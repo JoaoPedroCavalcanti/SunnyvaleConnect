@@ -18,7 +18,6 @@ class UserSerializer(ModelSerializer):
         
     def create(self, validated_data):
         User = get_user_model()
-        
         user = User.objects.create_user(
             username = validated_data.get('username'),
             password = validated_data.get('password'),
@@ -26,7 +25,6 @@ class UserSerializer(ModelSerializer):
             last_name = validated_data.get('last_name'),
             email = validated_data.get('email'),
         )
-
         return user
     
     def validate_email(self, value):

@@ -14,4 +14,3 @@ def hasAtLeast8Characters(password: str):
 def hasSpecialCharacter(password: str):
     return not password.isalnum()
 
-print(hasSpecialCharacter('asd'))
