@@ -11,4 +11,5 @@ class UserViewSet(ModelViewSet):
         # qs = get_object_or_404(User, pk = self.pk)
         qs = User.objects.all()
         return qs
+    http_method_names = ['get', 'post', 'delete']
     

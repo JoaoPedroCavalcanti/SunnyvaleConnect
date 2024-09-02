@@ -8,5 +8,4 @@ userRouter.register(
     UserViewSet,
     basename='users-api'
 )
-print(userRouter.urls)
 urlpatterns = userRouter.urls
