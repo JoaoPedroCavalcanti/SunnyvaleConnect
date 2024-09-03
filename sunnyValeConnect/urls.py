@@ -19,6 +19,10 @@ urlpatterns = [
          include('hall_reservations.urls')
         ),
     
+    path('visitor_access/', 
+         include('visitor_access.urls')
+        ),
+    
     path('api/token/', 
            TokenObtainPairView.as_view(), 
            name='token_obtain_pair'

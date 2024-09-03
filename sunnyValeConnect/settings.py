@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'bbq_reservations',
     'hall_reservations',
+    'visitor_access',
     
 ]
 
