@@ -7,8 +7,12 @@ urlpatterns = [
          admin.site.urls
         ),
     
-    path('', 
+    path('user/', 
          include('users.urls')
+        ),
+    
+    path('bbq/', 
+         include('bbq_reservations.urls')
         ),
     
     path('api/token/', 

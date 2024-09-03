@@ -4,7 +4,7 @@ from users.views import UserViewSet
 
 userRouter = SimpleRouter()
 userRouter.register(
-    'user',
+    '',
     UserViewSet,
     basename='users-api'
 )
