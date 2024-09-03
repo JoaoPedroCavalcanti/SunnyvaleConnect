@@ -15,6 +15,10 @@ urlpatterns = [
          include('bbq_reservations.urls')
         ),
     
+    path('hall/', 
+         include('hall_reservations.urls')
+        ),
+    
     path('api/token/', 
            TokenObtainPairView.as_view(), 
            name='token_obtain_pair'

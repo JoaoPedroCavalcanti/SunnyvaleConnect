@@ -12,13 +12,6 @@ class BBQReservationViewSet(ModelViewSet):
 
     # Overwriting method to pass the user to the serializer
     def get_serializer(self, *args, **kwargs):
-        kwargs['user'] = self.request.user  # Passa o usuário para o serializer
+        kwargs['user'] = self.request.user  
         return super().get_serializer(*args, **kwargs)
     
-
-    # def perform_create(self, serializer):
-    #     if self.request.user.is_staff:
-    #         return super().perform_create(serializer)
-    #     serializer.save(reservation_user=self.request.user)
-
-        

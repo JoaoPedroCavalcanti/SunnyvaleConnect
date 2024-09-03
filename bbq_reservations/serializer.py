@@ -14,9 +14,9 @@ class BBQReservationSerializer(ModelSerializer):
             'guest_count': {'required': False},
             }
     
-    # Passing the user to the serializer
+    # Recieve user from view
     def __init__(self, *args, **kwargs):
-        self.user = kwargs.pop('user', None)  # Pega o usuário da instância do serializer
+        self.user = kwargs.pop('user', None)  
         super().__init__(*args, **kwargs)
     
     # If the date is in the past => 'The date is invalid.'
