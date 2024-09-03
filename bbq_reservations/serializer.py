@@ -9,7 +9,7 @@ class BBQReservationSerializer(ModelSerializer):
         fields = ['id', 'reservation_user', 'reservation_date', 'guest_count']
         read_only_fields = ['id']
         extra_kwargs = {
-            'reservation_user': {'required': True},
+            'reservation_user': {'required': False},
             'reservation_date': {'required': True},
             'guest_count': {'required': False},
             }
@@ -31,6 +31,16 @@ class BBQReservationSerializer(ModelSerializer):
     
     # If not admin and date is < than 30 days => 'You can not book the barbecue with less than 30 days before your last bookment.'
     def validate(self, attrs):
+        if not self.user.is_staff:
+            if attrs.get('reservation_user'):
+                raise ValidationError('You can not pass a reservation_user.')
+            
+            attrs['reservation_user'] = self.user
+
+        
+        if not attrs.get('reservation_user'):
+            raise ValidationError('reservation_user can not be empty.')
+
         # Check if is admin user
         if self.user.is_staff:
             return super().validate(attrs)
@@ -50,8 +60,8 @@ class BBQReservationSerializer(ModelSerializer):
             raise ValidationError('You can not book the barbecue with less than 30 days before your last bookment.')
         return super().validate(attrs)
     
-    def validate_reservation_user(self, value):
-        if not self.user.is_staff:
-            if value and value != self.user:
-                raise ValidationError("You can only define this fiels as None or yours.")
-        return value
+    # def validate_reservation_user(self, value):
+    #     if not self.user.is_staff:
+    #         if value and value != self.user:
+    #             raise ValidationError("You can only define this fiels as None or yours.")
+    #     return value

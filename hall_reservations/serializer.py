@@ -31,7 +31,7 @@ class HallReservationSerializer(ModelSerializer):
         
         if not attrs.get('reservation_user'):
             raise ValidationError('reservation_user can not be empty.')
-        return super().validate(attrs)  
+        return super().validate(attrs)
         
     def validate_reservation_date(self, value):
         # Can't book in a day in the past
