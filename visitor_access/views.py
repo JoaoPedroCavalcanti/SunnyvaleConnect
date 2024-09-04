@@ -17,7 +17,7 @@ class VisitorAccessViewSet(ModelViewSet):
 
     def get_queryset(self):
         if self.request.user.is_staff:
-            return VisitorAccessModel.objects.all()
+            return VisitorAccessModel.objects.all().order_by('-scheduled_date')
         return VisitorAccessModel.objects.filter(host_user = self.request.user).order_by('-scheduled_date')
 
          
