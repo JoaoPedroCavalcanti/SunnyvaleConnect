@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 class VisitorAccessModel(models.Model):
     visitor_name = models.CharField(max_length=100)
     host_user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, blank=True, null=True, default=None)
+    email = models.EmailField(blank=True, null=True, default="")
     scheduled_date = models.DateTimeField()
     checkin_date_time = models.DateTimeField()
     checkout_date_time = models.DateTimeField()
