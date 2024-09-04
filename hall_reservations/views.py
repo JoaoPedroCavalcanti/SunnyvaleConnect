@@ -6,7 +6,6 @@ from rest_framework.permissions import IsAuthenticated
 
 class HallReservationViewSet(ModelViewSet):
     serializer_class = HallReservationSerializer
-    queryset = HallReservationModel.objects.all()
     permission_classes = [IsAuthenticated, ]
     
     # Send user to serializer
@@ -14,3 +13,5 @@ class HallReservationViewSet(ModelViewSet):
         kwargs['user'] = self.request.user  
         return super().get_serializer(*args, **kwargs)
     
+    def get_queryset(self):
+        return HallReservationModel.objects.all().order_by('-reservation_date')

@@ -9,13 +9,12 @@ from django.shortcuts import get_object_or_404
 
 class VisitorAccessViewSet(ModelViewSet):
     serializer_class = VisitorAccessSerializer
-    queryset = VisitorAccessModel.objects.all()
     permission_classes = [IsAuthenticated, ]
 
     def get_serializer(self, *args, **kwargs):
         kwargs['user'] = self.request.user
         return super().get_serializer(*args, **kwargs)
-    
+
     def get_queryset(self):
         if self.request.user.is_staff:
             return VisitorAccessModel.objects.all()
