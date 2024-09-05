@@ -122,6 +122,7 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+
 }
 
 # Django project settings.py
@@ -136,3 +137,14 @@ SIMPLE_JWT = {
     "SIGNING_KEY": 'sdhgfsiudfg sdf giuhsdfiughsdfiuh sdf',
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
+
+# settings.py
+# Change from console to smtp when is not developer
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'pythondjango703@gmail.com'
+EMAIL_HOST_PASSWORD = 'Toszo0-qursoz-fatjif'
+DEFAULT_FROM_EMAIL = 'pythondjango703@gmail.com'
+

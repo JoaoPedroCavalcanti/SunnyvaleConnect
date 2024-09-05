@@ -1,10 +1,11 @@
-from rest_framework.fields import empty
 from rest_framework.serializers import ModelSerializer
 from visitor_access.models import VisitorAccessModel
 from rest_framework.exceptions import ValidationError
 from sunnyValeConnect.utils.mixing_and_unmixing_strings import mix_strings
 from sunnyValeConnect.utils.settings_config import base_url_visitor_access, secret_mixin_string
 from datetime import timedelta
+from django.utils import timezone
+from sunnyValeConnect.utils.send_email_to_visitor import send_link_email
 
 class VisitorAccessSerializer(ModelSerializer):
     class Meta:
@@ -29,7 +30,13 @@ class VisitorAccessSerializer(ModelSerializer):
         return attrs
     
     
+    def validate_scheduled_date(self, value):
+        if value < timezone.now():
+            raise ValidationError({"Scheduled_date": "You can not create a visitor access with a past date."})
+        return value
+    
     def create(self, validated_data):
+        print(timezone.now())
         validated_data['checkin_date_time'] = validated_data['scheduled_date']
         validated_data['status'] = 'Scheduled'
         # Primeiro, cria o objeto com os dados fornecidos
@@ -43,5 +50,14 @@ class VisitorAccessSerializer(ModelSerializer):
         
         # Atualize o objeto com o link_checkin
         instance.link_checkin = link_checkin
+        
+        # Seending email with link_checkin
+        email = validated_data['email']
+        user_name = validated_data['host_user']
+        datetime_checkin = validated_data['checkin_date_time']
+        visitor_name = validated_data['visitor_name']
+        send_link_email(to_email=email, datetime_checkin=datetime_checkin, link_email=link_checkin, user_name=user_name, visitor_name=visitor_name)
+        
+        # Saving instance with changes
         instance.save()
         return instance

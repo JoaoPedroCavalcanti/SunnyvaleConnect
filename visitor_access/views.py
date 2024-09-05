@@ -1,4 +1,3 @@
-from django.shortcuts import render
 from visitor_access.serializer import VisitorAccessSerializer
 from rest_framework.viewsets import ModelViewSet
 from visitor_access.models import VisitorAccessModel
@@ -12,6 +11,8 @@ from sunnyValeConnect.utils.settings_config import secret_mixin_string
 from sunnyValeConnect.utils.generate_checkin_and_checkout import generate_five_digits_code
 from rest_framework.response import Response
 from datetime import timedelta
+from sunnyValeConnect.utils.send_email_to_visitor import send_checkin_notification, send_checkout_notification
+
 
 class VisitorAccessViewSet(ModelViewSet):
     serializer_class = VisitorAccessSerializer
@@ -43,10 +44,19 @@ class VisitorAccessViewSet(ModelViewSet):
     def checkin(self, request, *args, **kwargs):
         obj_id = unmix_strings(kwargs.get('visitor_access_link_checkin'), secret_mixin_string)
         obj = get_object_or_404(VisitorAccessModel, id = obj_id)
-        # Check if checkin_date_time in visitor_access is > datetime.now and < checkout_date_time     
+        # Check if checkin_date_time in visitor_access is > datetime.now and < checkout_date_time
+
         if obj.checkin_date_time < timezone.now() and timezone.now() < obj.checkout_date_time:
             checkin_code = generate_five_digits_code()
+            
+            # Send notification checkin
+            user_email = obj.email
+            user_name = obj.host_user
+            visitor_name = obj.visitor_name
+            send_checkin_notification(to_email=user_email, user_name=user_name, visitor_name=visitor_name)
+
             return Response({'checkin_code': checkin_code})
+        return Response("Please checkin just in your scheduled time")
         
     @action(
         methods=['get'],
@@ -59,5 +69,12 @@ class VisitorAccessViewSet(ModelViewSet):
         # Check if visitor did checkin  
         if ( obj.scheduled_date - timezone.now() ) < timedelta(hours=10):
             checkout_code = generate_five_digits_code()
+            
+            user_email = obj.email
+            user_name = obj.host_user
+            visitor_name = obj.visitor_name
+            send_checkout_notification(to_email=user_email, user_name=user_name, visitor_name=visitor_name)
+            
             return Response({'checkout_code': checkout_code})
-        
+    
+    
