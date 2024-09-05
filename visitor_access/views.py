@@ -44,10 +44,22 @@ class VisitorAccessViewSet(ModelViewSet):
     def checkin(self, request, *args, **kwargs):
         obj_id = unmix_strings(kwargs.get('visitor_access_link_checkin'), secret_mixin_string)
         obj = get_object_or_404(VisitorAccessModel, id = obj_id)
+        
         # Check if checkin_date_time in visitor_access is > datetime.now and < checkout_date_time
-
+        if obj.status != 'Scheduled':
+            
+            if obj.status == 'Checked-out':
+                raise ValidationError(f'You already {obj.status}')
+            
         if obj.checkin_date_time < timezone.now() and timezone.now() < obj.checkout_date_time:
+            
+            if obj.checkin_code != '':
+                return Response({'checkin_code': obj.checkin_code})
+            
             checkin_code = generate_five_digits_code()
+            obj.checkin_code = checkin_code
+            obj.status = 'Checked-in'
+            obj.save()
             
             # Send notification checkin
             user_email = obj.email
@@ -56,7 +68,9 @@ class VisitorAccessViewSet(ModelViewSet):
             send_checkin_notification(to_email=user_email, user_name=user_name, visitor_name=visitor_name)
 
             return Response({'checkin_code': checkin_code})
-        return Response("Please checkin just in your scheduled time")
+        
+        return Response("Please checkin just in your scheduled time") 
+
         
     @action(
         methods=['get'],
@@ -66,9 +80,22 @@ class VisitorAccessViewSet(ModelViewSet):
     def checkout(self, request, *args, **kwargs):
         obj_id = unmix_strings(kwargs.get('visitor_access_link_checkout'), secret_mixin_string)
         obj = get_object_or_404(VisitorAccessModel, id = obj_id)
-        # Check if visitor did checkin  
+        
+        if obj.status != 'Checked-in':
+            
+            if obj.status == 'Scheduled':
+                raise ValidationError('You can not check-out because you did not checked-in')
+        
+
         if ( obj.scheduled_date - timezone.now() ) < timedelta(hours=10):
+            
+            if obj.checkout_code != '':
+                return Response({'checkout_code': obj.checkout_code})
+            
             checkout_code = generate_five_digits_code()
+            obj.checkout_code = checkout_code
+            obj.status = 'Checked-out'
+            obj.save()
             
             user_email = obj.email
             user_name = obj.host_user

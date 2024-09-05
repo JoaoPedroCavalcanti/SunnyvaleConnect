@@ -36,7 +36,6 @@ class VisitorAccessSerializer(ModelSerializer):
         return value
     
     def create(self, validated_data):
-        print(timezone.now())
         validated_data['checkin_date_time'] = validated_data['scheduled_date']
         validated_data['status'] = 'Scheduled'
         # Primeiro, cria o objeto com os dados fornecidos
