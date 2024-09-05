@@ -2,12 +2,17 @@ from rest_framework.fields import empty
 from rest_framework.serializers import ModelSerializer
 from visitor_access.models import VisitorAccessModel
 from rest_framework.exceptions import ValidationError
-
+from sunnyValeConnect.utils.mixing_and_unmixing_strings import mix_strings
+from sunnyValeConnect.utils.settings_config import base_url_visitor_access, secret_mixin_string
+from datetime import timedelta
 
 class VisitorAccessSerializer(ModelSerializer):
     class Meta:
         model = VisitorAccessModel
         fields = '__all__'
+        read_only_fields = ['id', 'checkin_code', 'checkout_code', 'checkin_date_time', 'link_checkin', 
+                            'link_checkout', 'status', 'created_at', 'updated_at'
+                           ]
         
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop('user', None)  
@@ -22,3 +27,21 @@ class VisitorAccessSerializer(ModelSerializer):
             raise ValidationError({'host_user': 'This field is automatically set to the current user.'})
         attrs['host_user'] = self.user
         return attrs
+    
+    
+    def create(self, validated_data):
+        validated_data['checkin_date_time'] = validated_data['scheduled_date']
+        validated_data['status'] = 'Scheduled'
+        # Primeiro, cria o objeto com os dados fornecidos
+        instance = super().create(validated_data)
+        # Definir o checkout_date_time, se ele for None
+        if instance.checkout_date_time == None:
+            instance.checkout_date_time = instance.checkin_date_time + timedelta(hours=3)
+        # Gere o link_checkin após a criação do objeto (e ai posso acessar o id)
+        mixed_string = mix_strings(string=str(instance.id), mix_code=secret_mixin_string)
+        link_checkin = base_url_visitor_access + f'/checkin/{mixed_string}'
+        
+        # Atualize o objeto com o link_checkin
+        instance.link_checkin = link_checkin
+        instance.save()
+        return instance
