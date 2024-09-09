@@ -10,7 +10,14 @@ class ServiceRequestSerializer(serializers.Serializer):
         ('medium', 'Medium'),
         ('high', 'High'),
     ]
-    id = serializers.IntegerField(read_only=True)  
+    STATUS = [
+        ('requested', 'Requested'),
+        ('accepted', 'Accepted'),
+        ('declined', 'Declined'),
+        # Add more choices here as needed
+    ]
+    
+    id = serializers.IntegerField(read_only=True)
     requester_user = serializers.PrimaryKeyRelatedField(queryset = get_user_model().objects.all())
     title = serializers.CharField(max_length=150)
     request_description = serializers.CharField(required=False, allow_blank=True)
@@ -20,6 +27,8 @@ class ServiceRequestSerializer(serializers.Serializer):
     request_scheduled_date = serializers.DateTimeField()
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
+    status = serializers.ChoiceField(choices=STATUS, default='requested')
+    
     # Staff will fill these fields
     responsable_staff = serializers.CharField(max_length=50, required = False)
     scheduled_date = serializers.DateTimeField(required = False)
@@ -44,3 +53,4 @@ class ServiceRequestSerializer(serializers.Serializer):
         representation = super().to_representation(instance)
         representation['id'] = instance.id
         return representation
+    
