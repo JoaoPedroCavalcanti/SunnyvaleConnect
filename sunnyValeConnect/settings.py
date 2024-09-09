@@ -32,7 +32,7 @@ INSTALLED_APPS = [
     'bbq_reservations',
     'hall_reservations',
     'visitor_access',
-    
+    'service_requests',
 ]
 
 MIDDLEWARE = [

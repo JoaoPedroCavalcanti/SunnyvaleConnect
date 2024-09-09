@@ -23,6 +23,10 @@ urlpatterns = [
          include('visitor_access.urls')
         ),
     
+    path('service_requests/', 
+         include('service_requests.urls')
+        ),
+    
     path('api/token/', 
            TokenObtainPairView.as_view(), 
            name='token_obtain_pair'
