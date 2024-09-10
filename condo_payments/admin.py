@@ -1,3 +1,7 @@
 from django.contrib import admin
+from condo_payments.models import CondoPaymentModel
 
-# Register your models here.
+class CondoPaymentAdmin(admin.ModelAdmin):
+    ...
+    
+admin.site.register(CondoPaymentModel)
