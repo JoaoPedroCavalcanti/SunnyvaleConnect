@@ -31,6 +31,10 @@ urlpatterns = [
          include('condo_payments.urls')
         ),
     
+    path('delivery_notification/', 
+         include('delivery_notification.urls')
+        ),
+    
     path('api/token/', 
            TokenObtainPairView.as_view(), 
            name='token_obtain_pair'

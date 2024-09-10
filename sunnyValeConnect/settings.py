@@ -33,7 +33,8 @@ INSTALLED_APPS = [
     'hall_reservations',
     'visitor_access',
     'service_requests',
-    'condo_payments'
+    'condo_payments',
+    'delivery_notification',
 ]
 
 MIDDLEWARE = [
