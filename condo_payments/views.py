@@ -15,7 +15,7 @@ class CondoPaymentViewSet(ModelViewSet):
     
     def get_queryset(self):
         if self.request.user.is_staff:
-            return CondoPaymentModel.objects.all()
+            return CondoPaymentModel.objects.all().order_by('-created_at')
         return CondoPaymentModel.objects.filter(payer_user = self.request.user)
     
     @action(
