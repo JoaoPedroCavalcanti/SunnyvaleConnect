@@ -26,6 +26,10 @@ urlpatterns = [
     path('service_requests/', 
          include('service_requests.urls')
         ),
+
+    path('condo_payments/', 
+         include('condo_payments.urls')
+        ),
     
     path('api/token/', 
            TokenObtainPairView.as_view(), 
