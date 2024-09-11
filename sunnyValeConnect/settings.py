@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     'service_requests',
     'condo_payments',
     'delivery_notification',
+    'sunny_vale_news'
 ]
 
 MIDDLEWARE = [

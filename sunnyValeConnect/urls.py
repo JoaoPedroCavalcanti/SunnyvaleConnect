@@ -35,6 +35,10 @@ urlpatterns = [
          include('delivery_notification.urls')
         ),
     
+    path('sunny_vale_news/', 
+         include('sunny_vale_news.urls')
+        ),
+    
     path('api/token/', 
            TokenObtainPairView.as_view(), 
            name='token_obtain_pair'
