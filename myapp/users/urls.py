@@ -1,10 +1,6 @@
+from django.urls import path
 from rest_framework.routers import SimpleRouter
 from users.views import UserViewSet
-from django.urls import reverse
-
-
-app_name = "users"
-
 
 userRouter = SimpleRouter()
 userRouter.register(
@@ -13,4 +9,3 @@ userRouter.register(
     basename='users-api'
 )
 urlpatterns = userRouter.urls
-

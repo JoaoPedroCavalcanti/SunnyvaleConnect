@@ -44,7 +44,7 @@ class UserSerializer(ModelSerializer):
             errors_list.append("Password must be at least 8 characters long.")
             
         if not hasSpecialCharacter(value):
-            errors_list.append("Password must have at least 1 special character(ex: !$%*<).")
+            errors_list.append("Password must be have at least 1 special character(ex: !$%*<).")
 
         if errors_list:
             raise ValidationError(errors_list)

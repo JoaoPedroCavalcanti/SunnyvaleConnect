@@ -1,23 +1,28 @@
-version: '3.8'
+version: '3.8'  # Se não estiver especificado, é bom adicionar a versão do compose.
 
 services:
-  web:
-    build: .
-    command: python manage.py runserver 0.0.0.0:8000
-    volumes:
-      - .:/sunnyValeConnect
+  myapp:
+    container_name: myapp
+    build:
+      context: .
     ports:
-      - "8000:8000"
+      - 8000:8000
+    volumes:
+      - ./myapp:/myapp
+      - ./data/web/static:/data/web/static/
+      - ./data/web/media:/data/web/media/
+    env_file:
+      - ./dotenv_files/.env
     depends_on:
-      - db
+      - psql_sunnyvale
 
-  db:
-    container_name: psql_sunny
+  psql_sunnyvale:
+    container_name: psql_sunnyvale
     image: postgres:13-alpine
     volumes:
       - ./data/postgres/data:/var/lib/postgresql/data/
     env_file:
-      - ./.env
+      - ./dotenv_files/.env
 
   test:
     build:
@@ -27,10 +32,11 @@ services:
       - DJANGO_SETTINGS_MODULE=sunnyValeConnect.settings
       - TESTING=1
     env_file:
-      - ./.env
+      - ./dotenv_files/.env 
     volumes:
-      - .:/sunnyValeConnect
+      - ./myapp:/myapp
+      - ./scripts:/scripts
     depends_on:
-      - db
+      - psql_sunnyvale
     profiles: 
       - test

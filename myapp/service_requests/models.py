@@ -38,5 +38,5 @@ class ServiceRequestModel(models.Model):
         default='requested'
     )
     responsable_staff = models.CharField(max_length=50, blank=True, null=True, default="")
-    scheduled_date = models.DateTimeField(blank=True, null=True)
+    scheduled_date = models.DateField(null=True, blank=True)
     more_details = models.TextField(max_length=200, blank=True, null=True, default="")

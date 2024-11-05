@@ -1,15 +1,39 @@
-# Use uma imagem base oficial do Python
-FROM python:3.9-slim
+FROM python:3.13.0-alpine3.20
+LABEL maintainer="https://github.com/JoaoPedroCavalcanti"
 
-# Defina o diretório de trabalho
-WORKDIR /sunnyValeConnect
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
 
-# Copie o restante do código do aplicativo
-COPY . .
+# Instala o bash e outras dependências necessárias
+RUN apk add --no-cache bash
 
-# Copie o arquivo de requisitos e instale as dependências
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copia a pasta "myapp" e "scripts" para dentro do contêiner
+COPY myapp /myapp
+COPY scripts /scripts
 
-# Comando para rodar o servidor Django
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+# Define o diretório de trabalho
+WORKDIR /myapp
+
+# Exponha a porta
+EXPOSE 8000
+
+# Executa os comandos para preparar o ambiente e instalar as dependências globalmente
+RUN pip install --upgrade pip && \
+  pip install -r /myapp/requirements.txt && \
+  adduser --disabled-password --no-create-home duser && \
+  mkdir -p /data/web/static && \
+  mkdir -p /data/web/media && \
+  chown -R duser:duser /data/web/static && \
+  chown -R duser:duser /data/web/media && \
+  chmod -R 755 /data/web/static && \
+  chmod -R 755 /data/web/media && \
+  chmod -R +x /scripts
+
+# Adiciona a pasta scripts ao $PATH do contêiner
+ENV PATH="/scripts:$PATH"
+
+# Muda o usuário para duser
+USER duser
+
+# Executa o arquivo scripts/commands.sh
+CMD ["commands.sh"]
