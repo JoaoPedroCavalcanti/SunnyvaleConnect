@@ -4,5 +4,5 @@ from django.test import TestCase
 
 class UserAuthenticationTests(TestCase):
     def test_tests(self):
-        # print(reverse())
+        print('oi')
         self.assertEqual(1,1)
