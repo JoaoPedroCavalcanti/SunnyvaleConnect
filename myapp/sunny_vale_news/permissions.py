@@ -1,7 +1,7 @@
 from rest_framework.permissions import BasePermission, SAFE_METHODS
 
+
 class IsAdminOrReadOnlyIfLogged(BasePermission):
-    
     def has_permission(self, request, view):
         if request.user.is_staff:
             return True

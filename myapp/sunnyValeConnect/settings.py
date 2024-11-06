@@ -1,4 +1,3 @@
-
 import os
 from pathlib import Path
 
@@ -23,54 +22,53 @@ ALLOWED_HOSTS = [
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'rest_framework',
-    'users',
-    'rest_framework_simplejwt',
-    'bbq_reservations',
-    'hall_reservations',
-    'visitor_access',
-    'service_requests',
-    'condo_payments',
-    'delivery_notification',
-    'sunny_vale_news'
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "rest_framework",
+    "users",
+    "rest_framework_simplejwt",
+    "bbq_reservations",
+    "hall_reservations",
+    "visitor_access",
+    "service_requests",
+    "condo_payments",
+    "delivery_notification",
+    "sunny_vale_news",
 ]
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = 'sunnyValeConnect.urls'
+ROOT_URLCONF = "sunnyValeConnect.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'sunnyValeConnect.wsgi.application'
-
+WSGI_APPLICATION = "sunnyValeConnect.wsgi.application"
 
 
 DATABASES = {
@@ -84,7 +82,6 @@ DATABASES = {
         "TEST": {"NAME": "test_" + os.getenv("POSTGRES_DB", "change-me")},
     }
 }
-
 
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -101,7 +98,6 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
-
 
 
 # Internationalization
@@ -155,11 +151,10 @@ SIMPLE_JWT = {
 
 # settings.py
 # Change from console to smtp when is not developer
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_HOST = "smtp.gmail.com"
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'pythondjango703@gmail.com'
-EMAIL_HOST_PASSWORD = 'Toszo0-qursoz-fatjif'
-DEFAULT_FROM_EMAIL = 'pythondjango703@gmail.com'
-
+EMAIL_HOST_USER = "pythondjango703@gmail.com"
+EMAIL_HOST_PASSWORD = "Toszo0-qursoz-fatjif"
+DEFAULT_FROM_EMAIL = "pythondjango703@gmail.com"

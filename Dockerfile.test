@@ -1,0 +1,38 @@
+FROM python:3.13.0-alpine3.20
+LABEL maintainer="https://github.com/JoaoPedroCavalcanti"
+
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+
+# Instala dependências básicas
+RUN apk add --no-cache bash curl gcc musl-dev postgresql-dev
+
+# Instala o Poetry
+RUN pip install poetry
+
+# Configura o Poetry para não criar virtualenvs
+RUN poetry config virtualenvs.create false
+
+# Define o diretório de trabalho
+WORKDIR /myapp
+
+# Copia os arquivos de configuração do Poetry de dentro da pasta myapp
+COPY myapp/pyproject.toml myapp/poetry.lock* ./
+
+# Copia o diretório da aplicação e scripts para o contêiner
+COPY myapp /myapp
+COPY scripts /scripts
+
+# Instala as dependências com as de desenvolvimento incluídas
+RUN poetry install --no-root --with dev && \
+    adduser --disabled-password --no-create-home duser && \
+    chmod -R +x /scripts
+
+# Adiciona a pasta scripts ao PATH
+ENV PATH="/scripts:$PATH"
+
+# Define o usuário
+USER duser
+
+# Comando para rodar os testes
+CMD ["sh", "-c", "pytest -s && coverage report"]

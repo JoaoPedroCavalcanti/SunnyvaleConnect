@@ -1,5 +1,6 @@
 from rest_framework.permissions import BasePermission
 
+
 class CanCreateUser(BasePermission):
     """
     Custom permission to only allow unauthenticated users or admins to create a user.

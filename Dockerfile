@@ -24,7 +24,7 @@ COPY scripts /scripts
 EXPOSE 8000
 
 # Instala as dependências usando o Poetry
-RUN poetry install --no-root && \
+RUN poetry install --no-root --without dev && \
     adduser --disabled-password --no-create-home duser && \
     mkdir -p /data/web/static && \
     mkdir -p /data/web/media && \

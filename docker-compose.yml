@@ -5,6 +5,7 @@ services:
     container_name: myapp
     build:
       context: .
+      dockerfile: Dockerfile # Dockerfile principal para o app, sem dev deps
     ports:
       - 8000:8000
     volumes:
@@ -27,7 +28,8 @@ services:
   test:
     build:
       context: .
-    command: ["sh", "-c", "pytest -s && coverage report"]
+      dockerfile: Dockerfile.test # Dockerfile de teste que inclui dev deps
+    command: [ "sh", "-c", "pytest -s && coverage report" ]
     environment:
       - DJANGO_SETTINGS_MODULE=sunnyValeConnect.settings
       - TESTING=1
