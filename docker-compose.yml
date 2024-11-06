@@ -33,11 +33,13 @@ services:
     environment:
       - DJANGO_SETTINGS_MODULE=sunnyValeConnect.settings
       - TESTING=1
-    env_file:
-      - ./dotenv_files/.env
+      - PYTHONPATH=/myapp
     volumes:
       - ./myapp:/myapp
-      - ./scripts:/scripts
+      - ./data/web/static:/data/web/static/
+      - ./data/web/media:/data/web/media/
+    env_file:
+      - ./dotenv_files/.env
     depends_on:
       - psql_sunnyvale
     profiles:

@@ -79,7 +79,10 @@ DATABASES = {
         "PASSWORD": os.getenv("POSTGRES_PASSWORD", "change-me"),
         "HOST": os.getenv("POSTGRES_HOST", "psql"),
         "PORT": os.getenv("POSTGRES_PORT", "5432"),
-        "TEST": {"NAME": "test_" + os.getenv("POSTGRES_DB", "change-me")},
+        "TEST": {
+            "NAME": "test_" + os.getenv("POSTGRES_DB", "change-me"),
+            "MIRROR": None,  # Adicione esta linha para resolver o KeyError
+        },
     }
 }
 

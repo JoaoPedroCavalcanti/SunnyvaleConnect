@@ -4,35 +4,41 @@ LABEL maintainer="https://github.com/JoaoPedroCavalcanti"
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 
-# Instala dependências básicas
+# Instala o bash, curl, gcc, e outras dependências necessárias
 RUN apk add --no-cache bash curl gcc musl-dev postgresql-dev
 
-# Instala o Poetry
+# Instala o Poetry globalmente usando pip
 RUN pip install poetry
 
-# Configura o Poetry para não criar virtualenvs
+# Configura o Poetry para instalar no ambiente global, evitando virtualenv
 RUN poetry config virtualenvs.create false
 
-# Define o diretório de trabalho
+# Define o diretório de trabalho na pasta 'myapp'
 WORKDIR /myapp
 
-# Copia os arquivos de configuração do Poetry de dentro da pasta myapp
-COPY myapp/pyproject.toml myapp/poetry.lock* ./
-
-# Copia o diretório da aplicação e scripts para o contêiner
+# Copia o projeto e as dependências do Poetry para dentro do contêiner
 COPY myapp /myapp
 COPY scripts /scripts
 
-# Instala as dependências com as de desenvolvimento incluídas
+# Exponha a porta
+EXPOSE 8000
+
+# Instala as dependências usando o Poetry
 RUN poetry install --no-root --with dev && \
     adduser --disabled-password --no-create-home duser && \
+    mkdir -p /data/web/static && \
+    mkdir -p /data/web/media && \
+    chown -R duser:duser /data/web/static && \
+    chown -R duser:duser /data/web/media && \
+    chmod -R 755 /data/web/static && \
+    chmod -R 755 /data/web/media && \
     chmod -R +x /scripts
 
-# Adiciona a pasta scripts ao PATH
+# Adiciona a pasta scripts ao $PATH do contêiner
 ENV PATH="/scripts:$PATH"
 
-# Define o usuário
+# Muda o usuário para duser
 USER duser
 
-# Comando para rodar os testes
-CMD ["sh", "-c", "pytest -s && coverage report"]
+# Executa o arquivo scripts/commands.sh
+CMD ["sh", "-c", "/scripts/commands.sh"]
