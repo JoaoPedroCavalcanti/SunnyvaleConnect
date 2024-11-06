@@ -1,4 +1,4 @@
-version: '3.8'  # Se não estiver especificado, é bom adicionar a versão do compose.
+version: '3.8'
 
 services:
   myapp:
@@ -27,16 +27,16 @@ services:
   test:
     build:
       context: .
-    command: ["sh", "-c", "pytest -s && coverage report"] 
+    command: ["sh", "-c", "pytest -s && coverage report"]
     environment:
       - DJANGO_SETTINGS_MODULE=sunnyValeConnect.settings
       - TESTING=1
     env_file:
-      - ./dotenv_files/.env 
+      - ./dotenv_files/.env
     volumes:
       - ./myapp:/myapp
       - ./scripts:/scripts
     depends_on:
       - psql_sunnyvale
-    profiles: 
+    profiles:
       - test
