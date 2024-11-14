@@ -8,7 +8,7 @@ from rest_framework_simplejwt.views import (
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("user/", include("users.urls")),
+    path("user/", include(("users.urls"), namespace="users")),
     path("bbq/", include("bbq_reservations.urls")),
     path("hall/", include("hall_reservations.urls")),
     path("visitor_access/", include("visitor_access.urls")),
