@@ -4,12 +4,13 @@ LABEL maintainer="https://github.com/JoaoPedroCavalcanti"
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 ENV POETRY_VIRTUALENVS_CREATE=false
+ENV POETRY_VIRTUALENVS_IN_PROJECT=false
 
 # Instala o bash, curl, gcc, e outras dependências necessárias
 RUN apk add --no-cache bash curl gcc musl-dev postgresql-dev
 
-# Instala o Poetry globalmente usando pip
-RUN pip install poetry
+# Instala o Poetry globalmente usando pip (pinned em 1.x para compatibilidade com pyproject atual)
+RUN pip install "poetry>=1.8,<2.0"
 
 # Configura o Poetry para instalar no ambiente global, evitando virtualenv
 RUN poetry config virtualenvs.create false
@@ -25,7 +26,8 @@ COPY scripts /scripts
 EXPOSE 8000
 
 # Instala as dependências usando o Poetry (regenera o lock se necessário)
-RUN poetry lock && \
+RUN rm -rf /myapp/.venv && \
+    poetry lock && \
     poetry install --no-root --without dev && \
     adduser --disabled-password --no-create-home duser && \
     mkdir -p /data/web/static && \

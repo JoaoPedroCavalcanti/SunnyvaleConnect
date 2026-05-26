@@ -5,7 +5,7 @@ from django.db import models
 class SunnyValeNewsModel(models.Model):
     PRIORITY = [("low", "Low"), ("medium", "Medium"), ("high", "High")]
 
-    title = (models.CharField(max_length=200),)
+    title = models.CharField(max_length=200, blank=True, default="")
     description = models.TextField()
     author = models.CharField(max_length=50)
     priority_level = models.CharField(choices=PRIORITY, max_length=50, default="low")

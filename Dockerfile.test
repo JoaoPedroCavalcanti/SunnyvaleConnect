@@ -7,8 +7,8 @@ ENV PYTHONUNBUFFERED 1
 # Instala o bash, curl, gcc, e outras dependências necessárias
 RUN apk add --no-cache bash curl gcc musl-dev postgresql-dev
 
-# Instala o Poetry globalmente usando pip
-RUN pip install poetry
+# Instala o Poetry globalmente usando pip (pinned em 1.x para compatibilidade com pyproject atual)
+RUN pip install "poetry>=1.8,<2.0"
 
 # Configura o Poetry para instalar no ambiente global, evitando virtualenv
 RUN poetry config virtualenvs.create false
