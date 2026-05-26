@@ -17,5 +17,5 @@ class VisitorAccessModel(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     description = models.TextField(max_length=150, blank=True, null=True, default="")
-    link_checkin = models.CharField(max_length=50, blank=True, null=True)
-    link_checkout = models.CharField(max_length=50, blank=True, null=True)
+    link_checkin = models.CharField(max_length=255, blank=True, null=True)
+    link_checkout = models.CharField(max_length=255, blank=True, null=True)
