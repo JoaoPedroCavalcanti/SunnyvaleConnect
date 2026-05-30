@@ -17,7 +17,9 @@ class CondoPaymentViewSet(ModelViewSet):
     def get_queryset(self):
         if self.request.user.is_staff:
             return CondoPaymentModel.objects.all().order_by("-created_at")
-        return CondoPaymentModel.objects.filter(payer_user=self.request.user)
+        return CondoPaymentModel.objects.filter(
+            payer_user=self.request.user
+        ).order_by("-created_at")
 
     @action(methods=["patch"], detail=False, url_name="set_paid_status/")
     def set_paid_status(self, request, *args, **kwargs):

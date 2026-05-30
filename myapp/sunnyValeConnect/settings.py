@@ -1,9 +1,15 @@
 import os
+import sys
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR.parent / "data" / "web"
+
+# True when running under pytest or when TESTING=1 is exported.
+TESTING = bool(int(os.getenv("TESTING", "0"))) or "pytest" in sys.modules or any(
+    arg.startswith("test") for arg in sys.argv
+)
 
 
 # SECURITY WARNING: keep the secret key used in production secret!
@@ -88,20 +94,29 @@ TEMPLATES = [
 WSGI_APPLICATION = "sunnyValeConnect.wsgi.application"
 
 
-DATABASES = {
-    "default": {
-        "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
-        "NAME": os.getenv("POSTGRES_DB", "change-me"),
-        "USER": os.getenv("POSTGRES_USER", "change-me"),
-        "PASSWORD": os.getenv("POSTGRES_PASSWORD", "change-me"),
-        "HOST": os.getenv("POSTGRES_HOST", "psql"),
-        "PORT": os.getenv("POSTGRES_PORT", "5432"),
-        "TEST": {
-            "NAME": "test_" + os.getenv("POSTGRES_DB", "change-me"),
-            "MIRROR": None,  # Adicione esta linha para resolver o KeyError
-        },
+if TESTING:
+    # In-memory SQLite so tests run anywhere (CI, local, no Postgres needed).
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": ":memory:",
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
+            "NAME": os.getenv("POSTGRES_DB", "change-me"),
+            "USER": os.getenv("POSTGRES_USER", "change-me"),
+            "PASSWORD": os.getenv("POSTGRES_PASSWORD", "change-me"),
+            "HOST": os.getenv("POSTGRES_HOST", "psql"),
+            "PORT": os.getenv("POSTGRES_PORT", "5432"),
+            "TEST": {
+                "NAME": "test_" + os.getenv("POSTGRES_DB", "change-me"),
+                "MIRROR": None,
+            },
+        }
+    }
 
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -191,3 +206,9 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = "pythondjango703@gmail.com"
 EMAIL_HOST_PASSWORD = "Toszo0-qursoz-fatjif"
 DEFAULT_FROM_EMAIL = "pythondjango703@gmail.com"
+
+if TESTING:
+    EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+    PASSWORD_HASHERS = [
+        "django.contrib.auth.hashers.MD5PasswordHasher",
+    ]

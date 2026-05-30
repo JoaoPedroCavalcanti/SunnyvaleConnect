@@ -27,18 +27,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.test # Dockerfile de teste que inclui dev deps
-    command: [ "sh", "-c", "pytest -s && coverage report" ]
+    command: [ "sh", "-c", "/scripts/test.sh" ]
     environment:
       - DJANGO_SETTINGS_MODULE=sunnyValeConnect.settings
       - TESTING=1
       - PYTHONPATH=/myapp
     volumes:
       - ./myapp:/myapp
-      - ./data/web/static:/data/web/static/
-      - ./data/web/media:/data/web/media/
-    env_file:
-      - ./dotenv_files/.env
-    depends_on:
-      - psql_sunnyvale
+      - ./scripts:/scripts
     profiles:
       - test

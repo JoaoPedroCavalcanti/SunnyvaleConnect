@@ -18,9 +18,9 @@ class UserViewSet(ModelViewSet):
         User = get_user_model()
 
         if self.request.user.is_staff:
-            return User.objects.all()
+            return User.objects.all().order_by("id")
 
-        return User.objects.filter(pk=self.request.user.pk)
+        return User.objects.filter(pk=self.request.user.pk).order_by("id")
 
     def get_permissions(self):
         if self.request.method == "POST":

@@ -23,3 +23,8 @@ logs
 stats
 Dockerfile
 __localcode/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
