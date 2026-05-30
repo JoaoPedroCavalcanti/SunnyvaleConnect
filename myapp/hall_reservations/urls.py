@@ -1,9 +1,13 @@
-from rest_framework.routers import SimpleRouter
-from hall_reservations.views import HallReservationViewSet
+from django.urls import path
 
-hall_reservation_router = SimpleRouter()
-hall_reservation_router.register(
-    "", HallReservationViewSet, basename="hall_reservation-router"
+from hall_reservations.views import (
+    HallReservationDetailView,
+    HallReservationListCreateView,
 )
 
-urlpatterns = hall_reservation_router.urls
+app_name = "hall_reservations"
+
+urlpatterns = [
+    path("", HallReservationListCreateView.as_view(), name="list-create"),
+    path("<int:pk>/", HallReservationDetailView.as_view(), name="detail"),
+]

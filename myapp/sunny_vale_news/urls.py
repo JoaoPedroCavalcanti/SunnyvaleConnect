@@ -1,6 +1,13 @@
-from rest_framework.routers import SimpleRouter
-from sunny_vale_news.views import SunnyValeNewsViewSet
+from django.urls import path
 
-sunny_vale_new_router = SimpleRouter()
-sunny_vale_new_router.register("", SunnyValeNewsViewSet, basename="sunny_vale_new")
-urlpatterns = sunny_vale_new_router.urls
+from sunny_vale_news.views import (
+    SunnyValeNewsDetailView,
+    SunnyValeNewsListCreateView,
+)
+
+app_name = "sunny_vale_news"
+
+urlpatterns = [
+    path("", SunnyValeNewsListCreateView.as_view(), name="list-create"),
+    path("<int:pk>/", SunnyValeNewsDetailView.as_view(), name="detail"),
+]

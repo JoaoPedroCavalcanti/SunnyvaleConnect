@@ -1,0 +1,122 @@
+"""Unit tests for DeliveryNotificationService."""
+
+from types import SimpleNamespace
+
+import pytest
+
+from delivery_notification.repositories.delivery_notification_repository import (
+    IDeliveryNotificationRepository,
+)
+from delivery_notification.services.delivery_notification_service import (
+    DeliveryNotificationService,
+)
+from shared.exceptions import NotFoundError
+from shared.test_doubles.fakes import FakeEmailSender
+from users.repositories.user_repository import IUserRepository
+
+
+pytestmark = pytest.mark.unit
+
+
+class FakeDeliveryRepo(IDeliveryNotificationRepository):
+    def __init__(self):
+        self._items: dict[int, SimpleNamespace] = {}
+        self._next_id = 1
+
+    def list_all(self):
+        return list(self._items.values())
+
+    def get_by_id(self, pk):
+        return self._items.get(int(pk))
+
+    def create(self, data):
+        item = SimpleNamespace(id=self._next_id, **{k: v for k, v in data.items() if k != "user_to_delivery"})
+        self._items[self._next_id] = item
+        self._next_id += 1
+        return item
+
+
+class FakeUserRepo(IUserRepository):
+    def __init__(self):
+        self._users: dict[int, SimpleNamespace] = {}
+
+    def add(self, user):
+        self._users[user.id] = user
+        return user
+
+    def list_all(self):
+        return list(self._users.values())
+
+    def get_by_id(self, pk):
+        return self._users.get(int(pk))
+
+    def exists_with_email(self, email):
+        return any(u.email == email for u in self._users.values())
+
+    def exists_with_username(self, username):
+        return any(u.username == username for u in self._users.values())
+
+    def create_user(self, **k):  # not used here
+        raise NotImplementedError
+
+    def update(self, instance, data):
+        for k, v in data.items():
+            setattr(instance, k, v)
+        return instance
+
+    def delete(self, instance):
+        self._users.pop(instance.id, None)
+
+
+@pytest.fixture
+def email_sender():
+    return FakeEmailSender()
+
+
+@pytest.fixture
+def user_repo():
+    repo = FakeUserRepo()
+    repo.add(SimpleNamespace(id=1, email="u@example.com", username="user1"))
+    return repo
+
+
+@pytest.fixture
+def service(email_sender, user_repo):
+    return DeliveryNotificationService(
+        repository=FakeDeliveryRepo(),
+        user_repository=user_repo,
+        email_sender=email_sender,
+    )
+
+
+def test_send_creates_record_and_emails(service, email_sender, user_repo):
+    user = user_repo.get_by_id(1)
+    result = service.send(
+        {
+            "user_to_delivery": user,
+            "title": "Package",
+            "delivery_from": "iFood",
+            "delivery_platform": "ifood",
+        }
+    )
+    assert result is not None
+    assert len(email_sender.sent) == 1
+    assert email_sender.sent[0]["kind"] == "delivery"
+    assert email_sender.sent[0]["to"] == "u@example.com"
+
+
+def test_send_with_unknown_user_raises(service):
+    with pytest.raises(NotFoundError):
+        service.send(
+            {
+                "user_to_delivery": SimpleNamespace(id=999),
+                "title": "x",
+                "delivery_from": "z",
+                "delivery_platform": "ifood",
+            }
+        )
+
+
+def test_get_not_found(service):
+    with pytest.raises(NotFoundError):
+        service.get(123)

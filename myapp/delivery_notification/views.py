@@ -1,55 +1,49 @@
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAdminUser
-from delivery_notification.serializer import DeliveryNotificationSerializer
-from rest_framework.response import Response
+"""Plain APIViews for delivery notifications."""
+
 from rest_framework import status
-from rest_framework.exceptions import ValidationError
-from sunnyValeConnect.utils.delivery_notification import send_delivery_notification
-from django.contrib.auth import get_user_model
-from django.shortcuts import get_object_or_404
-from delivery_notification.models import DeliveryNotificationModel
+from rest_framework.permissions import IsAdminUser
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from delivery_notification.serializers import (
+    DeliveryNotificationInputSerializer,
+    DeliveryNotificationOutputSerializer,
+)
+from shared.container import container
 
 
-@api_view(http_method_names=["post"])
-@permission_classes([IsAdminUser])
-def send_notification(request):
-    serializer = DeliveryNotificationSerializer(data=request.data)
-    if serializer.is_valid():
-        serializer.save()
+class SendDeliveryNotificationView(APIView):
+    permission_classes = [IsAdminUser]
 
-        UserModel = get_user_model()
-        user_id = serializer.data.get("user_to_delivery")
-        user = get_object_or_404(UserModel, id=user_id)
-
-        user_email = user.email
-        user_name = user.username
-        delivery_plataform = request.data.get("delivery_platform")
-        delivery_from = request.data.get("delivery_from")
-        send_delivery_notification(
-            user_email, user_name, delivery_plataform, delivery_from
+    def post(self, request):
+        serializer = DeliveryNotificationInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instance = container.delivery_notification_service.send(
+            serializer.validated_data
+        )
+        return Response(
+            DeliveryNotificationOutputSerializer(instance).data,
+            status=status.HTTP_200_OK,
         )
 
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    raise ValidationError(serializer.errors, status.HTTP_400_BAD_REQUEST)
+
+class ListDeliveryNotificationsView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        items = container.delivery_notification_service.list()
+        return Response(
+            DeliveryNotificationOutputSerializer(items, many=True).data,
+            status=status.HTTP_200_OK,
+        )
 
 
-@api_view(http_method_names=["GET"])
-@permission_classes([IsAdminUser])
-def list_notifications(request):
-    # Obtém todos os objetos do DeliveryNotificationModel
-    objects = DeliveryNotificationModel.objects.all()
+class DetailDeliveryNotificationView(APIView):
+    permission_classes = [IsAdminUser]
 
-    # Serializa os objetos obtidos
-    serializer = DeliveryNotificationSerializer(objects, many=True)
-
-    # Retorna a resposta com os dados serializados
-    return Response(serializer.data, status=status.HTTP_200_OK)
-
-
-@api_view(http_method_names=["GET"])
-@permission_classes([IsAdminUser])
-def detail_notification(request, pk):
-    notification = get_object_or_404(DeliveryNotificationModel, pk=pk)
-    serializer = DeliveryNotificationSerializer(instance=notification)
-
-    return Response(serializer.data, status=status.HTTP_200_OK)
+    def get(self, request, pk: int):
+        instance = container.delivery_notification_service.get(pk)
+        return Response(
+            DeliveryNotificationOutputSerializer(instance).data,
+            status=status.HTTP_200_OK,
+        )

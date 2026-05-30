@@ -1,9 +1,13 @@
-from rest_framework.routers import SimpleRouter
-from bbq_reservations.views import BBQReservationViewSet
+from django.urls import path
 
-bbq_reservations_router = SimpleRouter()
-bbq_reservations_router.register(
-    "", BBQReservationViewSet, basename="bbq_reservations-router"
+from bbq_reservations.views import (
+    BBQReservationDetailView,
+    BBQReservationListCreateView,
 )
 
-urlpatterns = bbq_reservations_router.urls
+app_name = "bbq_reservations"
+
+urlpatterns = [
+    path("", BBQReservationListCreateView.as_view(), name="list-create"),
+    path("<int:pk>/", BBQReservationDetailView.as_view(), name="detail"),
+]

@@ -1,0 +1,64 @@
+"""Smoke tests for the users API. One happy + one sad case per endpoint."""
+
+import pytest
+from django.urls import reverse
+
+from tests_base.base_tests_user import BaseTestsUsers
+
+
+pytestmark = pytest.mark.api
+
+
+LIST_URL = reverse("users:users-api-list")
+ME_URL = reverse("users:users-api-me")
+
+
+def detail_url(pk: int) -> str:
+    return reverse("users:users-api-detail", kwargs={"pk": pk})
+
+
+class UsersAPISmoke(BaseTestsUsers):
+    def test_anonymous_blocked(self):
+        self.assertEqual(self.client.get(LIST_URL).status_code, 401)
+
+    def test_anonymous_can_register(self):
+        response = self.client.post(LIST_URL, data=self.create_random_user_from_faker())
+        self.assertEqual(response.status_code, 201)
+
+    def test_regular_user_lists_only_self(self):
+        self.authenticate(self.user_a)
+        results = self.client.get(LIST_URL).data["results"]
+        self.assertEqual(len(results), 1)
+
+    def test_admin_lists_all(self):
+        self.authenticate(self.admin)
+        self.assertGreaterEqual(self.client.get(LIST_URL).data["count"], 3)
+
+    def test_me_returns_current_user(self):
+        self.authenticate(self.user_a)
+        response = self.client.get(ME_URL)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["id"], self.user_a.id)
+
+    def test_user_detail_404_for_others(self):
+        self.authenticate(self.user_a)
+        self.assertEqual(self.client.get(detail_url(self.user_b.id)).status_code, 404)
+
+    def test_weak_password_rejected(self):
+        payload = self.create_random_user_from_faker()
+        payload["password"] = "a"
+        response = self.client.post(LIST_URL, data=payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("password", response.data)
+
+    def test_duplicate_email_rejected(self):
+        payload = self.create_random_user_from_faker()
+        payload["email"] = self.user_a.email
+        response = self.client.post(LIST_URL, data=payload)
+        self.assertEqual(response.status_code, 400)
+
+    def test_admin_can_delete_user(self):
+        self.authenticate(self.admin)
+        self.assertEqual(
+            self.client.delete(detail_url(self.user_a.id)).status_code, 204
+        )

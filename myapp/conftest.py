@@ -12,7 +12,16 @@ from model_bakery import baker
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import AccessToken
 
+from shared.container import container
+
 fake = Faker()
+
+
+@pytest.fixture(autouse=True)
+def _reset_container():
+    """Reset the DI container between tests so overrides don't leak."""
+    yield
+    container.reset()
 
 
 @pytest.fixture

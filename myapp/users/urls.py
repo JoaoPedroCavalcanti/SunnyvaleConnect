@@ -1,10 +1,11 @@
-from rest_framework.routers import SimpleRouter
-from users.views import UserViewSet
+from django.urls import path
+
+from users.views import UserDetailView, UserListCreateView, UserMeView
 
 app_name = "users"
 
-
-userRouter = SimpleRouter()
-userRouter.register("", UserViewSet, basename="users-api")
-
-urlpatterns = userRouter.urls
+urlpatterns = [
+    path("", UserListCreateView.as_view(), name="users-api-list"),
+    path("me/", UserMeView.as_view(), name="users-api-me"),
+    path("<int:pk>/", UserDetailView.as_view(), name="users-api-detail"),
+]
