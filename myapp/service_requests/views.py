@@ -1,5 +1,6 @@
 """Plain APIViews for service requests."""
 
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
@@ -13,14 +14,20 @@ from service_requests.serializers import (
 from shared.container import container
 
 
+@extend_schema(tags=["service_requests"])
 class ServiceRequestListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses={200: ServiceRequestOutputSerializer(many=True)})
     def get(self, request):
         items = container.service_request_service.list_for(request.user)
         serializer = ServiceRequestOutputSerializer(items, many=True)
         return Response(serializer.data)
 
+    @extend_schema(
+        request=ServiceRequestInputSerializer,
+        responses={201: ServiceRequestOutputSerializer},
+    )
     def post(self, request):
         serializer = ServiceRequestInputSerializer(data=request.data)
         if not serializer.is_valid():
@@ -32,13 +39,19 @@ class ServiceRequestListCreateView(APIView):
         )
 
 
+@extend_schema(tags=["service_requests"])
 class ServiceRequestDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses={200: ServiceRequestOutputSerializer})
     def get(self, request, pk: int):
         instance = container.service_request_service.get_for(request.user, pk)
         return Response(ServiceRequestOutputSerializer(instance).data)
 
+    @extend_schema(
+        request=ServiceRequestPatchSerializer,
+        responses={200: ServiceRequestOutputSerializer},
+    )
     def patch(self, request, pk: int):
         serializer = ServiceRequestPatchSerializer(data=request.data)
         if not serializer.is_valid():
@@ -48,14 +61,20 @@ class ServiceRequestDetailView(APIView):
         )
         return Response(ServiceRequestOutputSerializer(instance).data)
 
+    @extend_schema(responses={204: None})
     def delete(self, request, pk: int):
         container.service_request_service.delete(request.user, pk)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+@extend_schema(tags=["service_requests"])
 class AcceptOrDeclineServiceRequestView(APIView):
     permission_classes = [IsAdminUser]
 
+    @extend_schema(
+        request=ServiceRequestPatchSerializer,
+        responses={200: ServiceRequestOutputSerializer},
+    )
     def patch(self, request, pk: int, accept_or_decline: str):
         instance = container.service_request_service.set_status(
             pk, accept_or_decline, request.data

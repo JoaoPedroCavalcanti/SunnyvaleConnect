@@ -184,6 +184,12 @@ SPECTACULAR_SETTINGS = {
         "persistAuthorization": True,
     },
     "COMPONENT_SPLIT_REQUEST": True,
+    "ENUM_NAME_OVERRIDES": {
+        "CondoPaymentStatusEnum": "condo_payments.models.CondoPaymentModel.STATUS",
+        "ServiceRequestStatusEnum": "service_requests.models.ServiceRequestModel.STATUS",
+        # Priority levels happen to share (low/medium/high) across 3 apps; unify.
+        "PriorityEnum": "service_requests.models.ServiceRequestModel.PRIORITY_LEVEL",
+    },
 }
 
 from datetime import timedelta  # noqa: E402

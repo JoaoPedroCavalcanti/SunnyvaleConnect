@@ -1,5 +1,6 @@
 """Plain APIViews for BBQ reservations."""
 
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
@@ -14,9 +15,11 @@ from bbq_reservations.serializers import (
 from shared.container import container
 
 
+@extend_schema(tags=["bbq_reservations"])
 class BBQReservationListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses={200: BBQReservationOutputSerializer(many=True)})
     def get(self, request):
         queryset = container.bbq_service.list()
         paginator = PageNumberPagination()
@@ -24,6 +27,10 @@ class BBQReservationListCreateView(APIView):
         serializer = BBQReservationOutputSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
 
+    @extend_schema(
+        request=BBQReservationInputSerializer,
+        responses={201: BBQReservationOutputSerializer},
+    )
     def post(self, request):
         serializer = BBQReservationInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -36,13 +43,19 @@ class BBQReservationListCreateView(APIView):
         )
 
 
+@extend_schema(tags=["bbq_reservations"])
 class BBQReservationDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses={200: BBQReservationOutputSerializer})
     def get(self, request, pk: int):
         instance = container.bbq_service.get(pk)
         return Response(BBQReservationOutputSerializer(instance).data)
 
+    @extend_schema(
+        request=BBQReservationPatchSerializer,
+        responses={200: BBQReservationOutputSerializer},
+    )
     def patch(self, request, pk: int):
         serializer = BBQReservationPatchSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -51,6 +64,7 @@ class BBQReservationDetailView(APIView):
         )
         return Response(BBQReservationOutputSerializer(instance).data)
 
+    @extend_schema(responses={204: None})
     def delete(self, request, pk: int):
         container.bbq_service.delete(pk)
         return Response(status=status.HTTP_204_NO_CONTENT)

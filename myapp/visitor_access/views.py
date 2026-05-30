@@ -1,6 +1,7 @@
 """Plain APIViews for visitor access."""
 
-from rest_framework import status
+from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
+from rest_framework import serializers, status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -13,9 +14,21 @@ from visitor_access.serializers import (
 )
 
 
+_CheckinResponse = inline_serializer(
+    name="CheckinResponse",
+    fields={"checkin_code": serializers.CharField()},
+)
+_CheckoutResponse = inline_serializer(
+    name="CheckoutResponse",
+    fields={"checkout_code": serializers.CharField()},
+)
+
+
+@extend_schema(tags=["visitor_access"])
 class VisitorAccessListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses={200: VisitorAccessOutputSerializer(many=True)})
     def get(self, request):
         queryset = container.visitor_access_service.list_for(request.user)
         paginator = PageNumberPagination()
@@ -23,6 +36,10 @@ class VisitorAccessListCreateView(APIView):
         serializer = VisitorAccessOutputSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
 
+    @extend_schema(
+        request=VisitorAccessInputSerializer,
+        responses={201: VisitorAccessOutputSerializer},
+    )
     def post(self, request):
         serializer = VisitorAccessInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -35,29 +52,51 @@ class VisitorAccessListCreateView(APIView):
         )
 
 
+@extend_schema(tags=["visitor_access"])
 class VisitorAccessDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses={200: VisitorAccessOutputSerializer})
     def get(self, request, pk: int):
         instance = container.visitor_access_service.get_for(request.user, pk)
         return Response(VisitorAccessOutputSerializer(instance).data)
 
+    @extend_schema(responses={204: None})
     def delete(self, request, pk: int):
         container.visitor_access_service.delete(request.user, pk)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+@extend_schema(tags=["visitor_access"])
 class VisitorAccessCheckinView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        responses={
+            200: OpenApiResponse(
+                response=_CheckinResponse,
+                description="Returns the check-in code, or a plain text message "
+                "when the request is outside the allowed window.",
+            )
+        }
+    )
     def get(self, request, visitor_access_link_checkin: str):
         result = container.visitor_access_service.checkin(visitor_access_link_checkin)
         return Response(result)
 
 
+@extend_schema(tags=["visitor_access"])
 class VisitorAccessCheckoutView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        responses={
+            200: OpenApiResponse(
+                response=_CheckoutResponse,
+                description="Returns the check-out code if inside the allowed window.",
+            )
+        }
+    )
     def get(self, request, visitor_access_link_checkout: str):
         result = container.visitor_access_service.checkout(
             visitor_access_link_checkout
