@@ -56,6 +56,9 @@ class FakeUserRepo(IUserRepository):
     def exists_with_username(self, username):
         return any(u.username == username for u in self._users.values())
 
+    def exists_with_cpf(self, cpf):
+        return any(getattr(u, "cpf", None) == cpf for u in self._users.values())
+
     def create_user(self, **k):  # not used here
         raise NotImplementedError
 

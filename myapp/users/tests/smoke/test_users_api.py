@@ -57,6 +57,20 @@ class UsersAPISmoke(BaseTestsUsers):
         response = self.client.post(LIST_URL, data=payload)
         self.assertEqual(response.status_code, 400)
 
+    def test_duplicate_cpf_rejected(self):
+        payload = self.create_random_user_from_faker()
+        payload["cpf"] = self.user_a.cpf
+        response = self.client.post(LIST_URL, data=payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("cpf", response.data)
+
+    def test_invalid_cpf_rejected(self):
+        payload = self.create_random_user_from_faker()
+        payload["cpf"] = "11111111111"
+        response = self.client.post(LIST_URL, data=payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("cpf", response.data)
+
     def test_admin_can_delete_user(self):
         self.authenticate(self.admin)
         self.assertEqual(

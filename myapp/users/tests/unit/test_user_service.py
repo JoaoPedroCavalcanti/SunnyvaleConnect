@@ -1,5 +1,7 @@
 """Unit tests for UserService with an in-memory fake repository."""
 
+from datetime import date
+
 import pytest
 
 from shared.exceptions import (
@@ -7,12 +9,21 @@ from shared.exceptions import (
     NotFoundError,
     PermissionDeniedError,
 )
+from shared.infrastructure.document_validators import (
+    BrazilianCPFValidator,
+    BrazilianPhoneValidator,
+)
 from shared.infrastructure.password_policy import DefaultPasswordPolicy
 from users.repositories.user_repository import IUserRepository
 from users.services.user_service import UserService
 
 
 pytestmark = pytest.mark.unit
+
+
+# Two valid CPFs (correct check digits) for the tests.
+VALID_CPF_A = "39053344705"
+VALID_CPF_B = "12345678909"
 
 
 class _FakeUser:
@@ -28,8 +39,13 @@ class _FakeUser:
         self.pk = pk
         self.username = username
         self.email = email
-        self.first_name = ""
-        self.last_name = ""
+        self.full_name = ""
+        self.cpf = ""
+        self.phone = ""
+        self.birth_date = None
+        self.apartment = ""
+        self.block = ""
+        self.photo = None
         self.is_staff = is_staff
         self.is_authenticated = is_authenticated
 
@@ -55,10 +71,19 @@ class FakeUserRepository(IUserRepository):
     def exists_with_username(self, username):
         return any(u.username == username for u in self._users.values())
 
-    def create_user(self, username, password, first_name, last_name, email):
-        user = _FakeUser(self._next_id, username=username, email=email)
-        user.first_name = first_name
-        user.last_name = last_name
+    def exists_with_cpf(self, cpf):
+        return any(u.cpf == cpf for u in self._users.values())
+
+    def create_user(self, **fields):
+        password = fields.pop("password", "")
+        user = _FakeUser(
+            self._next_id,
+            username=fields.get("username", ""),
+            email=fields.get("email", ""),
+        )
+        for k, v in fields.items():
+            setattr(user, k, v)
+        user._password = password
         self._users[self._next_id] = user
         self._next_id += 1
         return user
@@ -77,6 +102,8 @@ def service():
     return UserService(
         user_repository=FakeUserRepository(),
         password_policy=DefaultPasswordPolicy(),
+        cpf_validator=BrazilianCPFValidator(),
+        phone_validator=BrazilianPhoneValidator(),
     )
 
 
@@ -84,9 +111,13 @@ def _valid_payload(**overrides):
     data = {
         "username": "joao",
         "password": "StrongPass1!",
-        "first_name": "Joao",
-        "last_name": "Pedro",
+        "full_name": "Joao Pedro",
+        "birth_date": date(1995, 5, 20),
+        "cpf": VALID_CPF_A,
+        "phone": "11987654321",
         "email": "joao@example.com",
+        "apartment": "101",
+        "block": "A",
     }
     data.update(overrides)
     return data
@@ -96,6 +127,7 @@ class TestCreate:
     def test_anonymous_can_create(self, service):
         user = service.create(_anon(), _valid_payload())
         assert user.username == "joao"
+        assert user.cpf == VALID_CPF_A
 
     def test_admin_can_create(self, service):
         admin = _FakeUser(99, is_staff=True)
@@ -109,14 +141,47 @@ class TestCreate:
     def test_rejects_duplicate_email(self, service):
         service.create(_anon(), _valid_payload())
         with pytest.raises(BusinessRuleError) as exc:
-            service.create(_anon(), _valid_payload(username="other"))
+            service.create(
+                _anon(),
+                _valid_payload(username="other", cpf=VALID_CPF_B),
+            )
         assert exc.value.field == "email"
 
     def test_rejects_duplicate_username(self, service):
         service.create(_anon(), _valid_payload())
         with pytest.raises(BusinessRuleError) as exc:
-            service.create(_anon(), _valid_payload(email="other@e.com"))
+            service.create(
+                _anon(),
+                _valid_payload(email="other@e.com", cpf=VALID_CPF_B),
+            )
         assert exc.value.field == "username"
+
+    def test_rejects_duplicate_cpf(self, service):
+        service.create(_anon(), _valid_payload())
+        with pytest.raises(BusinessRuleError) as exc:
+            service.create(
+                _anon(),
+                _valid_payload(username="other", email="other@e.com"),
+            )
+        assert exc.value.field == "cpf"
+
+    def test_rejects_invalid_cpf_check_digits(self, service):
+        with pytest.raises(BusinessRuleError) as exc:
+            service.create(_anon(), _valid_payload(cpf="11111111111"))
+        assert exc.value.field == "cpf"
+
+    def test_rejects_short_phone(self, service):
+        with pytest.raises(BusinessRuleError) as exc:
+            service.create(_anon(), _valid_payload(phone="123"))
+        assert exc.value.field == "phone"
+
+    def test_normalizes_cpf_with_mask(self, service):
+        user = service.create(_anon(), _valid_payload(cpf="390.533.447-05"))
+        assert user.cpf == VALID_CPF_A
+
+    def test_normalizes_email_lowercase(self, service):
+        user = service.create(_anon(), _valid_payload(email="UPPER@MAIL.COM"))
+        assert user.email == "upper@mail.com"
 
     def test_rejects_weak_password(self, service):
         with pytest.raises(BusinessRuleError) as exc:
@@ -147,3 +212,17 @@ class TestListFor:
     def test_regular_user_lists_only_self(self, service):
         u = _FakeUser(99)
         assert list(service.list_for(u)) == [u]
+
+
+class TestUpdateSelf:
+    def test_drops_immutable_cpf(self, service):
+        user = service.create(_anon(), _valid_payload())
+        original_cpf = user.cpf
+        service.update_self(user, {"cpf": VALID_CPF_B, "full_name": "New Name"})
+        assert user.cpf == original_cpf
+        assert user.full_name == "New Name"
+
+    def test_drops_immutable_username(self, service):
+        user = service.create(_anon(), _valid_payload())
+        service.update_self(user, {"username": "hacked"})
+        assert user.username == "joao"

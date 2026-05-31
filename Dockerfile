@@ -7,7 +7,8 @@ ENV POETRY_VIRTUALENVS_CREATE=false
 ENV POETRY_VIRTUALENVS_IN_PROJECT=false
 
 # Instala o bash, curl, gcc, e outras dependências necessárias
-RUN apk add --no-cache bash curl gcc musl-dev postgresql-dev
+RUN apk add --no-cache bash curl gcc musl-dev postgresql-dev \
+    jpeg-dev zlib-dev libjpeg
 
 # Instala o Poetry globalmente usando pip (pinned em 1.x para compatibilidade com pyproject atual)
 RUN pip install "poetry>=1.8,<2.0"

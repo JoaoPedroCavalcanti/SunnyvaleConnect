@@ -18,6 +18,12 @@ For tests you can replace any provider in-place::
 from typing import Any, Callable
 
 from shared.infrastructure.code_generator import ICodeGenerator, RandomCodeGenerator
+from shared.infrastructure.document_validators import (
+    BrazilianCPFValidator,
+    BrazilianPhoneValidator,
+    ICPFValidator,
+    IPhoneValidator,
+)
 from shared.infrastructure.email_sender import DjangoEmailSender, IEmailSender
 from shared.infrastructure.password_policy import (
     DefaultPasswordPolicy,
@@ -82,6 +88,14 @@ class Container:
     @property
     def password_policy(self) -> IPasswordPolicy:
         return self._resolve("password_policy", DefaultPasswordPolicy)
+
+    @property
+    def cpf_validator(self) -> ICPFValidator:
+        return self._resolve("cpf_validator", BrazilianCPFValidator)
+
+    @property
+    def phone_validator(self) -> IPhoneValidator:
+        return self._resolve("phone_validator", BrazilianPhoneValidator)
 
     @property
     def visitor_access_base_url(self) -> str:
@@ -171,6 +185,8 @@ class Container:
             lambda: UserService(
                 user_repository=self.user_repository,
                 password_policy=self.password_policy,
+                cpf_validator=self.cpf_validator,
+                phone_validator=self.phone_validator,
             ),
         )
 

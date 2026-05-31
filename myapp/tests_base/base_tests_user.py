@@ -1,10 +1,40 @@
+from datetime import date
+
 from django.contrib.auth import get_user_model
 from faker import Faker
-from model_bakery import baker
 from rest_framework.test import APIClient, APITestCase
 from rest_framework_simplejwt.tokens import AccessToken
 
-fake = Faker()
+fake = Faker("pt_BR")
+
+
+def _gen_cpf() -> str:
+    """Generate a syntactically valid CPF (digits-only)."""
+    import random
+
+    base = [random.randint(0, 9) for _ in range(9)]
+    for i in (9, 10):
+        total = sum(base[j] * ((i + 1) - j) for j in range(i))
+        check = (total * 10) % 11
+        base.append(0 if check == 10 else check)
+    return "".join(str(d) for d in base)
+
+
+def _make_user(model, **overrides):
+    defaults = {
+        "username": fake.unique.user_name(),
+        "email": fake.unique.email(),
+        "password": "Abcd123!",
+        "full_name": fake.name(),
+        "birth_date": date(1990, 1, 1),
+        "cpf": _gen_cpf(),
+        "phone": "11987654321",
+        "apartment": "101",
+        "block": "A",
+    }
+    defaults.update(overrides)
+    password = defaults.pop("password")
+    return model.objects.create_user(password=password, **defaults)
 
 
 class BaseTestsUsers(APITestCase):
@@ -24,9 +54,14 @@ class BaseTestsUsers(APITestCase):
             username="admin",
             email="admin@example.com",
             password="Abcd123!",
+            full_name="Admin User",
+            birth_date=date(1980, 1, 1),
+            cpf=_gen_cpf(),
+            phone="11999999999",
+            apartment="0",
         )
-        cls.user_a = baker.make(cls.User)
-        cls.user_b = baker.make(cls.User)
+        cls.user_a = _make_user(cls.User)
+        cls.user_b = _make_user(cls.User)
         cls.token_user_a = AccessToken.for_user(cls.user_a)
         cls.token_user_b = AccessToken.for_user(cls.user_b)
         cls.token_admin = AccessToken.for_user(cls.admin)
@@ -50,9 +85,13 @@ class BaseTestsUsers(APITestCase):
 
     def create_random_user_from_faker(self):
         return {
-            "username": fake.user_name(),
-            "first_name": fake.first_name(),
-            "last_name": fake.last_name(),
-            "email": fake.email(),
+            "username": fake.unique.user_name(),
+            "email": fake.unique.email(),
             "password": "StrongPass1!",
+            "full_name": fake.name(),
+            "birth_date": "1995-05-20",
+            "cpf": _gen_cpf(),
+            "phone": "11987654321",
+            "apartment": "202",
+            "block": "B",
         }

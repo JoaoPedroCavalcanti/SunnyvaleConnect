@@ -3,6 +3,7 @@
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -17,6 +18,8 @@ from users.serializers import (
 
 @extend_schema(tags=["users"])
 class UserListCreateView(APIView):
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
+
     def get_permissions(self):
         if self.request.method == "POST":
             return [AllowAny()]
@@ -44,6 +47,7 @@ class UserListCreateView(APIView):
 @extend_schema(tags=["users"])
 class UserDetailView(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     @extend_schema(responses={200: UserOutputSerializer})
     def get(self, request, pk: int):
@@ -71,6 +75,7 @@ class UserDetailView(APIView):
 @extend_schema(tags=["users"])
 class UserMeView(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     @extend_schema(responses={200: UserOutputSerializer})
     def get(self, request):

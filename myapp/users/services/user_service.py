@@ -3,8 +3,15 @@
 from abc import ABC, abstractmethod
 
 from shared.exceptions import BusinessRuleError, NotFoundError, PermissionDeniedError
+from shared.infrastructure.document_validators import (
+    ICPFValidator,
+    IPhoneValidator,
+)
 from shared.infrastructure.password_policy import IPasswordPolicy
 from users.repositories.user_repository import IUserRepository
+
+
+_IMMUTABLE_ON_PATCH = {"username", "cpf"}
 
 
 class IUserService(ABC):
@@ -32,14 +39,17 @@ class UserService(IUserService):
         self,
         user_repository: IUserRepository,
         password_policy: IPasswordPolicy,
+        cpf_validator: ICPFValidator,
+        phone_validator: IPhoneValidator,
     ):
         self._repo = user_repository
         self._policy = password_policy
+        self._cpf = cpf_validator
+        self._phone = phone_validator
 
     def list_for(self, user):
         if user.is_staff:
             return self._repo.list_all()
-        # regular user sees only itself
         return [user]
 
     def get_for(self, user, pk):
@@ -47,12 +57,10 @@ class UserService(IUserService):
         if not instance:
             raise NotFoundError("No user matches the given query.")
         if not user.is_staff and instance.id != user.id:
-            # mimic the previous queryset filtering: not in scope -> 404
             raise NotFoundError("No user matches the given query.")
         return instance
 
     def create(self, requester, payload: dict):
-        # Only anonymous users or staff can create accounts.
         is_anonymous = requester is None or not getattr(
             requester, "is_authenticated", False
         )
@@ -73,19 +81,38 @@ class UserService(IUserService):
                 field="username",
             )
 
-        email = payload.get("email")
+        email = (payload.get("email") or "").lower().strip()
         if email and self._repo.exists_with_email(email):
             raise BusinessRuleError(
                 message="An account with this email address already exists.",
                 field="email",
             )
 
+        cpf = self._cpf.normalize(payload.get("cpf", ""))
+        cpf_error = self._cpf.validate(cpf)
+        if cpf_error:
+            raise BusinessRuleError(message=cpf_error, field="cpf")
+        if self._repo.exists_with_cpf(cpf):
+            raise BusinessRuleError(
+                message="An account with this CPF already exists.", field="cpf"
+            )
+
+        phone = self._phone.normalize(payload.get("phone", ""))
+        phone_error = self._phone.validate(phone)
+        if phone_error:
+            raise BusinessRuleError(message=phone_error, field="phone")
+
         return self._repo.create_user(
-            username=payload["username"],
+            username=username,
             password=password,
-            first_name=payload["first_name"],
-            last_name=payload["last_name"],
             email=email,
+            full_name=payload["full_name"],
+            birth_date=payload["birth_date"],
+            cpf=cpf,
+            phone=phone,
+            apartment=payload["apartment"],
+            block=payload.get("block", ""),
+            photo=payload.get("photo"),
         )
 
     def update(self, user, pk, payload):
@@ -96,11 +123,16 @@ class UserService(IUserService):
         return self._update(user, payload)
 
     def _update(self, instance, payload):
+        for field in _IMMUTABLE_ON_PATCH & payload.keys():
+            payload.pop(field)
+
         if "password" in payload:
             errors = self._policy.validate(payload["password"])
             if errors:
                 raise BusinessRuleError(message=errors, field="password")
+
         if "email" in payload and payload["email"]:
+            payload["email"] = payload["email"].lower().strip()
             if (
                 payload["email"] != instance.email
                 and self._repo.exists_with_email(payload["email"])
@@ -109,6 +141,14 @@ class UserService(IUserService):
                     message="An account with this email address already exists.",
                     field="email",
                 )
+
+        if "phone" in payload and payload["phone"]:
+            phone = self._phone.normalize(payload["phone"])
+            phone_error = self._phone.validate(phone)
+            if phone_error:
+                raise BusinessRuleError(message=phone_error, field="phone")
+            payload["phone"] = phone
+
         return self._repo.update(instance, payload)
 
     def delete(self, user, pk):

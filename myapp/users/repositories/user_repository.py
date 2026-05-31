@@ -20,14 +20,10 @@ class IUserRepository(ABC):
     def exists_with_username(self, username: str) -> bool: ...
 
     @abstractmethod
-    def create_user(
-        self,
-        username: str,
-        password: str,
-        first_name: str,
-        last_name: str,
-        email: str,
-    ): ...
+    def exists_with_cpf(self, cpf: str) -> bool: ...
+
+    @abstractmethod
+    def create_user(self, **fields): ...
 
     @abstractmethod
     def update(self, instance, data: dict): ...
@@ -47,18 +43,19 @@ class DjangoUserRepository(IUserRepository):
         return self._model().objects.filter(pk=pk).first()
 
     def exists_with_email(self, email):
-        return self._model().objects.filter(email=email).exists()
+        return self._model().objects.filter(email__iexact=email).exists()
 
     def exists_with_username(self, username):
         return self._model().objects.filter(username=username).exists()
 
-    def create_user(self, username, password, first_name, last_name, email):
+    def exists_with_cpf(self, cpf):
+        return self._model().objects.filter(cpf=cpf).exists()
+
+    def create_user(self, **fields):
+        password = fields.pop("password")
+        username = fields.pop("username")
         return self._model().objects.create_user(
-            username=username,
-            password=password,
-            first_name=first_name,
-            last_name=last_name,
-            email=email,
+            username=username, password=password, **fields
         )
 
     def update(self, instance, data):
