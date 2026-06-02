@@ -6,10 +6,11 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
     TokenRefreshView,
     TokenVerifyView,
 )
+
+from users.views import LoginView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -21,7 +22,8 @@ urlpatterns = [
     path("condo_payments/", include("condo_payments.urls")),
     path("delivery_notification/", include("delivery_notification.urls")),
     path("sunny_vale_news/", include("sunny_vale_news.urls")),
-    path("api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("households/", include(("households.urls"), namespace="households")),
+    path("api/token/", LoginView.as_view(), name="token_obtain_pair"),
     path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/token/verify/", TokenVerifyView.as_view(), name="token_verify"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

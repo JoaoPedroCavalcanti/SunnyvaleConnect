@@ -70,6 +70,22 @@ class FakeUserRepo(IUserRepository):
     def delete(self, instance):
         self._users.pop(instance.id, None)
 
+    def set_active(self, instance, value):
+        instance.is_active = value
+        return instance
+
+    def list_admin_emails(self):
+        return []
+
+    def get_by_username(self, username):
+        for u in self._users.values():
+            if u.username == username:
+                return u
+        return None
+
+    def check_password(self, instance, raw_password):
+        return False
+
 
 @pytest.fixture
 def email_sender():

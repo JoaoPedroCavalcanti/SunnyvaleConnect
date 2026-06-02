@@ -43,6 +43,52 @@ class FakeEmailSender(IEmailSender):
             "from": delivery_from,
         })
 
+    def send_household_join_request(
+        self, to_email, holder_name, requester_name, apartment, block
+    ):
+        self.sent.append({
+            "kind": "household_join_request",
+            "to": to_email,
+            "holder_name": holder_name,
+            "requester_name": requester_name,
+            "apartment": apartment,
+            "block": block,
+        })
+
+    def send_household_creation_request(
+        self, to_email, requester_name, apartment, block
+    ):
+        self.sent.append({
+            "kind": "household_creation_request",
+            "to": to_email,
+            "requester_name": requester_name,
+            "apartment": apartment,
+            "block": block,
+        })
+
+    def send_household_request_approved(
+        self, to_email, requester_name, apartment, block
+    ):
+        self.sent.append({
+            "kind": "household_approved",
+            "to": to_email,
+            "requester_name": requester_name,
+            "apartment": apartment,
+            "block": block,
+        })
+
+    def send_household_request_rejected(
+        self, to_email, requester_name, apartment, block, reason
+    ):
+        self.sent.append({
+            "kind": "household_rejected",
+            "to": to_email,
+            "requester_name": requester_name,
+            "apartment": apartment,
+            "block": block,
+            "reason": reason,
+        })
+
 
 class FakeCodeGenerator(ICodeGenerator):
     def __init__(self, value: str = "12345"):

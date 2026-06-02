@@ -63,6 +63,7 @@ source = [
     "delivery_notification",
     "sunny_vale_news",
     "users",
+    "households",
     "sunnyValeConnect",
 ]
 omit = [

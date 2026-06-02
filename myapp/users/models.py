@@ -10,11 +10,11 @@ class User(AbstractUser):
     birth_date = models.DateField()
     cpf = models.CharField(max_length=11, unique=True)
     phone = models.CharField(max_length=11)
-    apartment = models.CharField(max_length=10)
+    apartment = models.CharField(max_length=10, blank=True, default="")
     block = models.CharField(max_length=10, blank=True, default="")
     photo = models.ImageField(upload_to="users/photos/", blank=True, null=True)
 
-    REQUIRED_FIELDS = ["email", "full_name", "birth_date", "cpf", "phone", "apartment"]
+    REQUIRED_FIELDS = ["email", "full_name", "birth_date", "cpf", "phone"]
 
     def __str__(self) -> str:
         return self.full_name or self.username

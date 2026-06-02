@@ -76,3 +76,53 @@ class UsersAPISmoke(BaseTestsUsers):
         self.assertEqual(
             self.client.delete(detail_url(self.user_a.id)).status_code, 204
         )
+
+
+LOGIN_URL = "/api/token/"
+
+
+class LoginAPISmoke(BaseTestsUsers):
+    def test_active_user_gets_tokens(self):
+        response = self.client.post(
+            LOGIN_URL,
+            data={"username": self.user_a.username, "password": "Abcd123!"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIn("access", response.data)
+        self.assertIn("refresh", response.data)
+
+    def test_invalid_credentials_returns_401(self):
+        response = self.client.post(
+            LOGIN_URL,
+            data={"username": self.user_a.username, "password": "wrong"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.data["code"], "invalid_credentials")
+
+    def test_pending_user_returns_403_with_household_info(self):
+        from households.models import Household, HouseholdMembership
+
+        self.user_a.is_active = False
+        self.user_a.save()
+        household = Household.objects.create(
+            apartment="701",
+            block="C",
+            status=Household.Status.PENDING_ADMIN,
+        )
+        HouseholdMembership.objects.create(
+            household=household,
+            user=self.user_a,
+            role=HouseholdMembership.Role.HOLDER,
+            status=HouseholdMembership.Status.PENDING_ADMIN,
+        )
+
+        response = self.client.post(
+            LOGIN_URL,
+            data={"username": self.user_a.username, "password": "Abcd123!"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["code"], "pending_household_approval")
+        self.assertEqual(response.data["household"]["apartment"], "701")

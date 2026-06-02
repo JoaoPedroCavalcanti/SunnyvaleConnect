@@ -31,6 +31,18 @@ class IUserRepository(ABC):
     @abstractmethod
     def delete(self, instance) -> None: ...
 
+    @abstractmethod
+    def set_active(self, instance, value: bool): ...
+
+    @abstractmethod
+    def list_admin_emails(self) -> list[str]: ...
+
+    @abstractmethod
+    def get_by_username(self, username: str): ...
+
+    @abstractmethod
+    def check_password(self, instance, raw_password: str) -> bool: ...
+
 
 class DjangoUserRepository(IUserRepository):
     def _model(self):
@@ -69,3 +81,22 @@ class DjangoUserRepository(IUserRepository):
 
     def delete(self, instance):
         instance.delete()
+
+    def set_active(self, instance, value):
+        instance.is_active = value
+        instance.save(update_fields=["is_active"])
+        return instance
+
+    def list_admin_emails(self):
+        return list(
+            self._model()
+            .objects.filter(is_staff=True, is_active=True)
+            .exclude(email="")
+            .values_list("email", flat=True)
+        )
+
+    def get_by_username(self, username):
+        return self._model().objects.filter(username=username).first()
+
+    def check_password(self, instance, raw_password):
+        return instance.check_password(raw_password)

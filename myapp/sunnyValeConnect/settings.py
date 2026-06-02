@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "condo_payments",
     "delivery_notification",
     "sunny_vale_news",
+    "households",
 ]
 
 MIDDLEWARE = [
@@ -191,6 +192,9 @@ SPECTACULAR_SETTINGS = {
         "ServiceRequestStatusEnum": "service_requests.models.ServiceRequestModel.STATUS",
         # Priority levels happen to share (low/medium/high) across 3 apps; unify.
         "PriorityEnum": "service_requests.models.ServiceRequestModel.PRIORITY_LEVEL",
+        "HouseholdStatusEnum": "households.models.Household.Status",
+        "MembershipStatusEnum": "households.models.HouseholdMembership.Status",
+        "MembershipRoleEnum": "households.models.HouseholdMembership.Role",
     },
 }
 

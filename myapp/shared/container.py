@@ -173,6 +173,30 @@ class Container:
             "visitor_access_repository", DjangoVisitorAccessRepository
         )
 
+    @property
+    def household_repository(self):
+        from households.repositories.household_repository import (
+            DjangoHouseholdRepository,
+        )
+
+        return self._resolve("household_repository", DjangoHouseholdRepository)
+
+    @property
+    def membership_repository(self):
+        from households.repositories.membership_repository import (
+            DjangoMembershipRepository,
+        )
+
+        return self._resolve("membership_repository", DjangoMembershipRepository)
+
+    @property
+    def dependent_repository(self):
+        from households.repositories.dependent_repository import (
+            DjangoDependentRepository,
+        )
+
+        return self._resolve("dependent_repository", DjangoDependentRepository)
+
     # ------------------------------------------------------------------ #
     # services                                                           #
     # ------------------------------------------------------------------ #
@@ -266,6 +290,74 @@ class Container:
                 code_generator=self.code_generator,
                 string_mixer=self.string_mixer,
                 visitor_access_base_url=self.visitor_access_base_url,
+            ),
+        )
+
+    @property
+    def household_service(self):
+        from households.services.household_service import HouseholdService
+
+        return self._resolve(
+            "household_service",
+            lambda: HouseholdService(
+                household_repository=self.household_repository,
+                membership_repository=self.membership_repository,
+                user_repository=self.user_repository,
+                email_sender=self.email_sender,
+            ),
+        )
+
+    @property
+    def membership_service(self):
+        from households.services.membership_service import MembershipService
+
+        return self._resolve(
+            "membership_service",
+            lambda: MembershipService(
+                membership_repository=self.membership_repository,
+                household_repository=self.household_repository,
+                user_repository=self.user_repository,
+                email_sender=self.email_sender,
+            ),
+        )
+
+    @property
+    def dependent_service(self):
+        from households.services.dependent_service import DependentService
+
+        return self._resolve(
+            "dependent_service",
+            lambda: DependentService(
+                dependent_repository=self.dependent_repository,
+                membership_repository=self.membership_repository,
+                household_repository=self.household_repository,
+                user_repository=self.user_repository,
+                cpf_validator=self.cpf_validator,
+            ),
+        )
+
+    @property
+    def signup_service(self):
+        from households.services.signup_service import SignupService
+
+        return self._resolve(
+            "signup_service",
+            lambda: SignupService(
+                user_service=self.user_service,
+                household_service=self.household_service,
+                membership_service=self.membership_service,
+            ),
+        )
+
+    @property
+    def auth_service(self):
+        from users.services.auth_service import AuthService
+
+        return self._resolve(
+            "auth_service",
+            lambda: AuthService(
+                user_repository=self.user_repository,
+                membership_repository=self.membership_repository,
             ),
         )
 

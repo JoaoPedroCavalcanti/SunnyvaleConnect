@@ -3,6 +3,8 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
+from households.serializers import HouseholdRequestSerializer
+
 
 class UserInputSerializer(serializers.Serializer):
     username = serializers.CharField(required=True)
@@ -12,9 +14,8 @@ class UserInputSerializer(serializers.Serializer):
     cpf = serializers.CharField(required=True, max_length=14)
     phone = serializers.CharField(required=True, max_length=20)
     email = serializers.EmailField(required=True)
-    apartment = serializers.CharField(required=True, max_length=10)
-    block = serializers.CharField(required=False, allow_blank=True, max_length=10)
     photo = serializers.ImageField(required=False, allow_null=True)
+    household_request = HouseholdRequestSerializer(required=False, allow_null=True)
 
 
 class UserPatchSerializer(serializers.Serializer):
@@ -47,3 +48,13 @@ class UserOutputSerializer(serializers.ModelSerializer):
             "block",
             "photo",
         ]
+
+
+class LoginInputSerializer(serializers.Serializer):
+    username = serializers.CharField(required=True)
+    password = serializers.CharField(required=True, write_only=True)
+
+
+class LoginOutputSerializer(serializers.Serializer):
+    access = serializers.CharField(read_only=True)
+    refresh = serializers.CharField(read_only=True)

@@ -22,7 +22,13 @@ class IUserService(ABC):
     def get_for(self, user, pk: int): ...
 
     @abstractmethod
-    def create(self, requester, payload: dict): ...
+    def create(self, requester, payload: dict, *, is_active: bool = True): ...
+
+    @abstractmethod
+    def activate(self, user) -> None: ...
+
+    @abstractmethod
+    def hard_delete(self, user) -> None: ...
 
     @abstractmethod
     def update(self, user, pk: int, payload: dict): ...
@@ -60,7 +66,13 @@ class UserService(IUserService):
             raise NotFoundError("No user matches the given query.")
         return instance
 
-    def create(self, requester, payload: dict):
+    def activate(self, user) -> None:
+        self._repo.set_active(user, True)
+
+    def hard_delete(self, user) -> None:
+        self._repo.delete(user)
+
+    def create(self, requester, payload: dict, *, is_active: bool = True):
         is_anonymous = requester is None or not getattr(
             requester, "is_authenticated", False
         )
@@ -110,9 +122,10 @@ class UserService(IUserService):
             birth_date=payload["birth_date"],
             cpf=cpf,
             phone=phone,
-            apartment=payload["apartment"],
+            apartment=payload.get("apartment", ""),
             block=payload.get("block", ""),
             photo=payload.get("photo"),
+            is_active=is_active,
         )
 
     def update(self, user, pk, payload):
