@@ -8,15 +8,17 @@ from shared.infrastructure.document_validators import (
     IPhoneValidator,
 )
 from shared.infrastructure.password_policy import IPasswordPolicy
+from users.models import UserRole
 from users.repositories.user_repository import IUserRepository
 
 
 _IMMUTABLE_ON_PATCH = {"username", "cpf"}
+_VALID_ROLES = {choice for choice, _ in UserRole.choices}
 
 
 class IUserService(ABC):
     @abstractmethod
-    def list_for(self, user): ...
+    def list_for(self, user, role: str | None = None): ...
 
     @abstractmethod
     def get_for(self, user, pk: int): ...
@@ -53,10 +55,16 @@ class UserService(IUserService):
         self._cpf = cpf_validator
         self._phone = phone_validator
 
-    def list_for(self, user):
-        if user.is_staff:
-            return self._repo.list_all()
-        return [user]
+    def list_for(self, user, role=None):
+        if not user.is_staff:
+            return [user]
+        if role is not None:
+            if role not in _VALID_ROLES:
+                raise BusinessRuleError(
+                    message=f"Invalid role filter: {role!r}.", field="role"
+                )
+            return self._repo.list_by_role(role)
+        return self._repo.list_all()
 
     def get_for(self, user, pk):
         instance = self._repo.get_by_id(pk)
@@ -79,6 +87,16 @@ class UserService(IUserService):
         if not is_anonymous and not getattr(requester, "is_staff", False):
             raise PermissionDeniedError(
                 "Only anonymous users or staff can create accounts."
+            )
+
+        role = payload.pop("role", UserRole.RESIDENT)
+        if role not in _VALID_ROLES:
+            raise BusinessRuleError(
+                message=f"Invalid role: {role!r}.", field="role"
+            )
+        if role != UserRole.RESIDENT and is_anonymous:
+            raise PermissionDeniedError(
+                "Only admins can create non-resident users."
             )
 
         password = payload.get("password", "")
@@ -126,18 +144,38 @@ class UserService(IUserService):
             block=payload.get("block", ""),
             photo=payload.get("photo"),
             is_active=is_active,
+            role=role,
+            is_staff=role == UserRole.ADMIN,
         )
 
     def update(self, user, pk, payload):
         instance = self.get_for(user, pk)
-        return self._update(instance, payload)
+        return self._update(user, instance, payload)
 
     def update_self(self, user, payload):
-        return self._update(user, payload)
+        return self._update(user, user, payload)
 
-    def _update(self, instance, payload):
+    def _update(self, requester, instance, payload):
         for field in _IMMUTABLE_ON_PATCH & payload.keys():
             payload.pop(field)
+
+        if "role" in payload:
+            new_role = payload["role"]
+            if not getattr(requester, "is_staff", False):
+                raise PermissionDeniedError("Only admins can change user role.")
+            if new_role not in _VALID_ROLES:
+                raise BusinessRuleError(
+                    message=f"Invalid role: {new_role!r}.", field="role"
+                )
+            if (
+                requester.id == instance.id
+                and instance.role == UserRole.ADMIN
+                and new_role != UserRole.ADMIN
+            ):
+                raise PermissionDeniedError(
+                    "Admins cannot demote themselves."
+                )
+            payload["is_staff"] = new_role == UserRole.ADMIN
 
         if "password" in payload:
             errors = self._policy.validate(payload["password"])
@@ -166,4 +204,9 @@ class UserService(IUserService):
 
     def delete(self, user, pk):
         instance = self.get_for(user, pk)
+        if (
+            user.id == instance.id
+            and getattr(instance, "role", None) == UserRole.ADMIN
+        ):
+            raise PermissionDeniedError("Admins cannot delete themselves.")
         self._repo.delete(instance)

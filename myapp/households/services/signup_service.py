@@ -11,6 +11,7 @@ from django.db import transaction
 from households.services.household_service import IHouseholdService
 from households.services.membership_service import IMembershipService
 from shared.exceptions import BusinessRuleError
+from users.models import UserRole
 from users.services.user_service import IUserService
 
 
@@ -39,6 +40,13 @@ class SignupService(ISignupService):
         self._memberships = membership_service
 
     def signup(self, requester, user_payload, household_request):
+        role = user_payload.get("role", UserRole.RESIDENT)
+        if role != UserRole.RESIDENT and household_request is not None:
+            raise BusinessRuleError(
+                "Non-resident users cannot have a household_request.",
+                field="household_request",
+            )
+
         normalized = self._normalize_request(household_request)
 
         with transaction.atomic():

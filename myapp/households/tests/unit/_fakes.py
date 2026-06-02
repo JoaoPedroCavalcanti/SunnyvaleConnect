@@ -21,6 +21,7 @@ def make_user(
     is_staff=False,
     is_active=True,
     is_authenticated=True,
+    role="RESIDENT",
 ):
     return SimpleNamespace(
         id=pk,
@@ -37,6 +38,7 @@ def make_user(
         is_staff=is_staff,
         is_active=is_active,
         is_authenticated=is_authenticated,
+        role="ADMIN" if is_staff else role,
     )
 
 
@@ -52,6 +54,9 @@ class FakeUserRepository(IUserRepository):
 
     def list_all(self):
         return list(self._users.values())
+
+    def list_by_role(self, role):
+        return [u for u in self._users.values() if getattr(u, "role", None) == role]
 
     def get_by_id(self, pk):
         return self._users.get(int(pk))

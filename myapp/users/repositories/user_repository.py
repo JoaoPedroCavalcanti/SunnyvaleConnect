@@ -11,6 +11,9 @@ class IUserRepository(ABC):
     def list_all(self) -> Iterable: ...
 
     @abstractmethod
+    def list_by_role(self, role: str) -> Iterable: ...
+
+    @abstractmethod
     def get_by_id(self, pk: int): ...
 
     @abstractmethod
@@ -50,6 +53,9 @@ class DjangoUserRepository(IUserRepository):
 
     def list_all(self):
         return self._model().objects.all().order_by("id")
+
+    def list_by_role(self, role):
+        return self._model().objects.filter(role=role).order_by("id")
 
     def get_by_id(self, pk):
         return self._model().objects.filter(pk=pk).first()

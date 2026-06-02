@@ -1,6 +1,6 @@
 """Plain APIViews for users."""
 
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -10,6 +10,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from shared.container import container
+from users.models import UserRole
 from users.serializers import (
     LoginInputSerializer,
     LoginOutputSerializer,
@@ -34,9 +35,22 @@ class UserListCreateView(APIView):
             return [AllowAny()]
         return [IsAuthenticated()]
 
-    @extend_schema(responses={200: UserOutputSerializer(many=True)})
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="role",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                enum=[c for c, _ in UserRole.choices],
+                description="Filter by role (admin only).",
+            ),
+        ],
+        responses={200: UserOutputSerializer(many=True)},
+    )
     def get(self, request):
-        queryset = container.user_service.list_for(request.user)
+        role = request.query_params.get("role") or None
+        queryset = container.user_service.list_for(request.user, role=role)
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(list(queryset), request, view=self)
         serializer = UserOutputSerializer(page, many=True)
@@ -110,10 +124,12 @@ class LoginView(APIView):
         kind = result["kind"]
 
         if kind == KIND_OK:
-            refresh = RefreshToken.for_user(result["user"])
-            return Response(
-                {"access": str(refresh.access_token), "refresh": str(refresh)}
-            )
+            user = result["user"]
+            refresh = RefreshToken.for_user(user)
+            refresh["role"] = user.role
+            access = refresh.access_token
+            access["role"] = user.role
+            return Response({"access": str(access), "refresh": str(refresh)})
 
         if kind == KIND_PENDING:
             return Response(

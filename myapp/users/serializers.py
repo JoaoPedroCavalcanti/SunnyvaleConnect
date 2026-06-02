@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from households.serializers import HouseholdRequestSerializer
+from users.models import UserRole
 
 
 class UserInputSerializer(serializers.Serializer):
@@ -15,6 +16,9 @@ class UserInputSerializer(serializers.Serializer):
     phone = serializers.CharField(required=True, max_length=20)
     email = serializers.EmailField(required=True)
     photo = serializers.ImageField(required=False, allow_null=True)
+    role = serializers.ChoiceField(
+        choices=UserRole.choices, required=False, default=UserRole.RESIDENT
+    )
     household_request = HouseholdRequestSerializer(required=False, allow_null=True)
 
 
@@ -29,6 +33,7 @@ class UserPatchSerializer(serializers.Serializer):
     apartment = serializers.CharField(required=False, max_length=10)
     block = serializers.CharField(required=False, allow_blank=True, max_length=10)
     photo = serializers.ImageField(required=False, allow_null=True)
+    role = serializers.ChoiceField(choices=UserRole.choices, required=False)
 
 
 class UserOutputSerializer(serializers.ModelSerializer):
@@ -47,6 +52,7 @@ class UserOutputSerializer(serializers.ModelSerializer):
             "apartment",
             "block",
             "photo",
+            "role",
         ]
 
 

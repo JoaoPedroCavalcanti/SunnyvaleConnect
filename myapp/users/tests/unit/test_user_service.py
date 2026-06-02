@@ -14,6 +14,7 @@ from shared.infrastructure.document_validators import (
     BrazilianPhoneValidator,
 )
 from shared.infrastructure.password_policy import DefaultPasswordPolicy
+from users.models import UserRole
 from users.repositories.user_repository import IUserRepository
 from users.services.user_service import UserService
 
@@ -34,6 +35,7 @@ class _FakeUser:
         email="u@e.com",
         is_staff=False,
         is_authenticated=True,
+        role=UserRole.RESIDENT,
     ):
         self.id = pk
         self.pk = pk
@@ -48,6 +50,7 @@ class _FakeUser:
         self.photo = None
         self.is_staff = is_staff
         self.is_authenticated = is_authenticated
+        self.role = role
 
 
 def _anon():
@@ -61,6 +64,9 @@ class FakeUserRepository(IUserRepository):
 
     def list_all(self):
         return list(self._users.values())
+
+    def list_by_role(self, role):
+        return [u for u in self._users.values() if u.role == role]
 
     def get_by_id(self, pk):
         return self._users.get(int(pk))
@@ -242,3 +248,116 @@ class TestUpdateSelf:
         user = service.create(_anon(), _valid_payload())
         service.update_self(user, {"username": "hacked"})
         assert user.username == "joao"
+
+
+class TestRoleOnCreate:
+    def test_anonymous_signup_defaults_to_resident(self, service):
+        user = service.create(_anon(), _valid_payload())
+        assert user.role == UserRole.RESIDENT
+        assert user.is_staff is False
+
+    def test_anonymous_cannot_self_assign_admin(self, service):
+        with pytest.raises(PermissionDeniedError):
+            service.create(_anon(), _valid_payload(role=UserRole.ADMIN))
+
+    def test_anonymous_cannot_self_assign_employee(self, service):
+        with pytest.raises(PermissionDeniedError):
+            service.create(_anon(), _valid_payload(role=UserRole.EMPLOYEE))
+
+    def test_admin_can_create_admin_and_syncs_is_staff(self, service):
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        new_admin = service.create(
+            admin, _valid_payload(role=UserRole.ADMIN)
+        )
+        assert new_admin.role == UserRole.ADMIN
+        assert new_admin.is_staff is True
+
+    def test_admin_can_create_employee_without_is_staff(self, service):
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        emp = service.create(admin, _valid_payload(role=UserRole.EMPLOYEE))
+        assert emp.role == UserRole.EMPLOYEE
+        assert emp.is_staff is False
+
+    def test_invalid_role_rejected(self, service):
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        with pytest.raises(BusinessRuleError) as exc:
+            service.create(admin, _valid_payload(role="GHOST"))
+        assert exc.value.field == "role"
+
+
+class TestRoleOnUpdate:
+    def test_admin_can_promote_resident_to_employee(self, service):
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        target = service.create(_anon(), _valid_payload())
+        result = service.update(admin, target.id, {"role": UserRole.EMPLOYEE})
+        assert result.role == UserRole.EMPLOYEE
+        assert result.is_staff is False
+
+    def test_admin_can_promote_resident_to_admin(self, service):
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        target = service.create(_anon(), _valid_payload())
+        result = service.update(admin, target.id, {"role": UserRole.ADMIN})
+        assert result.role == UserRole.ADMIN
+        assert result.is_staff is True
+
+    def test_admin_can_demote_other_admin(self, service):
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        target = service.create(admin, _valid_payload(role=UserRole.ADMIN))
+        result = service.update(admin, target.id, {"role": UserRole.RESIDENT})
+        assert result.role == UserRole.RESIDENT
+        assert result.is_staff is False
+
+    def test_non_admin_cannot_change_role(self, service):
+        target = service.create(_anon(), _valid_payload())
+        with pytest.raises(PermissionDeniedError):
+            service.update_self(target, {"role": UserRole.ADMIN})
+
+    def test_admin_cannot_demote_self(self, service):
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        with pytest.raises(PermissionDeniedError) as exc:
+            service.update_self(admin, {"role": UserRole.RESIDENT})
+        assert "demote" in str(exc.value.message).lower()
+
+
+class TestRoleOnDelete:
+    def test_admin_cannot_delete_self(self, service):
+        admin = service.create(
+            _FakeUser(99, is_staff=True, role=UserRole.ADMIN),
+            _valid_payload(role=UserRole.ADMIN),
+        )
+        with pytest.raises(PermissionDeniedError):
+            service.delete(admin, admin.id)
+
+    def test_admin_can_delete_other_admin(self, service):
+        boss = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        other = service.create(boss, _valid_payload(role=UserRole.ADMIN))
+        service.delete(boss, other.id)
+
+
+class TestListByRole:
+    def test_admin_filters_by_role(self, service):
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        service.create(_anon(), _valid_payload())
+        service.create(
+            admin,
+            _valid_payload(
+                username="emp",
+                email="emp@x.com",
+                cpf=VALID_CPF_B,
+                role=UserRole.EMPLOYEE,
+            ),
+        )
+        residents = list(service.list_for(admin, role=UserRole.RESIDENT))
+        employees = list(service.list_for(admin, role=UserRole.EMPLOYEE))
+        assert len(residents) == 1
+        assert len(employees) == 1
+
+    def test_role_filter_ignored_for_regular_user(self, service):
+        u = _FakeUser(99)
+        result = list(service.list_for(u, role=UserRole.ADMIN))
+        assert result == [u]
+
+    def test_invalid_role_filter_rejected(self, service):
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        with pytest.raises(BusinessRuleError):
+            list(service.list_for(admin, role="GHOST"))

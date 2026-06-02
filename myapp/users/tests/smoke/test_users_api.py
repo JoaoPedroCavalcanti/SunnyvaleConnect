@@ -77,6 +77,83 @@ class UsersAPISmoke(BaseTestsUsers):
             self.client.delete(detail_url(self.user_a.id)).status_code, 204
         )
 
+    def test_anonymous_signup_defaults_to_resident(self):
+        payload = self.create_random_user_from_faker()
+        response = self.client.post(LIST_URL, data=payload)
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["role"], "RESIDENT")
+
+    def test_anonymous_cannot_self_assign_admin(self):
+        payload = self.create_random_user_from_faker()
+        payload["role"] = "ADMIN"
+        response = self.client.post(LIST_URL, data=payload)
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_can_create_employee(self):
+        self.authenticate(self.admin)
+        payload = self.create_random_user_from_faker()
+        payload["role"] = "EMPLOYEE"
+        payload.pop("apartment", None)
+        payload.pop("block", None)
+        response = self.client.post(LIST_URL, data=payload)
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["role"], "EMPLOYEE")
+
+    def test_admin_can_create_admin(self):
+        self.authenticate(self.admin)
+        payload = self.create_random_user_from_faker()
+        payload["role"] = "ADMIN"
+        response = self.client.post(LIST_URL, data=payload)
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["role"], "ADMIN")
+
+    def test_resident_cannot_create_employee(self):
+        self.authenticate(self.user_a)
+        payload = self.create_random_user_from_faker()
+        payload["role"] = "EMPLOYEE"
+        response = self.client.post(LIST_URL, data=payload)
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_cannot_demote_self_via_patch(self):
+        self.authenticate(self.admin)
+        response = self.client.patch(
+            detail_url(self.admin.id),
+            data={"role": "RESIDENT"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_cannot_delete_self(self):
+        self.authenticate(self.admin)
+        response = self.client.delete(detail_url(self.admin.id))
+        self.assertEqual(response.status_code, 403)
+
+    def test_resident_cannot_change_own_role(self):
+        self.authenticate(self.user_a)
+        response = self.client.patch(ME_URL, data={"role": "ADMIN"})
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_can_promote_user_to_employee(self):
+        self.authenticate(self.admin)
+        response = self.client.patch(
+            detail_url(self.user_a.id),
+            data={"role": "EMPLOYEE"},
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["role"], "EMPLOYEE")
+
+    def test_role_filter_lists_only_matching(self):
+        self.authenticate(self.admin)
+        emp_payload = self.create_random_user_from_faker()
+        emp_payload["role"] = "EMPLOYEE"
+        emp_payload.pop("apartment", None)
+        emp_payload.pop("block", None)
+        self.client.post(LIST_URL, data=emp_payload)
+
+        response = self.client.get(LIST_URL, {"role": "EMPLOYEE"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["role"], "EMPLOYEE")
+
 
 LOGIN_URL = "/api/token/"
 
@@ -91,6 +168,18 @@ class LoginAPISmoke(BaseTestsUsers):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertIn("access", response.data)
         self.assertIn("refresh", response.data)
+
+    def test_access_token_carries_role_claim(self):
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        response = self.client.post(
+            LOGIN_URL,
+            data={"username": self.admin.username, "password": "Abcd123!"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        token = AccessToken(response.data["access"])
+        self.assertEqual(token["role"], "ADMIN")
 
     def test_invalid_credentials_returns_401(self):
         response = self.client.post(

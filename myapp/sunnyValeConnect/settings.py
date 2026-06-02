@@ -195,6 +195,7 @@ SPECTACULAR_SETTINGS = {
         "HouseholdStatusEnum": "households.models.Household.Status",
         "MembershipStatusEnum": "households.models.HouseholdMembership.Status",
         "MembershipRoleEnum": "households.models.HouseholdMembership.Role",
+        "UserRoleEnum": "users.models.UserRole",
     },
 }
 

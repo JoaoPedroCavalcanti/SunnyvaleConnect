@@ -27,6 +27,7 @@ class UserAdmin(DjangoUserAdmin):
             "Permissions",
             {
                 "fields": (
+                    "role",
                     "is_active",
                     "is_staff",
                     "is_superuser",
@@ -53,10 +54,20 @@ class UserAdmin(DjangoUserAdmin):
                     "email",
                     "apartment",
                     "block",
+                    "role",
                 ),
             },
         ),
     )
-    list_display = ("username", "full_name", "email", "apartment", "block", "is_staff")
+    list_display = (
+        "username",
+        "full_name",
+        "email",
+        "apartment",
+        "block",
+        "role",
+        "is_staff",
+    )
+    list_filter = ("role", "is_staff", "is_active")
     search_fields = ("username", "full_name", "email", "cpf")
     ordering = ("username",)

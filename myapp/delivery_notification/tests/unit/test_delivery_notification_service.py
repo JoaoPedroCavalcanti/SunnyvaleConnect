@@ -47,6 +47,9 @@ class FakeUserRepo(IUserRepository):
     def list_all(self):
         return list(self._users.values())
 
+    def list_by_role(self, role):
+        return [u for u in self._users.values() if getattr(u, "role", None) == role]
+
     def get_by_id(self, pk):
         return self._users.get(int(pk))
 

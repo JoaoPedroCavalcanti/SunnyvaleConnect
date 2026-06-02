@@ -59,6 +59,7 @@ class BaseTestsUsers(APITestCase):
             cpf=_gen_cpf(),
             phone="11999999999",
             apartment="0",
+            role="ADMIN",
         )
         cls.user_a = _make_user(cls.User)
         cls.user_b = _make_user(cls.User)
