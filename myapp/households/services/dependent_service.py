@@ -20,6 +20,9 @@ class IDependentService(ABC):
     def list_for_household(self, user, household_id: int): ...
 
     @abstractmethod
+    def list_residents(self, user, household_id: int) -> list[dict]: ...
+
+    @abstractmethod
     def create(self, user, household_id: int, payload: dict) -> Dependent: ...
 
     @abstractmethod
@@ -47,6 +50,29 @@ class DependentService(IDependentService):
     def list_for_household(self, user, household_id):
         self._require_active_member(user, household_id)
         return list(self._repo.list_for_household(household_id))
+
+    def list_residents(self, user, household_id):
+        """Returns a polymorphic list with the active household members
+        first (``type="household"``) and the active dependents after
+        (``type="dependent"``). Each item is ``{"type", "obj"}``.
+
+        Same permission as the rest of the dependents endpoints: active
+        member of the household, or staff.
+        """
+        household = self._households.get_by_id(household_id)
+        if not household:
+            raise NotFoundError("No household matches the given query.")
+        self._require_active_member(user, household.id)
+
+        items: list[dict] = [
+            {"type": "household", "obj": m}
+            for m in self._memberships.list_active_for_household(household.id)
+        ]
+        items += [
+            {"type": "dependent", "obj": d}
+            for d in self._repo.list_for_household(household.id)
+        ]
+        return items
 
     def create(self, user, household_id, payload):
         household = self._households.get_by_id(household_id)

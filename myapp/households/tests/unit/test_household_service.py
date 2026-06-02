@@ -137,6 +137,59 @@ class TestListAndGet:
             service.get_for(make_user(2), h.id)
 
 
+class TestListForWithMembers:
+    def test_admin_sees_all_houses_with_members(self, deps):
+        service, *_ = deps
+        admin = make_user(99, is_staff=True)
+
+        u1 = make_user(1, email="a@x.com")
+        u2 = make_user(2, email="b@x.com")
+        h1 = service.request_create(u1, "101", "A")
+        h2 = service.request_create(u2, "102", "A")
+        service.approve(admin, h1.id)
+        service.approve(admin, h2.id)
+
+        result = service.list_for_with_members(admin)
+
+        assert len(result) == 2
+        house_ids = {item["household"].id for item in result}
+        assert house_ids == {h1.id, h2.id}
+        for item in result:
+            assert len(item["members"]) == 1
+            assert item["members"][0].status == HouseholdMembership.Status.ACTIVE
+
+    def test_user_only_sees_own_house_with_members(self, deps):
+        service, *_ = deps
+        admin = make_user(99, is_staff=True)
+        mine = make_user(1, email="mine@x.com")
+        other = make_user(2, email="other@x.com")
+
+        own_h = service.request_create(mine, "101", "A")
+        other_h = service.request_create(other, "102", "A")
+        service.approve(admin, own_h.id)
+        service.approve(admin, other_h.id)
+
+        result = service.list_for_with_members(mine)
+        assert [i["household"].id for i in result] == [own_h.id]
+        assert result[0]["members"][0].user_id == mine.id
+
+    def test_status_filter_passes_through(self, deps):
+        service, households, *_ = deps
+        admin = make_user(99, is_staff=True)
+        h = service.request_create(make_user(1, email="a@x.com"), "101", "A")
+        service.request_create(make_user(2, email="b@x.com"), "102", "A")
+        service.approve(admin, h.id)
+
+        actives = service.list_for_with_members(
+            admin, status=Household.Status.ACTIVE
+        )
+        assert [i["household"].id for i in actives] == [h.id]
+
+    def test_empty_when_no_houses(self, deps):
+        service, *_ = deps
+        assert service.list_for_with_members(make_user(123)) == []
+
+
 class TestSearchPublic:
     def test_finds_active_by_apartment_block(self, deps):
         service, households, *_ = deps

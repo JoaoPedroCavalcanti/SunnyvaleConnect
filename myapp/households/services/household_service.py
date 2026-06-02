@@ -22,6 +22,11 @@ class IHouseholdService(ABC):
     def list_for(self, user, status: str | None = None): ...
 
     @abstractmethod
+    def list_for_with_members(
+        self, user, status: str | None = None
+    ) -> list[dict]: ...
+
+    @abstractmethod
     def get_for(self, user, pk: int) -> Household: ...
 
     @abstractmethod
@@ -67,6 +72,27 @@ class HouseholdService(IHouseholdService):
                 continue
             seen[household.id] = household
         return list(seen.values())
+
+    def list_for_with_members(self, user, status=None):
+        """Same scope as ``list_for`` but each item carries active members.
+
+        Returns a list of ``{"household": Household, "members": list}``.
+        Members are loaded in one batched query to avoid N+1 on the admin
+        listing.
+        """
+        households = list(self.list_for(user, status=status))
+        if not households:
+            return []
+        memberships = self._memberships.list_active_for_households(
+            [h.id for h in households]
+        )
+        grouped: dict[int, list] = {h.id: [] for h in households}
+        for m in memberships:
+            grouped.setdefault(m.household_id, []).append(m)
+        return [
+            {"household": h, "members": grouped.get(h.id, [])}
+            for h in households
+        ]
 
     def get_for(self, user, pk):
         instance = self._repo.get_by_id(pk)

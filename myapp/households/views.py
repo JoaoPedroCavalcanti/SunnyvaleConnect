@@ -14,10 +14,12 @@ from households.serializers import (
     HouseholdCreateRequestSerializer,
     HouseholdOutputSerializer,
     HouseholdRejectSerializer,
+    HouseholdWithMembersOutputSerializer,
     MembershipOutputSerializer,
     MembershipRejectSerializer,
     MembershipTransferSerializer,
     PendingApprovalSerializer,
+    ResidentItemSerializer,
 )
 from shared.container import container
 
@@ -40,17 +42,29 @@ class HouseholdSearchView(APIView):
 
 @extend_schema(tags=["households"])
 class HouseholdListView(APIView):
+    """List households scoped to the caller.
+
+    - Admin: every household.
+    - Regular user: only the households the user is an active member of.
+
+    Each item embeds the active members so the front can render a
+    household card without an extra request per row. Reservations,
+    payments and similar bundles will be appended here too.
+    """
+
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(responses={200: HouseholdOutputSerializer(many=True)})
+    @extend_schema(
+        responses={200: HouseholdWithMembersOutputSerializer(many=True)}
+    )
     def get(self, request):
         status_filter = request.query_params.get("status") or None
-        queryset = container.household_service.list_for(
+        items = container.household_service.list_for_with_members(
             request.user, status=status_filter
         )
         paginator = PageNumberPagination()
-        page = paginator.paginate_queryset(list(queryset), request, view=self)
-        serializer = HouseholdOutputSerializer(page, many=True)
+        page = paginator.paginate_queryset(items, request, view=self)
+        serializer = HouseholdWithMembersOutputSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
 
 
@@ -208,16 +222,19 @@ class HouseholdTransferView(APIView):
 # ---- Dependents ---------------------------------------------------------- #
 @extend_schema(tags=["households"])
 class DependentListCreateView(APIView):
+    """Detail-of-a-house list: active household members first
+    (``type="household"``) and active dependents after
+    (``type="dependent"``).
+
+    Permission: active member of the household, or admin.
+    """
+
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(responses={200: DependentOutputSerializer(many=True)})
+    @extend_schema(responses={200: ResidentItemSerializer(many=True)})
     def get(self, request, pk: int):
-        dependents = container.dependent_service.list_for_household(
-            request.user, pk
-        )
-        return Response(
-            DependentOutputSerializer(dependents, many=True).data
-        )
+        items = container.dependent_service.list_residents(request.user, pk)
+        return Response(ResidentItemSerializer(items, many=True).data)
 
     @extend_schema(
         request=DependentInputSerializer,

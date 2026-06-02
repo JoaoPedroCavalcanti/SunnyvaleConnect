@@ -80,6 +80,22 @@ class MembershipRejectSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True, default="")
 
 
+class HouseholdWithMembersOutputSerializer(serializers.Serializer):
+    """Rich household payload for listings: ``HouseholdOutputSerializer``
+    fields plus ``members`` (active memberships only).
+
+    Input is the dict produced by
+    ``HouseholdService.list_for_with_members``: ``{"household", "members"}``.
+    """
+
+    def to_representation(self, instance):
+        household = instance["household"]
+        members = instance.get("members") or []
+        data = HouseholdOutputSerializer(household).data
+        data["members"] = MembershipOutputSerializer(members, many=True).data
+        return data
+
+
 # ---- Dependent ------------------------------------------------------- #
 class DependentInputSerializer(serializers.Serializer):
     full_name = serializers.CharField(required=True, max_length=150)
@@ -114,6 +130,28 @@ class DependentOutputSerializer(serializers.ModelSerializer):
             "is_active",
             "created_at",
         ]
+
+
+class ResidentItemSerializer(serializers.Serializer):
+    """Polymorphic item for the ``/dependents/`` listing.
+
+    Active household members are emitted first with ``type="household"``
+    (payload identical to ``MembershipOutputSerializer``), followed by
+    active dependents with ``type="dependent"`` (payload identical to
+    ``DependentOutputSerializer``).
+
+    Input is the dict produced by ``DependentService.list_residents``:
+    ``{"type": "household"|"dependent", "obj": <instance>}``.
+    """
+
+    def to_representation(self, instance):
+        item_type = instance["type"]
+        obj = instance["obj"]
+        if item_type == "household":
+            return {"type": "household", **MembershipOutputSerializer(obj).data}
+        if item_type == "dependent":
+            return {"type": "dependent", **DependentOutputSerializer(obj).data}
+        raise ValueError(f"Unknown resident item type: {item_type!r}")
 
 
 # ---- Signup (household_request piece) -------------------------------- #

@@ -365,7 +365,7 @@ class DependentsSmoke(BaseTestsUsers):
         )
         self.assertEqual(response.status_code, 403)
 
-    def test_list_dependents_returns_active_only(self):
+    def test_list_residents_returns_members_first_then_dependents(self):
         household = self._seed_active_household()
         self.authenticate(self.user_a)
         self.client.post(
@@ -376,6 +376,70 @@ class DependentsSmoke(BaseTestsUsers):
             },
             format="json",
         )
+
         response = self.client.get(_dependents_url(household.id))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data), 1)
+        types = [item["type"] for item in response.data]
+        self.assertEqual(types, ["household", "dependent"])
+        self.assertEqual(response.data[0]["user"]["id"], self.user_a.id)
+        self.assertEqual(response.data[1]["full_name"], "Filho Silva")
+
+    def test_outsider_cannot_list_residents(self):
+        household = self._seed_active_household()
+        self.authenticate(self.user_b)
+        response = self.client.get(_dependents_url(household.id))
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_can_list_any_house_residents(self):
+        household = self._seed_active_household()
+        self.authenticate(self.admin)
+        response = self.client.get(_dependents_url(household.id))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            any(item["type"] == "household" for item in response.data)
+        )
+
+
+class HouseholdListSmoke(BaseTestsUsers):
+    def _seed_two_houses(self):
+        h1 = Household.objects.create(
+            apartment="100", block="A", status=Household.Status.ACTIVE
+        )
+        HouseholdMembership.objects.create(
+            household=h1,
+            user=self.user_a,
+            role=HouseholdMembership.Role.HOLDER,
+            status=HouseholdMembership.Status.ACTIVE,
+        )
+        h2 = Household.objects.create(
+            apartment="200", block="B", status=Household.Status.ACTIVE
+        )
+        HouseholdMembership.objects.create(
+            household=h2,
+            user=self.user_b,
+            role=HouseholdMembership.Role.HOLDER,
+            status=HouseholdMembership.Status.ACTIVE,
+        )
+        return h1, h2
+
+    def test_user_lists_only_own_house_with_members(self):
+        h1, _ = self._seed_two_houses()
+        self.authenticate(self.user_a)
+        response = self.client.get(LIST_URL)
+        self.assertEqual(response.status_code, 200)
+        results = response.data["results"]
+        self.assertEqual([r["id"] for r in results], [h1.id])
+        self.assertEqual(len(results[0]["members"]), 1)
+        self.assertEqual(results[0]["members"][0]["user"]["id"], self.user_a.id)
+
+    def test_admin_lists_all_houses_with_members(self):
+        h1, h2 = self._seed_two_houses()
+        self.authenticate(self.admin)
+        response = self.client.get(LIST_URL)
+        self.assertEqual(response.status_code, 200)
+        results = response.data["results"]
+        ids = {r["id"] for r in results}
+        self.assertTrue({h1.id, h2.id} <= ids)
+        for item in results:
+            if item["id"] in {h1.id, h2.id}:
+                self.assertEqual(len(item["members"]), 1)

@@ -173,6 +173,15 @@ class FakeMembershipRepository(IMembershipRepository):
             and m.status == HouseholdMembership.Status.ACTIVE
         ]
 
+    def list_active_for_households(self, household_ids):
+        ids = set(household_ids or [])
+        return [
+            m
+            for m in self._items.values()
+            if m.household_id in ids
+            and m.status == HouseholdMembership.Status.ACTIVE
+        ]
+
     def list_active_holders(self, household_id):
         return [
             m

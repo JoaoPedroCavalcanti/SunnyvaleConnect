@@ -130,6 +130,59 @@ class TestCreate:
             service.create(fixtures["holder"], 9999, _payload())
 
 
+class TestListResidents:
+    def test_member_sees_members_first_then_dependents(self, fixtures):
+        service = fixtures["service"]
+        service.create(
+            fixtures["holder"], fixtures["household"].id, _payload(full_name="A")
+        )
+        service.create(
+            fixtures["holder"], fixtures["household"].id, _payload(full_name="B")
+        )
+
+        items = service.list_residents(
+            fixtures["holder"], fixtures["household"].id
+        )
+
+        types = [i["type"] for i in items]
+        assert types == ["household", "dependent", "dependent"], items
+        assert items[0]["obj"].user_id == fixtures["holder"].id
+
+    def test_admin_can_list_any_house(self, fixtures):
+        service = fixtures["service"]
+        admin = make_user(99, is_staff=True)
+        items = service.list_residents(admin, fixtures["household"].id)
+        assert any(i["type"] == "household" for i in items)
+
+    def test_outsider_blocked(self, fixtures):
+        service = fixtures["service"]
+        with pytest.raises(PermissionDeniedError):
+            service.list_residents(
+                fixtures["outsider"], fixtures["household"].id
+            )
+
+    def test_unknown_household_404(self, fixtures):
+        service = fixtures["service"]
+        with pytest.raises(NotFoundError):
+            service.list_residents(fixtures["holder"], 9999)
+
+    def test_only_active_dependents_included(self, fixtures):
+        service = fixtures["service"]
+        kept = service.create(
+            fixtures["holder"], fixtures["household"].id, _payload(full_name="K")
+        )
+        gone = service.create(
+            fixtures["holder"], fixtures["household"].id, _payload(full_name="G")
+        )
+        service.delete(fixtures["holder"], gone.id)
+
+        items = service.list_residents(
+            fixtures["holder"], fixtures["household"].id
+        )
+        dep_ids = [i["obj"].id for i in items if i["type"] == "dependent"]
+        assert dep_ids == [kept.id]
+
+
 class TestUpdateAndDelete:
     def test_update_name(self, fixtures):
         service = fixtures["service"]
