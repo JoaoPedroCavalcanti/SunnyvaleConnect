@@ -231,7 +231,10 @@ class Container:
 
         return self._resolve(
             "bbq_service",
-            lambda: BBQReservationService(repository=self.bbq_repository),
+            lambda: BBQReservationService(
+                repository=self.bbq_repository,
+                membership_repository=self.membership_repository,
+            ),
         )
 
     @property
