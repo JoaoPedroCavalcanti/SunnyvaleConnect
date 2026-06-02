@@ -76,10 +76,19 @@ class VisitorAccessService(IVisitorAccessService):
         data = dict(payload)
         scheduled_date = data.get("scheduled_date")
         if scheduled_date and scheduled_date < timezone.now():
-            raise BusinessRuleError(
-                "You can not create a visitor access with a past date.",
-                field="Scheduled_date",
-            )
+            # all_day visits scheduled "today" are still allowed: the window is
+            # the entire day, so the past-date check uses date granularity.
+            if data.get("all_day"):
+                if scheduled_date.date() < timezone.now().date():
+                    raise BusinessRuleError(
+                        "You can not create a visitor access with a past date.",
+                        field="Scheduled_date",
+                    )
+            else:
+                raise BusinessRuleError(
+                    "You can not create a visitor access with a past date.",
+                    field="Scheduled_date",
+                )
 
         if user.is_staff:
             if not data.get("host_user"):
@@ -94,7 +103,19 @@ class VisitorAccessService(IVisitorAccessService):
                 )
             data["host_user"] = user
 
-        data["checkin_date_time"] = scheduled_date
+        all_day = bool(data.get("all_day"))
+        if all_day:
+            # the day boundary is in the project's local timezone, so a visit
+            # scheduled for "today" covers 00:00 → 23:59:59 local time.
+            local = timezone.localtime(scheduled_date)
+            day_start = local.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = local.replace(hour=23, minute=59, second=59, microsecond=0)
+            data["scheduled_date"] = day_start
+            data["checkin_date_time"] = day_start
+            data["checkout_date_time"] = day_end
+        else:
+            data["checkin_date_time"] = scheduled_date
+
         data["status"] = "Scheduled"
         data.setdefault("checkin_code", "")
         data.setdefault("checkout_code", "")

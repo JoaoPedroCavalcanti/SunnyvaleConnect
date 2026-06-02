@@ -5,6 +5,9 @@ from visitor_access.views import (
     VisitorAccessCheckoutView,
     VisitorAccessDetailView,
     VisitorAccessListCreateView,
+    VisitorGroupDetailView,
+    VisitorGroupListCreateView,
+    VisitorGroupScheduleView,
 )
 
 app_name = "visitor_access"
@@ -20,6 +23,21 @@ urlpatterns = [
         "checkout/<str:visitor_access_link_checkout>/",
         VisitorAccessCheckoutView.as_view(),
         name="checkout",
+    ),
+    path(
+        "groups/",
+        VisitorGroupListCreateView.as_view(),
+        name="groups-list-create",
+    ),
+    path(
+        "groups/<int:pk>/",
+        VisitorGroupDetailView.as_view(),
+        name="groups-detail",
+    ),
+    path(
+        "groups/<int:pk>/schedule/",
+        VisitorGroupScheduleView.as_view(),
+        name="groups-schedule",
     ),
     path("<int:pk>/", VisitorAccessDetailView.as_view(), name="detail"),
 ]

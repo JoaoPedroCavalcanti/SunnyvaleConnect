@@ -118,3 +118,25 @@ class VisitorAccessAPISmoke(BaseTestsUsers):
         )
         self.authenticate(self.user_a)
         self.assertEqual(self.client.delete(detail_url(obj.id)).status_code, 400)
+
+    def test_all_day_visit_covers_full_day(self):
+        self.authenticate(self.user_a)
+        response = self.client.post(
+            LIST_URL,
+            data={
+                "visitor_name": "John",
+                "email": "v@example.com",
+                "scheduled_date": self._future(),
+                "all_day": True,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertTrue(response.data["all_day"])
+        obj = VisitorAccessModel.objects.get(id=response.data["id"])
+        local_in = timezone.localtime(obj.checkin_date_time)
+        local_out = timezone.localtime(obj.checkout_date_time)
+        self.assertEqual(local_in.hour, 0)
+        self.assertEqual(local_in.minute, 0)
+        self.assertEqual(local_out.hour, 23)
+        self.assertEqual(local_out.minute, 59)

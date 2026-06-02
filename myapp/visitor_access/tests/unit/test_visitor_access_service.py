@@ -180,3 +180,53 @@ class TestDelete:
         service.delete(u, item.id)
         with pytest.raises(NotFoundError):
             service.get_for(u, item.id)
+
+
+class TestAllDay:
+    def test_all_day_window_covers_full_day(self, service):
+        u = _user(1)
+        when = timezone.now() + timedelta(days=2)
+        item = service.create(u, _payload(scheduled_date=when, all_day=True))
+        assert item.all_day is True
+        local_in = timezone.localtime(item.checkin_date_time)
+        local_out = timezone.localtime(item.checkout_date_time)
+        assert local_in.hour == 0
+        assert local_in.minute == 0
+        assert local_out.hour == 23
+        assert local_out.minute == 59
+        assert local_in.date() == timezone.localtime(when).date()
+
+    def test_all_day_today_allowed(self, service):
+        u = _user(1)
+        # earlier hour today is fine for all-day
+        earlier_today = timezone.localtime().replace(
+            hour=1, minute=0, second=0, microsecond=0
+        )
+        item = service.create(u, _payload(scheduled_date=earlier_today, all_day=True))
+        assert item.all_day is True
+
+    def test_all_day_past_day_rejected(self, service):
+        with pytest.raises(BusinessRuleError):
+            service.create(
+                _user(),
+                _payload(
+                    scheduled_date=timezone.now() - timedelta(days=2),
+                    all_day=True,
+                ),
+            )
+
+    def test_all_day_overrides_checkout_date_time(self, service):
+        u = _user(1)
+        when = timezone.now() + timedelta(days=2)
+        custom_checkout = when + timedelta(hours=1)
+        item = service.create(
+            u,
+            _payload(
+                scheduled_date=when,
+                all_day=True,
+                checkout_date_time=custom_checkout,
+            ),
+        )
+        local_out = timezone.localtime(item.checkout_date_time)
+        assert local_out.hour == 23
+        assert local_out.minute == 59

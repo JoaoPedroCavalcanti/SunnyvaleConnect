@@ -179,6 +179,16 @@ class Container:
         )
 
     @property
+    def visitor_group_repository(self):
+        from visitor_access.repositories.visitor_group_repository import (
+            DjangoVisitorGroupRepository,
+        )
+
+        return self._resolve(
+            "visitor_group_repository", DjangoVisitorGroupRepository
+        )
+
+    @property
     def household_repository(self):
         from households.repositories.household_repository import (
             DjangoHouseholdRepository,
@@ -312,6 +322,18 @@ class Container:
                 code_generator=self.code_generator,
                 string_mixer=self.string_mixer,
                 visitor_access_base_url=self.visitor_access_base_url,
+            ),
+        )
+
+    @property
+    def visitor_group_service(self):
+        from visitor_access.services.visitor_group_service import VisitorGroupService
+
+        return self._resolve(
+            "visitor_group_service",
+            lambda: VisitorGroupService(
+                repository=self.visitor_group_repository,
+                visitor_access_service=self.visitor_access_service,
             ),
         )
 

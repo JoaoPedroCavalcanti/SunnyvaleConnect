@@ -1665,6 +1665,146 @@ paths:
               schema:
                 $ref: '#/components/schemas/CheckoutResponse'
           description: Returns the check-out code if inside the allowed window.
+  /visitor_access/groups/:
+    get:
+      operationId: visitor_access_groups_list
+      tags:
+      - visitor_access
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VisitorGroupOutput'
+          description: ''
+    post:
+      operationId: visitor_access_groups_create
+      tags:
+      - visitor_access
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisitorGroupInputRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VisitorGroupInputRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VisitorGroupInputRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitorGroupOutput'
+          description: ''
+  /visitor_access/groups/{id}/:
+    get:
+      operationId: visitor_access_groups_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - visitor_access
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitorGroupOutput'
+          description: ''
+    patch:
+      operationId: visitor_access_groups_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - visitor_access
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedVisitorGroupPatchRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedVisitorGroupPatchRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedVisitorGroupPatchRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitorGroupOutput'
+          description: ''
+    delete:
+      operationId: visitor_access_groups_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - visitor_access
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /visitor_access/groups/{id}/schedule/:
+    post:
+      operationId: visitor_access_groups_schedule_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - visitor_access
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisitorGroupScheduleInputRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VisitorGroupScheduleInputRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VisitorGroupScheduleInputRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VisitorAccessOutput'
+          description: ''
 components:
   schemas:
     ActionEnum:
@@ -2517,6 +2657,17 @@ components:
           nullable: true
         role:
           $ref: '#/components/schemas/UserRoleEnum'
+    PatchedVisitorGroupPatchRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/VisitorGroupMemberInputRequest'
     PendingApproval:
       type: object
       description: |-
@@ -2897,6 +3048,9 @@ components:
           type: string
           format: date-time
           nullable: true
+        all_day:
+          type: boolean
+          default: false
         description:
           type: string
           nullable: true
@@ -2922,6 +3076,8 @@ components:
         scheduled_date:
           type: string
           format: date-time
+        all_day:
+          type: boolean
         checkin_date_time:
           type: string
           format: date-time
@@ -2962,6 +3118,9 @@ components:
         host_user:
           type: integer
           nullable: true
+        visitor_group:
+          type: integer
+          nullable: true
       required:
       - checkin_code
       - checkout_code
@@ -2971,6 +3130,106 @@ components:
       - status
       - updated_at
       - visitor_name
+    VisitorGroupInputRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/VisitorGroupMemberInputRequest'
+      required:
+      - name
+    VisitorGroupMemberInputRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          nullable: true
+          default: ''
+      required:
+      - name
+    VisitorGroupMemberOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          nullable: true
+          maxLength: 254
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - name
+    VisitorGroupOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        host_user:
+          type: integer
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/VisitorGroupMemberOutput'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - host_user
+      - id
+      - members
+      - name
+      - updated_at
+    VisitorGroupScheduleInputRequest:
+      type: object
+      properties:
+        scheduled_date:
+          type: string
+          format: date-time
+        checkout_date_time:
+          type: string
+          format: date-time
+          nullable: true
+        all_day:
+          type: boolean
+          default: false
+        description:
+          type: string
+          nullable: true
+          default: ''
+          maxLength: 150
+      required:
+      - scheduled_date
   securitySchemes:
     jwtAuth:
       type: http
