@@ -11,7 +11,11 @@ from hall_reservations.models import HallReservationModel
 from hall_reservations.repositories.hall_repository import IHallRepository
 from households.models import HouseholdMembership
 from households.repositories.membership_repository import IMembershipRepository
-from shared.exceptions import BusinessRuleError, NotFoundError
+from shared.exceptions import (
+    BusinessRuleError,
+    NotFoundError,
+    PermissionDeniedError,
+)
 from shared.time_slots import slots_overlap
 
 
@@ -30,6 +34,12 @@ class IHallReservationService(ABC):
 
     @abstractmethod
     def delete(self, pk: int) -> None: ...
+
+    @abstractmethod
+    def approve(self, user, pk: int) -> HallReservationModel: ...
+
+    @abstractmethod
+    def reject(self, user, pk: int) -> HallReservationModel: ...
 
 
 class HallReservationService(IHallReservationService):
@@ -70,6 +80,14 @@ class HallReservationService(IHallReservationService):
         if not user.is_staff:
             self._validate_30_day_window(household.id, reservation_date)
 
+        # Admin bookings skip the approval queue; everyone else lands
+        # as PENDING and waits for an admin to approve/reject.
+        data["status"] = (
+            HallReservationModel.Status.APPROVED
+            if user.is_staff
+            else HallReservationModel.Status.PENDING
+        )
+
         return self._repo.create(data)
 
     def update(self, user, pk, payload):
@@ -79,6 +97,41 @@ class HallReservationService(IHallReservationService):
     def delete(self, pk):
         instance = self.get(pk)
         self._repo.delete(instance)
+
+    def approve(self, user, pk):
+        if not user.is_staff:
+            raise PermissionDeniedError(
+                "Only admins can approve a hall booking."
+            )
+        instance = self.get(pk)
+        if instance.status == HallReservationModel.Status.APPROVED:
+            return instance
+        # Re-validate against the current state of APPROVED bookings.
+        self._validate_date(instance.reservation_date)
+        self._validate_slot(
+            instance.reservation_date,
+            instance.start_time,
+            instance.end_time,
+        )
+        if instance.household_id:
+            self._validate_30_day_window(
+                instance.household_id, instance.reservation_date
+            )
+        return self._repo.update(
+            instance, {"status": HallReservationModel.Status.APPROVED}
+        )
+
+    def reject(self, user, pk):
+        if not user.is_staff:
+            raise PermissionDeniedError(
+                "Only admins can reject a hall booking."
+            )
+        instance = self.get(pk)
+        if instance.status == HallReservationModel.Status.REJECTED:
+            return instance
+        return self._repo.update(
+            instance, {"status": HallReservationModel.Status.REJECTED}
+        )
 
     # --- internal rules ----------------------------------------------- #
     def _resolve_reservation_user(self, requester, passed_user):

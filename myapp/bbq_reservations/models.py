@@ -10,7 +10,17 @@ class BBQReservationModel(models.Model):
     user. ``reservation_user`` keeps a pointer to the person who actually
     created the entry (informational, for the front to render "booked
     by X").
+
+    ``status`` drives the approval workflow. Bookings created by a
+    regular morador are PENDING until an admin approves them; bookings
+    created directly by an admin are auto-APPROVED. Only APPROVED
+    bookings consume the time slot and count toward the 30-day cool-down.
     """
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        APPROVED = "APPROVED", "Approved"
+        REJECTED = "REJECTED", "Rejected"
 
     household = models.ForeignKey(
         "households.Household",
@@ -31,3 +41,6 @@ class BBQReservationModel(models.Model):
     end_time = models.TimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     guest_count = models.PositiveIntegerField(blank=True, null=True)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING
+    )

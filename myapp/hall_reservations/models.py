@@ -8,8 +8,15 @@ class HallReservationModel(models.Model):
     Same shape as ``BBQReservationModel``: ownership is per household
     (apartment), so the 30-day cool-down is enforced across all members
     of the same apartment. ``reservation_user`` keeps a snapshot of who
-    created the entry (informational).
+    created the entry (informational). ``status`` drives the approval
+    workflow (PENDING by default; only APPROVED bookings occupy slot
+    and count toward the cool-down).
     """
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        APPROVED = "APPROVED", "Approved"
+        REJECTED = "REJECTED", "Rejected"
 
     household = models.ForeignKey(
         "households.Household",
@@ -29,5 +36,8 @@ class HallReservationModel(models.Model):
     start_time = models.TimeField(blank=True, null=True)
     end_time = models.TimeField(blank=True, null=True)
     guest_count = models.PositiveIntegerField(blank=True, null=True, default=None)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)

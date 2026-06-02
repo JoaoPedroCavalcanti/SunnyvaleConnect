@@ -46,6 +46,20 @@ class BBQAPISmoke(BaseTestsUsers):
         )
         self.assertEqual(response.data["household"]["id"], house.id)
         self.assertEqual(response.data["household"]["apartment"], "1101")
+        self.assertEqual(response.data["status"], "PENDING")
+
+    def test_admin_creation_is_auto_approved(self):
+        self._seed_household_with(self.user_a)
+        self.authenticate(self.admin)
+        response = self.client.post(
+            LIST_URL,
+            data={
+                "reservation_date": self._future(),
+                "reservation_user": self.user_a.id,
+            },
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["status"], "APPROVED")
 
     def test_tolerates_passing_own_id(self):
         """Regression: front sending ``reservation_user`` with the
@@ -83,7 +97,8 @@ class BBQAPISmoke(BaseTestsUsers):
         self.assertEqual(response.status_code, 400)
 
     def test_30_day_window_is_per_apartment(self):
-        """Roommate of the same apartment can't bypass the cool-down."""
+        """Roommate of the same apartment can't bypass the cool-down.
+        Only APPROVED bookings count, so we seed an admin-created one."""
         house = self._seed_household_with(self.user_a, "1101", "A")
         HouseholdMembership.objects.create(
             household=house,
@@ -92,9 +107,13 @@ class BBQAPISmoke(BaseTestsUsers):
             status=HouseholdMembership.Status.ACTIVE,
         )
 
-        self.authenticate(self.user_a)
+        self.authenticate(self.admin)
         r1 = self.client.post(
-            LIST_URL, data={"reservation_date": self._future(5)}
+            LIST_URL,
+            data={
+                "reservation_date": self._future(5),
+                "reservation_user": self.user_a.id,
+            },
         )
         self.assertEqual(r1.status_code, 201, r1.data)
 
@@ -119,29 +138,76 @@ class BBQAPISmoke(BaseTestsUsers):
         self.assertEqual(response.status_code, 400)
 
     def test_two_non_overlapping_slots_same_day(self):
-        """Two apartments can share the same day if slots don't overlap."""
+        """Two apartments can share the same day if slots don't overlap.
+        Booked by admin so both are APPROVED (PENDING don't occupy slot)."""
         self._seed_household_with(self.user_a, "1101", "A")
         self._seed_household_with(self.user_b, "1102", "A")
+        self.authenticate(self.admin)
 
-        self.authenticate(self.user_a)
         r1 = self.client.post(
             LIST_URL,
             data={
                 "reservation_date": self._future(),
                 "start_time": "12:00",
                 "end_time": "18:00",
+                "reservation_user": self.user_a.id,
             },
         )
         self.assertEqual(r1.status_code, 201, r1.data)
         self.assertEqual(r1.data["start_time"], "12:00:00")
+        self.assertEqual(r1.data["status"], "APPROVED")
 
-        self.authenticate(self.user_b)
         r2 = self.client.post(
             LIST_URL,
             data={
                 "reservation_date": self._future(),
                 "start_time": "18:00",
                 "end_time": "22:00",
+                "reservation_user": self.user_b.id,
             },
         )
         self.assertEqual(r2.status_code, 201, r2.data)
+
+    def test_admin_approves_pending_booking(self):
+        self._seed_household_with(self.user_a)
+        self.authenticate(self.user_a)
+        r = self.client.post(
+            LIST_URL, data={"reservation_date": self._future()}
+        )
+        self.assertEqual(r.status_code, 201, r.data)
+        pk = r.data["id"]
+        self.assertEqual(r.data["status"], "PENDING")
+
+        self.authenticate(self.admin)
+        approve_url = reverse(
+            "bbq_reservations:approve", kwargs={"pk": pk}
+        )
+        approved = self.client.post(approve_url)
+        self.assertEqual(approved.status_code, 200, approved.data)
+        self.assertEqual(approved.data["status"], "APPROVED")
+
+    def test_admin_rejects_pending_booking(self):
+        self._seed_household_with(self.user_a)
+        self.authenticate(self.user_a)
+        r = self.client.post(
+            LIST_URL, data={"reservation_date": self._future()}
+        )
+        pk = r.data["id"]
+
+        self.authenticate(self.admin)
+        reject_url = reverse("bbq_reservations:reject", kwargs={"pk": pk})
+        rejected = self.client.post(reject_url)
+        self.assertEqual(rejected.status_code, 200, rejected.data)
+        self.assertEqual(rejected.data["status"], "REJECTED")
+
+    def test_regular_user_cannot_approve(self):
+        self._seed_household_with(self.user_a)
+        self.authenticate(self.user_a)
+        r = self.client.post(
+            LIST_URL, data={"reservation_date": self._future()}
+        )
+        pk = r.data["id"]
+        approve_url = reverse(
+            "bbq_reservations:approve", kwargs={"pk": pk}
+        )
+        self.assertEqual(self.client.post(approve_url).status_code, 403)

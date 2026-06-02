@@ -13,7 +13,11 @@ from bbq_reservations.models import BBQReservationModel
 from bbq_reservations.repositories.bbq_repository import IBBQRepository
 from households.models import HouseholdMembership
 from households.repositories.membership_repository import IMembershipRepository
-from shared.exceptions import BusinessRuleError, NotFoundError
+from shared.exceptions import (
+    BusinessRuleError,
+    NotFoundError,
+    PermissionDeniedError,
+)
 from shared.time_slots import slots_overlap
 
 
@@ -32,6 +36,12 @@ class IBBQReservationService(ABC):
 
     @abstractmethod
     def delete(self, pk: int) -> None: ...
+
+    @abstractmethod
+    def approve(self, user, pk: int) -> BBQReservationModel: ...
+
+    @abstractmethod
+    def reject(self, user, pk: int) -> BBQReservationModel: ...
 
 
 class BBQReservationService(IBBQReservationService):
@@ -72,6 +82,14 @@ class BBQReservationService(IBBQReservationService):
         if not user.is_staff:
             self._validate_30_day_window(household.id, reservation_date)
 
+        # Admin bookings skip the approval queue; everyone else lands
+        # as PENDING and waits for an admin to approve/reject.
+        data["status"] = (
+            BBQReservationModel.Status.APPROVED
+            if user.is_staff
+            else BBQReservationModel.Status.PENDING
+        )
+
         return self._repo.create(data)
 
     def update(self, user, pk, payload):
@@ -81,6 +99,42 @@ class BBQReservationService(IBBQReservationService):
     def delete(self, pk):
         instance = self.get(pk)
         self._repo.delete(instance)
+
+    def approve(self, user, pk):
+        if not user.is_staff:
+            raise PermissionDeniedError(
+                "Only admins can approve a barbecue booking."
+            )
+        instance = self.get(pk)
+        if instance.status == BBQReservationModel.Status.APPROVED:
+            return instance
+        # Re-validate against the current state of APPROVED bookings:
+        # other approvals may have happened since this one was created.
+        self._validate_date(instance.reservation_date)
+        self._validate_slot(
+            instance.reservation_date,
+            instance.start_time,
+            instance.end_time,
+        )
+        if instance.household_id:
+            self._validate_30_day_window(
+                instance.household_id, instance.reservation_date
+            )
+        return self._repo.update(
+            instance, {"status": BBQReservationModel.Status.APPROVED}
+        )
+
+    def reject(self, user, pk):
+        if not user.is_staff:
+            raise PermissionDeniedError(
+                "Only admins can reject a barbecue booking."
+            )
+        instance = self.get(pk)
+        if instance.status == BBQReservationModel.Status.REJECTED:
+            return instance
+        return self._repo.update(
+            instance, {"status": BBQReservationModel.Status.REJECTED}
+        )
 
     # --- internal rules ----------------------------------------------- #
     def _resolve_reservation_user(self, requester, passed_user):

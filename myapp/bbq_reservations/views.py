@@ -3,7 +3,7 @@
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -68,3 +68,27 @@ class BBQReservationDetailView(APIView):
     def delete(self, request, pk: int):
         container.bbq_service.delete(pk)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@extend_schema(tags=["bbq_reservations"])
+class BBQReservationApproveView(APIView):
+    permission_classes = [IsAdminUser]
+
+    @extend_schema(
+        request=None, responses={200: BBQReservationOutputSerializer}
+    )
+    def post(self, request, pk: int):
+        instance = container.bbq_service.approve(request.user, pk)
+        return Response(BBQReservationOutputSerializer(instance).data)
+
+
+@extend_schema(tags=["bbq_reservations"])
+class BBQReservationRejectView(APIView):
+    permission_classes = [IsAdminUser]
+
+    @extend_schema(
+        request=None, responses={200: BBQReservationOutputSerializer}
+    )
+    def post(self, request, pk: int):
+        instance = container.bbq_service.reject(request.user, pk)
+        return Response(BBQReservationOutputSerializer(instance).data)

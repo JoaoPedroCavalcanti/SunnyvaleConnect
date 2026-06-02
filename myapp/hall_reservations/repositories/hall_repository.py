@@ -46,13 +46,19 @@ class DjangoHallRepository(IHallRepository):
         )
 
     def list_for_date(self, reservation_date):
+        """Only APPROVED bookings occupy a time slot."""
         return HallReservationModel.objects.filter(
-            reservation_date=reservation_date
+            reservation_date=reservation_date,
+            status=HallReservationModel.Status.APPROVED,
         ).only("id", "start_time", "end_time", "reservation_date")
 
     def latest_date_for_household(self, household_id):
+        """Only APPROVED bookings count toward the 30-day cool-down."""
         last = (
-            HallReservationModel.objects.filter(household_id=household_id)
+            HallReservationModel.objects.filter(
+                household_id=household_id,
+                status=HallReservationModel.Status.APPROVED,
+            )
             .order_by("-reservation_date")
             .first()
         )

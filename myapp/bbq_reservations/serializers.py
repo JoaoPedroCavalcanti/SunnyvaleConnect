@@ -61,6 +61,7 @@ class BBQReservationOutputSerializer(serializers.ModelSerializer):
             "start_time",
             "end_time",
             "guest_count",
+            "status",
             "household",
             "reservation_user",
             "created_at",
