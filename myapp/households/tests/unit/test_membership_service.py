@@ -2,11 +2,12 @@
 
 import pytest
 
-from households.models import Household, HouseholdMembership
+from households.models import Household, HouseholdMembership, MembershipDecision
 from households.services.household_service import HouseholdService
 from households.services.membership_service import MembershipService
 from households.tests.unit._fakes import (
     FakeHouseholdRepository,
+    FakeMembershipDecisionRepository,
     FakeMembershipRepository,
     FakeUserRepository,
     make_user,
@@ -27,6 +28,7 @@ def fixtures():
     households = FakeHouseholdRepository()
     memberships = FakeMembershipRepository()
     users = FakeUserRepository()
+    decisions = FakeMembershipDecisionRepository()
     email = FakeEmailSender()
 
     household_service = HouseholdService(
@@ -40,6 +42,7 @@ def fixtures():
         household_repository=households,
         user_repository=users,
         email_sender=email,
+        decision_repository=decisions,
     )
 
     holder = make_user(1, email="h@x.com", full_name="Holder")
@@ -51,6 +54,7 @@ def fixtures():
         "households": households,
         "memberships": memberships,
         "users": users,
+        "decisions": decisions,
         "email": email,
         "household_service": household_service,
         "service": membership_service,
@@ -98,6 +102,23 @@ class TestApproveReject:
         assert result.status == HouseholdMembership.Status.ACTIVE
         assert new_user.is_active is True
 
+    def test_approve_records_audit_entry(self, fixtures):
+        service = fixtures["service"]
+        new_user = make_user(2, email="r@x.com", full_name="New", is_active=False)
+        membership = service.request_join(new_user, fixtures["household"].id)
+        service.approve(fixtures["holder"], membership.id)
+
+        rows = fixtures["decisions"].list_for_household(
+            fixtures["household"].id
+        )
+        assert len(rows) == 1
+        entry = rows[0]
+        assert entry.action == MembershipDecision.Action.APPROVED
+        assert entry.actor_id == fixtures["holder"].id
+        assert entry.target_id == new_user.id
+        assert entry.target_full_name == "New"
+        assert entry.reason == ""
+
     def test_non_holder_cannot_approve(self, fixtures):
         service = fixtures["service"]
         new_user = make_user(2)
@@ -116,6 +137,28 @@ class TestApproveReject:
 
         assert fixtures["memberships"].get_by_id(membership.id) is None
         assert users.get_by_id(new_user.id) is None
+
+    def test_reject_records_audit_entry_with_snapshot(self, fixtures):
+        """Reject deletes the user; the snapshot must survive."""
+        service = fixtures["service"]
+        users = fixtures["users"]
+        new_user = make_user(
+            50, email="r@x.com", full_name="Rejected One", is_active=False
+        )
+        users._users[new_user.id] = new_user
+
+        membership = service.request_join(new_user, fixtures["household"].id)
+        service.reject(fixtures["holder"], membership.id, reason="not approved")
+
+        rows = fixtures["decisions"].list_for_household(
+            fixtures["household"].id
+        )
+        assert len(rows) == 1
+        entry = rows[0]
+        assert entry.action == MembershipDecision.Action.REJECTED
+        assert entry.target_full_name == "Rejected One"
+        assert entry.target_email == "r@x.com"
+        assert entry.reason == "not approved"
 
 
 class TestPromoteDemote:

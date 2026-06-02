@@ -5,6 +5,9 @@ from types import SimpleNamespace
 from households.models import Household, HouseholdMembership
 from households.repositories.dependent_repository import IDependentRepository
 from households.repositories.household_repository import IHouseholdRepository
+from households.repositories.membership_decision_repository import (
+    IMembershipDecisionRepository,
+)
 from households.repositories.membership_repository import IMembershipRepository
 from users.repositories.user_repository import IUserRepository
 
@@ -266,6 +269,46 @@ class FakeMembershipRepository(IMembershipRepository):
 
     def delete(self, instance):
         self._items.pop(instance.id, None)
+
+
+class FakeMembershipDecisionRepository(IMembershipDecisionRepository):
+    def __init__(self):
+        self._items: list = []
+        self._next_id = 1
+
+    def record(self, data):
+        actor = data.get("actor")
+        target = data.get("target")
+        household = data.get("household")
+        d = SimpleNamespace(
+            id=self._next_id,
+            household=household,
+            household_id=getattr(household, "id", None),
+            household_apartment=data.get("household_apartment", ""),
+            household_block=data.get("household_block", ""),
+            actor=actor,
+            actor_id=getattr(actor, "id", None),
+            actor_username=data.get("actor_username", ""),
+            actor_full_name=data.get("actor_full_name", ""),
+            target=target,
+            target_id=getattr(target, "id", None),
+            target_username=data.get("target_username", ""),
+            target_full_name=data.get("target_full_name", ""),
+            target_email=data.get("target_email", ""),
+            action=data["action"],
+            reason=data.get("reason", ""),
+            created_at=None,
+        )
+        self._items.append(d)
+        self._next_id += 1
+        return d
+
+    def list_for_household(self, household_id):
+        return [
+            d
+            for d in reversed(self._items)
+            if d.household_id == household_id
+        ]
 
 
 class FakeDependentRepository(IDependentRepository):

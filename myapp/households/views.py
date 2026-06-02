@@ -15,6 +15,7 @@ from households.serializers import (
     HouseholdOutputSerializer,
     HouseholdRejectSerializer,
     HouseholdWithMembersOutputSerializer,
+    MembershipDecisionOutputSerializer,
     MembershipOutputSerializer,
     MembershipRejectSerializer,
     MembershipTransferSerializer,
@@ -217,6 +218,30 @@ class HouseholdTransferView(APIView):
             request.user, pk, serializer.validated_data["to_user_id"]
         )
         return Response(MembershipOutputSerializer(instance).data)
+
+
+# ---- Decisions (audit log) ---------------------------------------------- #
+@extend_schema(tags=["households"])
+class HouseholdDecisionListView(APIView):
+    """Audit log of every approve/reject performed by a holder (or admin)
+    over resident requests for this household.
+
+    Permission: active holder of the household, or admin. Residents
+    don't see the log (it can include reject reasons).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        responses={200: MembershipDecisionOutputSerializer(many=True)}
+    )
+    def get(self, request, pk: int):
+        items = container.membership_decision_service.list_for_household(
+            request.user, pk
+        )
+        return Response(
+            MembershipDecisionOutputSerializer(items, many=True).data
+        )
 
 
 # ---- Dependents ---------------------------------------------------------- #

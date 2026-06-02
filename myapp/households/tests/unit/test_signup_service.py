@@ -12,6 +12,7 @@ from households.services.membership_service import MembershipService
 from households.services.signup_service import SignupService
 from households.tests.unit._fakes import (
     FakeHouseholdRepository,
+    FakeMembershipDecisionRepository,
     FakeMembershipRepository,
     FakeUserRepository,
     anon,
@@ -58,6 +59,7 @@ def env():
         household_repository=households,
         user_repository=users,
         email_sender=email,
+        decision_repository=FakeMembershipDecisionRepository(),
     )
     signup = SignupService(
         user_service=user_service,

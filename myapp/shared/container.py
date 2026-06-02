@@ -197,6 +197,17 @@ class Container:
 
         return self._resolve("dependent_repository", DjangoDependentRepository)
 
+    @property
+    def membership_decision_repository(self):
+        from households.repositories.membership_decision_repository import (
+            DjangoMembershipDecisionRepository,
+        )
+
+        return self._resolve(
+            "membership_decision_repository",
+            DjangoMembershipDecisionRepository,
+        )
+
     # ------------------------------------------------------------------ #
     # services                                                           #
     # ------------------------------------------------------------------ #
@@ -318,6 +329,22 @@ class Container:
                 household_repository=self.household_repository,
                 user_repository=self.user_repository,
                 email_sender=self.email_sender,
+                decision_repository=self.membership_decision_repository,
+            ),
+        )
+
+    @property
+    def membership_decision_service(self):
+        from households.services.membership_decision_service import (
+            MembershipDecisionService,
+        )
+
+        return self._resolve(
+            "membership_decision_service",
+            lambda: MembershipDecisionService(
+                decision_repository=self.membership_decision_repository,
+                membership_repository=self.membership_repository,
+                household_repository=self.household_repository,
             ),
         )
 

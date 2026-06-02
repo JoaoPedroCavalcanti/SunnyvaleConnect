@@ -10,6 +10,7 @@ from households.services.membership_service import MembershipService
 from households.tests.unit._fakes import (
     FakeDependentRepository,
     FakeHouseholdRepository,
+    FakeMembershipDecisionRepository,
     FakeMembershipRepository,
     FakeUserRepository,
     make_user,
@@ -35,6 +36,7 @@ def fixtures():
     memberships = FakeMembershipRepository()
     users = FakeUserRepository()
     dependents = FakeDependentRepository()
+    decisions = FakeMembershipDecisionRepository()
     email = FakeEmailSender()
 
     household_service = HouseholdService(
@@ -48,6 +50,7 @@ def fixtures():
         household_repository=households,
         user_repository=users,
         email_sender=email,
+        decision_repository=decisions,
     )
     service = DependentService(
         dependent_repository=dependents,

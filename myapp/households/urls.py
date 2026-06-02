@@ -4,6 +4,7 @@ from households.views import (
     DependentDetailView,
     DependentListCreateView,
     HouseholdApproveView,
+    HouseholdDecisionListView,
     HouseholdDetailView,
     HouseholdLeaveView,
     HouseholdListView,
@@ -63,6 +64,11 @@ urlpatterns = [
         "<int:pk>/memberships/<int:mid>/",
         MembershipRemoveView.as_view(),
         name="membership-remove",
+    ),
+    path(
+        "<int:pk>/decisions/",
+        HouseholdDecisionListView.as_view(),
+        name="decisions-list",
     ),
     path(
         "<int:pk>/dependents/",

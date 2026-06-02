@@ -2,7 +2,12 @@
 
 from rest_framework import serializers
 
-from households.models import Dependent, Household, HouseholdMembership
+from households.models import (
+    Dependent,
+    Household,
+    HouseholdMembership,
+    MembershipDecision,
+)
 
 
 # ---- Household ------------------------------------------------------- #
@@ -78,6 +83,44 @@ class MembershipTransferSerializer(serializers.Serializer):
 
 class MembershipRejectSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class MembershipDecisionOutputSerializer(serializers.ModelSerializer):
+    """Audit row payload. Snapshots are exposed under ``actor`` and
+    ``target`` sub-objects so the front can render even after the
+    underlying users or household get deleted (FKs are nullable)."""
+
+    actor = serializers.SerializerMethodField()
+    target = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MembershipDecision
+        fields = [
+            "id",
+            "household",
+            "household_apartment",
+            "household_block",
+            "actor",
+            "target",
+            "action",
+            "reason",
+            "created_at",
+        ]
+
+    def get_actor(self, obj) -> dict:
+        return {
+            "id": obj.actor_id,
+            "username": obj.actor_username,
+            "full_name": obj.actor_full_name,
+        }
+
+    def get_target(self, obj) -> dict:
+        return {
+            "id": obj.target_id,
+            "username": obj.target_username,
+            "full_name": obj.target_full_name,
+            "email": obj.target_email,
+        }
 
 
 class HouseholdWithMembersOutputSerializer(serializers.Serializer):

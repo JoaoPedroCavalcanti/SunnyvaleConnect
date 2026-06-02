@@ -80,3 +80,64 @@ class Dependent(models.Model):
 
     def __str__(self) -> str:
         return self.full_name
+
+
+class MembershipDecision(models.Model):
+    """Immutable audit row for every approve/reject a holder (or admin)
+    performs over a resident membership request.
+
+    Foreign keys are ``SET_NULL`` and the relevant identifying fields are
+    snapshotted so the row survives household/user deletion (which does
+    happen on reject when the requester is purged).
+    """
+
+    class Action(models.TextChoices):
+        APPROVED = "APPROVED", "Approved"
+        REJECTED = "REJECTED", "Rejected"
+
+    household = models.ForeignKey(
+        Household,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="decisions",
+    )
+    household_apartment = models.CharField(max_length=10)
+    household_block = models.CharField(max_length=10, blank=True, default="")
+
+    actor = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    actor_username = models.CharField(max_length=150, blank=True, default="")
+    actor_full_name = models.CharField(max_length=150, blank=True, default="")
+
+    target = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    target_username = models.CharField(max_length=150, blank=True, default="")
+    target_full_name = models.CharField(max_length=150, blank=True, default="")
+    target_email = models.EmailField(blank=True, default="")
+
+    action = models.CharField(max_length=20, choices=Action.choices)
+    reason = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["household", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.action} {self.target_username or '?'} "
+            f"@apt {self.household_apartment}"
+        )

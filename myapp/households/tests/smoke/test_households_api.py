@@ -5,7 +5,11 @@ from datetime import date
 import pytest
 from django.urls import reverse
 
-from households.models import Household, HouseholdMembership
+from households.models import (
+    Household,
+    HouseholdMembership,
+    MembershipDecision,
+)
 from tests_base.base_tests_user import BaseTestsUsers, _gen_cpf, fake
 
 
@@ -62,6 +66,10 @@ def _transfer_url(pk):
 
 def _dependents_url(pk):
     return reverse("households:dependents-list-create", kwargs={"pk": pk})
+
+
+def _decisions_url(pk):
+    return reverse("households:decisions-list", kwargs={"pk": pk})
 
 
 def _signup_payload(**overrides):
@@ -443,3 +451,84 @@ class HouseholdListSmoke(BaseTestsUsers):
         for item in results:
             if item["id"] in {h1.id, h2.id}:
                 self.assertEqual(len(item["members"]), 1)
+
+
+class DecisionsHistorySmoke(BaseTestsUsers):
+    def _seed_active_household_with_holder(self):
+        household = Household.objects.create(
+            apartment="444", block="E", status=Household.Status.ACTIVE
+        )
+        HouseholdMembership.objects.create(
+            household=household,
+            user=self.user_a,
+            role=HouseholdMembership.Role.HOLDER,
+            status=HouseholdMembership.Status.ACTIVE,
+        )
+        return household
+
+    def _pending_resident(self, household, user):
+        return HouseholdMembership.objects.create(
+            household=household,
+            user=user,
+            role=HouseholdMembership.Role.RESIDENT,
+            status=HouseholdMembership.Status.PENDING_HOLDER,
+        )
+
+    def test_approve_creates_decision_visible_to_holder(self):
+        household = self._seed_active_household_with_holder()
+        membership = self._pending_resident(household, self.user_b)
+
+        self.authenticate(self.user_a)
+        approve = self.client.post(
+            _membership_approve_url(household.id, membership.id)
+        )
+        self.assertEqual(approve.status_code, 200, approve.data)
+
+        response = self.client.get(_decisions_url(household.id))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        entry = response.data[0]
+        self.assertEqual(entry["action"], MembershipDecision.Action.APPROVED)
+        self.assertEqual(entry["actor"]["id"], self.user_a.id)
+        self.assertEqual(entry["target"]["id"], self.user_b.id)
+
+    def test_reject_records_snapshot_and_admin_can_read(self):
+        household = self._seed_active_household_with_holder()
+        self.user_b.is_active = False
+        self.user_b.save()
+        membership = self._pending_resident(household, self.user_b)
+        snapshot_name = self.user_b.full_name
+
+        self.authenticate(self.user_a)
+        self.client.post(
+            _membership_reject_url(household.id, membership.id),
+            data={"reason": "duplicate request"},
+            format="json",
+        )
+
+        self.authenticate(self.admin)
+        response = self.client.get(_decisions_url(household.id))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        entry = response.data[0]
+        self.assertEqual(entry["action"], MembershipDecision.Action.REJECTED)
+        self.assertEqual(entry["reason"], "duplicate request")
+        self.assertEqual(entry["target"]["full_name"], snapshot_name)
+
+    def test_resident_cannot_read_decisions(self):
+        household = self._seed_active_household_with_holder()
+        HouseholdMembership.objects.create(
+            household=household,
+            user=self.user_b,
+            role=HouseholdMembership.Role.RESIDENT,
+            status=HouseholdMembership.Status.ACTIVE,
+        )
+        self.authenticate(self.user_b)
+        response = self.client.get(_decisions_url(household.id))
+        self.assertEqual(response.status_code, 403)
+
+    def test_outsider_cannot_read_decisions(self):
+        household = self._seed_active_household_with_holder()
+        self.authenticate(self.user_b)
+        response = self.client.get(_decisions_url(household.id))
+        self.assertEqual(response.status_code, 403)

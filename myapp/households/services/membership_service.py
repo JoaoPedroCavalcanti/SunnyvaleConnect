@@ -5,8 +5,15 @@ Handles join requests, holder approvals, promotions, transfers and leaves.
 
 from abc import ABC, abstractmethod
 
-from households.models import Household, HouseholdMembership
+from households.models import (
+    Household,
+    HouseholdMembership,
+    MembershipDecision,
+)
 from households.repositories.household_repository import IHouseholdRepository
+from households.repositories.membership_decision_repository import (
+    IMembershipDecisionRepository,
+)
 from households.repositories.membership_repository import IMembershipRepository
 from shared.exceptions import (
     BusinessRuleError,
@@ -60,11 +67,13 @@ class MembershipService(IMembershipService):
         household_repository: IHouseholdRepository,
         user_repository: IUserRepository,
         email_sender: IEmailSender,
+        decision_repository: IMembershipDecisionRepository,
     ):
         self._repo = membership_repository
         self._households = household_repository
         self._users = user_repository
         self._email = email_sender
+        self._decisions = decision_repository
 
     # ---- queries ------------------------------------------------------- #
     def list_for_household(self, user, household_id):
@@ -149,6 +158,15 @@ class MembershipService(IMembershipService):
                 apartment=membership.household.apartment,
                 block=membership.household.block,
             )
+
+        self._decisions.record(
+            self._build_decision_payload(
+                membership,
+                actor=holder,
+                action=MembershipDecision.Action.APPROVED,
+                reason="",
+            )
+        )
         return membership
 
     def reject(self, holder, membership_id, reason=""):
@@ -170,6 +188,17 @@ class MembershipService(IMembershipService):
                 block=household.block,
                 reason=reason,
             )
+
+        # Snapshot *before* delete so the audit row keeps the requester
+        # data even when the user is purged below.
+        self._decisions.record(
+            self._build_decision_payload(
+                membership,
+                actor=holder,
+                action=MembershipDecision.Action.REJECTED,
+                reason=reason,
+            )
+        )
 
         self._repo.delete(membership)
         if (
@@ -311,3 +340,27 @@ class MembershipService(IMembershipService):
     def _require_active(self, membership) -> None:
         if membership.status != HouseholdMembership.Status.ACTIVE:
             raise BusinessRuleError("Membership is not active.")
+
+    def _build_decision_payload(
+        self, membership, actor, action, reason
+    ) -> dict:
+        """Build the snapshot dict for ``MembershipDecision``. Keeps the
+        identifying strings (apartment, usernames, full names) even after
+        the underlying FKs are nulled out by deletes.
+        """
+        user = membership.user
+        household = membership.household
+        return {
+            "household": household,
+            "household_apartment": household.apartment,
+            "household_block": household.block,
+            "actor": actor,
+            "actor_username": getattr(actor, "username", "") or "",
+            "actor_full_name": getattr(actor, "full_name", "") or "",
+            "target": user,
+            "target_username": getattr(user, "username", "") or "",
+            "target_full_name": getattr(user, "full_name", "") or "",
+            "target_email": getattr(user, "email", "") or "",
+            "action": action,
+            "reason": reason or "",
+        }
