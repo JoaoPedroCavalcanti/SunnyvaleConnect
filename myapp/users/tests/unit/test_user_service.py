@@ -118,6 +118,11 @@ class FakeUserRepository(IUserRepository):
     def check_password(self, instance, raw_password):
         return getattr(instance, "_password", None) == raw_password
 
+    def count_active(self):
+        return sum(
+            1 for u in self._users.values() if getattr(u, "is_active", True)
+        )
+
 
 @pytest.fixture
 def service():

@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "delivery_notification",
     "sunny_vale_news",
     "households",
+    "admin_dashboard",
 ]
 
 MIDDLEWARE = [

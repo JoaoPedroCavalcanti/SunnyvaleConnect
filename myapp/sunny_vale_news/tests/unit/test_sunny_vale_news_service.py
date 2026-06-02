@@ -47,6 +47,9 @@ class FakeSunnyValeNewsRepository(ISunnyValeNewsRepository):
     def delete(self, instance):
         self._items.pop(instance.id, None)
 
+    def count_all(self):
+        return len(self._items)
+
 
 @pytest.fixture
 def service():

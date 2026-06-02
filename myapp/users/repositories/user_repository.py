@@ -46,6 +46,9 @@ class IUserRepository(ABC):
     @abstractmethod
     def check_password(self, instance, raw_password: str) -> bool: ...
 
+    @abstractmethod
+    def count_active(self) -> int: ...
+
 
 class DjangoUserRepository(IUserRepository):
     def _model(self):
@@ -106,3 +109,6 @@ class DjangoUserRepository(IUserRepository):
 
     def check_password(self, instance, raw_password):
         return instance.check_password(raw_password)
+
+    def count_active(self):
+        return self._model().objects.filter(is_active=True).count()

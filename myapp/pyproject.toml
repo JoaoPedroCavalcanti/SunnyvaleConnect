@@ -64,6 +64,7 @@ source = [
     "sunny_vale_news",
     "users",
     "households",
+    "admin_dashboard",
     "sunnyValeConnect",
 ]
 omit = [

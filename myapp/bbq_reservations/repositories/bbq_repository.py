@@ -28,6 +28,9 @@ class IBBQRepository(ABC):
     @abstractmethod
     def delete(self, instance: BBQReservationModel) -> None: ...
 
+    @abstractmethod
+    def count_by_status(self, status: str | None = None) -> int: ...
+
 
 class DjangoBBQRepository(IBBQRepository):
     def list_all(self, status=None):
@@ -78,3 +81,9 @@ class DjangoBBQRepository(IBBQRepository):
 
     def delete(self, instance):
         instance.delete()
+
+    def count_by_status(self, status=None):
+        qs = BBQReservationModel.objects.all()
+        if status:
+            qs = qs.filter(status=status)
+        return qs.count()

@@ -1,5 +1,6 @@
 """Reusable fakes for infrastructure interfaces."""
 
+from shared.infrastructure.cache import ICache
 from shared.infrastructure.code_generator import ICodeGenerator
 from shared.infrastructure.email_sender import IEmailSender
 from shared.infrastructure.string_mixer import IStringMixer
@@ -106,3 +107,18 @@ class FakeStringMixer(IStringMixer):
 
     def unmix(self, mixed: str) -> str:
         return mixed
+
+
+class FakeCache(ICache):
+    """In-memory cache without TTL semantics (tests control eviction manually)."""
+
+    def __init__(self):
+        self.store: dict[str, object] = {}
+        self.set_calls: list[tuple[str, object, int]] = []
+
+    def get(self, key):
+        return self.store.get(key)
+
+    def set(self, key, value, ttl_seconds):
+        self.store[key] = value
+        self.set_calls.append((key, value, ttl_seconds))

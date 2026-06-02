@@ -23,6 +23,10 @@ urlpatterns = [
     path("delivery_notification/", include("delivery_notification.urls")),
     path("sunny_vale_news/", include("sunny_vale_news.urls")),
     path("households/", include(("households.urls"), namespace="households")),
+    path(
+        "admin_dashboard/",
+        include(("admin_dashboard.urls"), namespace="admin_dashboard"),
+    ),
     path("api/token/", LoginView.as_view(), name="token_obtain_pair"),
     path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/token/verify/", TokenVerifyView.as_view(), name="token_verify"),

@@ -28,6 +28,9 @@ class IHallRepository(ABC):
     @abstractmethod
     def delete(self, instance: HallReservationModel) -> None: ...
 
+    @abstractmethod
+    def count_by_status(self, status: str | None = None) -> int: ...
+
 
 class DjangoHallRepository(IHallRepository):
     def list_all(self, status=None):
@@ -78,3 +81,9 @@ class DjangoHallRepository(IHallRepository):
 
     def delete(self, instance):
         instance.delete()
+
+    def count_by_status(self, status=None):
+        qs = HallReservationModel.objects.all()
+        if status:
+            qs = qs.filter(status=status)
+        return qs.count()

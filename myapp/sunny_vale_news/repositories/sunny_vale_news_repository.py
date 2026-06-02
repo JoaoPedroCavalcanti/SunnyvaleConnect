@@ -25,6 +25,9 @@ class ISunnyValeNewsRepository(ABC):
     @abstractmethod
     def delete(self, instance: SunnyValeNewsModel) -> None: ...
 
+    @abstractmethod
+    def count_all(self) -> int: ...
+
 
 class DjangoSunnyValeNewsRepository(ISunnyValeNewsRepository):
     def list_all(self):
@@ -59,3 +62,6 @@ class DjangoSunnyValeNewsRepository(ISunnyValeNewsRepository):
 
     def delete(self, instance):
         instance.delete()
+
+    def count_all(self):
+        return SunnyValeNewsModel.objects.count()

@@ -17,6 +17,7 @@ For tests you can replace any provider in-place::
 
 from typing import Any, Callable
 
+from shared.infrastructure.cache import DjangoCache, ICache
 from shared.infrastructure.code_generator import ICodeGenerator, RandomCodeGenerator
 from shared.infrastructure.document_validators import (
     BrazilianCPFValidator,
@@ -100,6 +101,10 @@ class Container:
     @property
     def visitor_access_base_url(self) -> str:
         return self._overrides.get("visitor_access_base_url", _VISITOR_ACCESS_BASE_URL)
+
+    @property
+    def cache(self) -> ICache:
+        return self._resolve("cache", DjangoCache)
 
     # ------------------------------------------------------------------ #
     # repositories                                                       #
@@ -391,6 +396,23 @@ class Container:
             lambda: AuthService(
                 user_repository=self.user_repository,
                 membership_repository=self.membership_repository,
+            ),
+        )
+
+    @property
+    def admin_dashboard_service(self):
+        from admin_dashboard.services.admin_dashboard_service import (
+            AdminDashboardService,
+        )
+
+        return self._resolve(
+            "admin_dashboard_service",
+            lambda: AdminDashboardService(
+                user_repository=self.user_repository,
+                bbq_repository=self.bbq_repository,
+                hall_repository=self.hall_repository,
+                news_repository=self.sunny_vale_news_repository,
+                cache=self.cache,
             ),
         )
 

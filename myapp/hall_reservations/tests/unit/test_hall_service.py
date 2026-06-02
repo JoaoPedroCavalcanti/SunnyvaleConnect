@@ -73,6 +73,11 @@ class FakeHallRepository(IHallRepository):
     def delete(self, instance):
         self._items.remove(instance)
 
+    def count_by_status(self, status=None):
+        if status:
+            return sum(1 for i in self._items if i.status == status)
+        return len(self._items)
+
 
 class FakeMembershipRepo:
     def __init__(self):

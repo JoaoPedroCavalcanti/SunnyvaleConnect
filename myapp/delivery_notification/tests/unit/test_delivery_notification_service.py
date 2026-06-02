@@ -89,6 +89,11 @@ class FakeUserRepo(IUserRepository):
     def check_password(self, instance, raw_password):
         return False
 
+    def count_active(self):
+        return sum(
+            1 for u in self._users.values() if getattr(u, "is_active", True)
+        )
+
 
 @pytest.fixture
 def email_sender():
