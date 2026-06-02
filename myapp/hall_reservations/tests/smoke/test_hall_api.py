@@ -180,3 +180,38 @@ class HallAPISmoke(BaseTestsUsers):
             "hall_reservations:approve", kwargs={"pk": pk}
         )
         self.assertEqual(self.client.post(approve_url).status_code, 403)
+
+    def test_list_filtered_by_status(self):
+        self._seed_household_with(self.user_a, "1101", "A")
+        self._seed_household_with(self.user_b, "1102", "A")
+        self.authenticate(self.user_a)
+        self.client.post(
+            LIST_URL, data={"reservation_date": self._future(5)}
+        )
+        self.authenticate(self.user_b)
+        self.client.post(
+            LIST_URL, data={"reservation_date": self._future(10)}
+        )
+        self.authenticate(self.admin)
+        self.client.post(
+            LIST_URL,
+            data={
+                "reservation_date": self._future(20),
+                "reservation_user": self.user_a.id,
+            },
+        )
+
+        response = self.client.get(LIST_URL + "?status=PENDING")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 2)
+        for item in response.data["results"]:
+            self.assertEqual(item["status"], "PENDING")
+
+        response = self.client.get(LIST_URL + "?status=APPROVED")
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["status"], "APPROVED")
+
+    def test_invalid_status_filter_returns_400(self):
+        self.authenticate(self.admin)
+        response = self.client.get(LIST_URL + "?status=NOPE")
+        self.assertEqual(response.status_code, 400)

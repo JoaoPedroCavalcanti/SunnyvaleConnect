@@ -24,7 +24,9 @@ class FakeBBQRepository(IBBQRepository):
         self._items = []
         self._next_id = 1
 
-    def list_all(self):
+    def list_all(self, status=None):
+        if status:
+            return [i for i in self._items if i.status == status]
         return list(self._items)
 
     def get_by_id(self, pk):

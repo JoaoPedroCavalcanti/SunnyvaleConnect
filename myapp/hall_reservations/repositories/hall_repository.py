@@ -8,7 +8,7 @@ from hall_reservations.models import HallReservationModel
 
 class IHallRepository(ABC):
     @abstractmethod
-    def list_all(self): ...
+    def list_all(self, status: str | None = None): ...
 
     @abstractmethod
     def get_by_id(self, pk: int) -> HallReservationModel | None: ...
@@ -30,12 +30,15 @@ class IHallRepository(ABC):
 
 
 class DjangoHallRepository(IHallRepository):
-    def list_all(self):
-        return (
+    def list_all(self, status=None):
+        qs = (
             HallReservationModel.objects.all()
             .select_related("reservation_user", "household")
             .order_by("-reservation_date")
         )
+        if status:
+            qs = qs.filter(status=status)
+        return qs
 
     def get_by_id(self, pk):
         return (

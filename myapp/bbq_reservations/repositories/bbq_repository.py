@@ -8,7 +8,7 @@ from bbq_reservations.models import BBQReservationModel
 
 class IBBQRepository(ABC):
     @abstractmethod
-    def list_all(self): ...
+    def list_all(self, status: str | None = None): ...
 
     @abstractmethod
     def get_by_id(self, pk: int) -> BBQReservationModel | None: ...
@@ -30,12 +30,15 @@ class IBBQRepository(ABC):
 
 
 class DjangoBBQRepository(IBBQRepository):
-    def list_all(self):
-        return (
+    def list_all(self, status=None):
+        qs = (
             BBQReservationModel.objects.all()
             .select_related("reservation_user", "household")
             .order_by("-reservation_date")
         )
+        if status:
+            qs = qs.filter(status=status)
+        return qs
 
     def get_by_id(self, pk):
         return (

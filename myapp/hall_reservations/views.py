@@ -1,6 +1,6 @@
 """Plain APIViews for Hall reservations."""
 
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
@@ -19,9 +19,24 @@ from shared.container import container
 class HallReservationListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(responses={200: HallReservationOutputSerializer(many=True)})
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="status",
+                description=(
+                    "Filter by booking status. Useful for the admin "
+                    "dashboard to fetch only the pending queue."
+                ),
+                required=False,
+                type=str,
+                enum=["PENDING", "APPROVED", "REJECTED"],
+            ),
+        ],
+        responses={200: HallReservationOutputSerializer(many=True)},
+    )
     def get(self, request):
-        queryset = container.hall_service.list()
+        status_filter = request.query_params.get("status")
+        queryset = container.hall_service.list(status=status_filter)
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request, view=self)
         serializer = HallReservationOutputSerializer(page, many=True)

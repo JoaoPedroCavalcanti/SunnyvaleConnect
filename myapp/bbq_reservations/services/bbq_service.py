@@ -23,7 +23,7 @@ from shared.time_slots import slots_overlap
 
 class IBBQReservationService(ABC):
     @abstractmethod
-    def list(self): ...
+    def list(self, status: str | None = None): ...
 
     @abstractmethod
     def get(self, pk: int) -> BBQReservationModel: ...
@@ -55,8 +55,23 @@ class BBQReservationService(IBBQReservationService):
         self._repo = repository
         self._memberships = membership_repository
 
-    def list(self):
-        return self._repo.list_all()
+    def list(self, status=None):
+        normalized = self._normalize_status_filter(status)
+        return self._repo.list_all(status=normalized)
+
+    @staticmethod
+    def _normalize_status_filter(status: str | None) -> str | None:
+        if not status:
+            return None
+        upper = status.upper()
+        valid = {s.value for s in BBQReservationModel.Status}
+        if upper not in valid:
+            raise BusinessRuleError(
+                f"Invalid status filter: {status!r}. "
+                f"Expected one of {sorted(valid)}.",
+                field="status",
+            )
+        return upper
 
     def get(self, pk):
         instance = self._repo.get_by_id(pk)
