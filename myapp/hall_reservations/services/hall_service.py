@@ -1,10 +1,16 @@
-"""Business rules for Hall reservations."""
+"""Business rules for Hall reservations.
+
+Mirrors ``BBQReservationService``: ownership and the 30-day cool-down
+are per household (apartment), not per individual user.
+"""
 
 from abc import ABC, abstractmethod
 from datetime import date, timedelta
 
 from hall_reservations.models import HallReservationModel
 from hall_reservations.repositories.hall_repository import IHallRepository
+from households.models import HouseholdMembership
+from households.repositories.membership_repository import IMembershipRepository
 from shared.exceptions import BusinessRuleError, NotFoundError
 
 
@@ -28,8 +34,13 @@ class IHallReservationService(ABC):
 class HallReservationService(IHallReservationService):
     MIN_DAYS_BETWEEN_BOOKINGS = 30
 
-    def __init__(self, repository: IHallRepository):
+    def __init__(
+        self,
+        repository: IHallRepository,
+        membership_repository: IMembershipRepository,
+    ):
         self._repo = repository
+        self._memberships = membership_repository
 
     def list(self):
         return self._repo.list_all()
@@ -42,14 +53,18 @@ class HallReservationService(IHallReservationService):
 
     def create(self, user, payload: dict):
         data = dict(payload)
-        reservation_user = self._resolve_reservation_user(user, data.get("reservation_user"))
+        reservation_user = self._resolve_reservation_user(
+            user, data.get("reservation_user")
+        )
+        household = self._resolve_household(reservation_user)
         data["reservation_user"] = reservation_user
+        data["household"] = household
 
         reservation_date = data.get("reservation_date")
         self._validate_date(reservation_date)
 
         if not user.is_staff:
-            self._validate_30_day_window(reservation_user.id, reservation_date)
+            self._validate_30_day_window(household.id, reservation_date)
 
         return self._repo.create(data)
 
@@ -63,13 +78,27 @@ class HallReservationService(IHallReservationService):
 
     # --- internal rules ----------------------------------------------- #
     def _resolve_reservation_user(self, requester, passed_user):
-        if not requester.is_staff:
-            if passed_user:
-                raise BusinessRuleError("You can not pass a reservation_user.")
-            return requester
-        if not passed_user:
-            raise BusinessRuleError("reservation_user can not be empty.")
-        return passed_user
+        if requester.is_staff:
+            if not passed_user:
+                raise BusinessRuleError(
+                    "reservation_user can not be empty."
+                )
+            return passed_user
+        if passed_user and passed_user.id != requester.id:
+            raise BusinessRuleError("You can not pass a reservation_user.")
+        return requester
+
+    def _resolve_household(self, target_user):
+        memberships = [
+            m
+            for m in self._memberships.list_active_for_user(target_user.id)
+            if m.status == HouseholdMembership.Status.ACTIVE
+        ]
+        if not memberships:
+            raise BusinessRuleError(
+                "User must belong to an active household to book the hall."
+            )
+        return memberships[0].household
 
     def _validate_date(self, reservation_date: date):
         if reservation_date < date.today():
@@ -82,11 +111,16 @@ class HallReservationService(IHallReservationService):
                 field="reservation_date",
             )
 
-    def _validate_30_day_window(self, user_id: int, reservation_date: date):
-        last_date = self._repo.latest_date_for_user(user_id)
+    def _validate_30_day_window(
+        self, household_id: int, reservation_date: date
+    ):
+        last_date = self._repo.latest_date_for_household(household_id)
         if not last_date:
             return
-        if reservation_date - last_date < timedelta(days=self.MIN_DAYS_BETWEEN_BOOKINGS):
+        if reservation_date - last_date < timedelta(
+            days=self.MIN_DAYS_BETWEEN_BOOKINGS
+        ):
             raise BusinessRuleError(
-                "You can not book the hall with less than 30 days before your last bookment."
+                "This apartment already booked the hall less than "
+                f"{self.MIN_DAYS_BETWEEN_BOOKINGS} days ago."
             )

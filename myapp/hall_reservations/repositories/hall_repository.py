@@ -17,7 +17,7 @@ class IHallRepository(ABC):
     def exists_for_date(self, reservation_date: date) -> bool: ...
 
     @abstractmethod
-    def latest_date_for_user(self, user_id: int) -> date | None: ...
+    def latest_date_for_household(self, household_id: int) -> date | None: ...
 
     @abstractmethod
     def create(self, data: dict) -> HallReservationModel: ...
@@ -31,19 +31,28 @@ class IHallRepository(ABC):
 
 class DjangoHallRepository(IHallRepository):
     def list_all(self):
-        return HallReservationModel.objects.all().order_by("-reservation_date")
+        return (
+            HallReservationModel.objects.all()
+            .select_related("reservation_user", "household")
+            .order_by("-reservation_date")
+        )
 
     def get_by_id(self, pk):
-        return HallReservationModel.objects.filter(pk=pk).first()
+        return (
+            HallReservationModel.objects
+            .select_related("reservation_user", "household")
+            .filter(pk=pk)
+            .first()
+        )
 
     def exists_for_date(self, reservation_date):
         return HallReservationModel.objects.filter(
             reservation_date=reservation_date
         ).exists()
 
-    def latest_date_for_user(self, user_id):
+    def latest_date_for_household(self, household_id):
         last = (
-            HallReservationModel.objects.filter(reservation_user_id=user_id)
+            HallReservationModel.objects.filter(household_id=household_id)
             .order_by("-reservation_date")
             .first()
         )

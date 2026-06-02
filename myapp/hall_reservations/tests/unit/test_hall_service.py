@@ -7,6 +7,7 @@ import pytest
 
 from hall_reservations.repositories.hall_repository import IHallRepository
 from hall_reservations.services.hall_service import HallReservationService
+from households.models import HouseholdMembership
 from shared.exceptions import BusinessRuleError, NotFoundError
 
 
@@ -25,10 +26,17 @@ class FakeHallRepository(IHallRepository):
         return next((i for i in self._items if i.id == pk), None)
 
     def exists_for_date(self, reservation_date):
-        return any(i.reservation_date == reservation_date for i in self._items)
+        return any(
+            i.reservation_date == reservation_date for i in self._items
+        )
 
-    def latest_date_for_user(self, user_id):
-        dates = [i.reservation_date for i in self._items if i.reservation_user.id == user_id]
+    def latest_date_for_household(self, household_id):
+        dates = [
+            i.reservation_date
+            for i in self._items
+            if getattr(i, "household", None)
+            and i.household.id == household_id
+        ]
         return max(dates) if dates else None
 
     def create(self, data):
@@ -46,9 +54,31 @@ class FakeHallRepository(IHallRepository):
         self._items.remove(instance)
 
 
-@pytest.fixture
-def service():
-    return HallReservationService(repository=FakeHallRepository())
+class FakeMembershipRepo:
+    def __init__(self):
+        self._by_user: dict[int, list] = {}
+
+    def add(self, user_id, household, status=HouseholdMembership.Status.ACTIVE):
+        m = SimpleNamespace(
+            id=len(self._by_user.get(user_id, [])) + 1,
+            user_id=user_id,
+            household=household,
+            household_id=household.id,
+            status=status,
+        )
+        self._by_user.setdefault(user_id, []).append(m)
+        return m
+
+    def list_active_for_user(self, user_id):
+        return [
+            m
+            for m in self._by_user.get(user_id, [])
+            if m.status == HouseholdMembership.Status.ACTIVE
+        ]
+
+
+def _household(pk=1, apt="1101", block="A"):
+    return SimpleNamespace(id=pk, apartment=apt, block=block)
 
 
 def _user(pk=1, is_staff=False):
@@ -59,40 +89,104 @@ def _future(days=10):
     return date.today() + timedelta(days=days)
 
 
-def test_regular_user_creates_for_self(service):
-    u = _user()
-    item = service.create(u, {"reservation_date": _future()})
-    assert item.reservation_user is u
+@pytest.fixture
+def fixtures():
+    repo = FakeHallRepository()
+    memberships = FakeMembershipRepo()
+    service = HallReservationService(
+        repository=repo, membership_repository=memberships
+    )
+    house = _household(1, "1101", "A")
+    holder = _user(1)
+    memberships.add(holder.id, house)
+    return {
+        "service": service,
+        "repo": repo,
+        "memberships": memberships,
+        "house": house,
+        "holder": holder,
+    }
 
 
-def test_regular_user_cannot_pass_reservation_user(service):
+def test_regular_user_creates_for_self(fixtures):
+    f = fixtures
+    item = f["service"].create(f["holder"], {"reservation_date": _future()})
+    assert item.reservation_user is f["holder"]
+    assert item.household is f["house"]
+
+
+def test_tolerates_passing_own_id(fixtures):
+    f = fixtures
+    item = f["service"].create(
+        f["holder"],
+        {"reservation_date": _future(), "reservation_user": f["holder"]},
+    )
+    assert item.reservation_user is f["holder"]
+
+
+def test_regular_user_cannot_pass_another_user(fixtures):
+    f = fixtures
+    other = _user(2)
+    f["memberships"].add(other.id, _household(2, "1102", "A"))
     with pytest.raises(BusinessRuleError):
-        service.create(_user(1), {"reservation_date": _future(), "reservation_user": _user(2)})
+        f["service"].create(
+            f["holder"],
+            {"reservation_date": _future(), "reservation_user": other},
+        )
 
 
-def test_admin_must_pass_reservation_user(service):
+def test_user_without_active_household_rejected(fixtures):
+    f = fixtures
+    homeless = _user(99)
     with pytest.raises(BusinessRuleError):
-        service.create(_user(is_staff=True), {"reservation_date": _future()})
+        f["service"].create(homeless, {"reservation_date": _future()})
 
 
-def test_past_date_rejected(service):
+def test_admin_must_pass_reservation_user(fixtures):
+    f = fixtures
     with pytest.raises(BusinessRuleError):
-        service.create(_user(), {"reservation_date": date.today() - timedelta(days=1)})
+        f["service"].create(
+            _user(is_staff=True), {"reservation_date": _future()}
+        )
 
 
-def test_date_collision(service):
+def test_past_date_rejected(fixtures):
+    f = fixtures
+    with pytest.raises(BusinessRuleError):
+        f["service"].create(
+            f["holder"],
+            {"reservation_date": date.today() - timedelta(days=1)},
+        )
+
+
+def test_date_collision(fixtures):
+    f = fixtures
     d = _future()
-    service.create(_user(1), {"reservation_date": d})
+    f["service"].create(f["holder"], {"reservation_date": d})
+    other = _user(2)
+    f["memberships"].add(other.id, _household(2, "1102", "A"))
     with pytest.raises(BusinessRuleError):
-        service.create(_user(2), {"reservation_date": d})
+        f["service"].create(other, {"reservation_date": d})
 
 
-def test_30_day_window(service):
-    service.create(_user(1), {"reservation_date": _future(5)})
+def test_30_day_window_is_per_household(fixtures):
+    f = fixtures
+    f["service"].create(f["holder"], {"reservation_date": _future(5)})
+    roommate = _user(2)
+    f["memberships"].add(roommate.id, f["house"])
     with pytest.raises(BusinessRuleError):
-        service.create(_user(1), {"reservation_date": _future(15)})
+        f["service"].create(roommate, {"reservation_date": _future(15)})
 
 
-def test_not_found_on_get(service):
+def test_30_day_window_does_not_cross_households(fixtures):
+    f = fixtures
+    f["service"].create(f["holder"], {"reservation_date": _future(5)})
+    other = _user(2)
+    f["memberships"].add(other.id, _household(2, "1102", "A"))
+    item = f["service"].create(other, {"reservation_date": _future(15)})
+    assert item is not None
+
+
+def test_not_found_on_get(fixtures):
     with pytest.raises(NotFoundError):
-        service.get(999)
+        fixtures["service"].get(999)

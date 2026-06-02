@@ -243,7 +243,10 @@ class Container:
 
         return self._resolve(
             "hall_service",
-            lambda: HallReservationService(repository=self.hall_repository),
+            lambda: HallReservationService(
+                repository=self.hall_repository,
+                membership_repository=self.membership_repository,
+            ),
         )
 
     @property
