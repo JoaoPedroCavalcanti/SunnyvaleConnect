@@ -1,36 +1,73 @@
-from django.db import models
 from django.contrib.auth import get_user_model
+from django.db import models
 
 
-# Create your models here.
 class ServiceRequestModel(models.Model):
-    PRIORITY_LEVEL = [
-        ("low", "Low"),
-        ("medium", "Medium"),
-        ("high", "High"),
-        # Add more choices here as needed
-    ]
-    STATUS = [
-        ("requested", "Requested"),
-        ("accepted", "Accepted"),
-        ("declined", "Declined"),
-        # Add more choices here as needed
-    ]
+    """A ticket opened by a resident asking the building staff to do
+    something (fix a leak, schedule extra cleaning, prune a tree, etc.).
 
-    requester_user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
+    A request is always created as PENDING by the resident. An admin
+    then accepts or declines it — and is forced to write a justification
+    (``admin_response``) so the resident always knows why. Once the work
+    is done the admin may mark it COMPLETED.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        ACCEPTED = "ACCEPTED", "Accepted"
+        DECLINED = "DECLINED", "Declined"
+        COMPLETED = "COMPLETED", "Completed"
+
+    class Priority(models.TextChoices):
+        LOW = "LOW", "Low"
+        MEDIUM = "MEDIUM", "Medium"
+        HIGH = "HIGH", "High"
+        URGENT = "URGENT", "Urgent"
+
+    class ServiceType(models.TextChoices):
+        CLEANING = "CLEANING", "Extra cleaning"
+        MAINTENANCE = "MAINTENANCE", "General maintenance"
+        PLUMBING = "PLUMBING", "Plumbing"
+        ELECTRICAL = "ELECTRICAL", "Electrical"
+        SECURITY = "SECURITY", "Security"
+        LANDSCAPING = "LANDSCAPING", "Landscaping"
+        PEST_CONTROL = "PEST_CONTROL", "Pest control"
+        OTHER = "OTHER", "Other"
+
+    requester = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        related_name="service_requests",
+    )
     title = models.CharField(max_length=150)
-    request_description = models.TextField(blank=True, null=True, default="")
-    service_type = models.CharField(max_length=150, default="Other")
-    location = models.CharField(max_length=150, blank=True, null=True, default="")
-    priority = models.CharField(max_length=20, choices=PRIORITY_LEVEL, default="low")
-    request_scheduled_date = models.DateTimeField()
+    description = models.TextField(blank=True, default="")
+    service_type = models.CharField(
+        max_length=20,
+        choices=ServiceType.choices,
+        default=ServiceType.OTHER,
+    )
+    location = models.CharField(max_length=150, blank=True, default="")
+    priority = models.CharField(
+        max_length=10, choices=Priority.choices, default=Priority.LOW
+    )
+    request_scheduled_date = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(
+        max_length=10, choices=Status.choices, default=Status.PENDING
+    )
+
+    # Filled when the admin responds (accept/decline) or completes.
+    admin_response = models.TextField(blank=True, default="")
+    responded_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="responded_service_requests",
+    )
+    responded_at = models.DateTimeField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # Staff will fill these fields
-    status = models.CharField(max_length=20, choices=STATUS, default="requested")
-    responsable_staff = models.CharField(
-        max_length=50, blank=True, null=True, default=""
-    )
-    scheduled_date = models.DateField(null=True, blank=True)
-    more_details = models.TextField(max_length=200, blank=True, null=True, default="")
+    class Meta:
+        ordering = ["-created_at"]

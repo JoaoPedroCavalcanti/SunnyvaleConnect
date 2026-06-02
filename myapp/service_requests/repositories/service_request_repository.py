@@ -7,10 +7,21 @@ from service_requests.models import ServiceRequestModel
 
 class IServiceRequestRepository(ABC):
     @abstractmethod
-    def list_all(self): ...
+    def list_all(
+        self,
+        status: str | None = None,
+        priority: str | None = None,
+        service_type: str | None = None,
+    ): ...
 
     @abstractmethod
-    def list_for_user(self, user_id: int): ...
+    def list_for_user(
+        self,
+        user_id: int,
+        status: str | None = None,
+        priority: str | None = None,
+        service_type: str | None = None,
+    ): ...
 
     @abstractmethod
     def get_by_id(self, pk: int) -> ServiceRequestModel | None: ...
@@ -19,23 +30,38 @@ class IServiceRequestRepository(ABC):
     def create(self, data: dict) -> ServiceRequestModel: ...
 
     @abstractmethod
-    def update(self, instance: ServiceRequestModel, data: dict) -> ServiceRequestModel: ...
+    def update(
+        self, instance: ServiceRequestModel, data: dict
+    ) -> ServiceRequestModel: ...
 
     @abstractmethod
     def delete(self, instance: ServiceRequestModel) -> None: ...
 
+    @abstractmethod
+    def count_by_status(self, status: str | None = None) -> int: ...
+
 
 class DjangoServiceRequestRepository(IServiceRequestRepository):
-    def list_all(self):
-        return ServiceRequestModel.objects.all().order_by("-request_scheduled_date")
+    def list_all(self, status=None, priority=None, service_type=None):
+        qs = ServiceRequestModel.objects.select_related(
+            "requester", "responded_by"
+        ).all()
+        return self._apply_filters(qs, status, priority, service_type)
 
-    def list_for_user(self, user_id):
-        return ServiceRequestModel.objects.filter(
-            requester_user_id=user_id
-        ).order_by("-request_scheduled_date")
+    def list_for_user(
+        self, user_id, status=None, priority=None, service_type=None
+    ):
+        qs = ServiceRequestModel.objects.select_related(
+            "requester", "responded_by"
+        ).filter(requester_id=user_id)
+        return self._apply_filters(qs, status, priority, service_type)
 
     def get_by_id(self, pk):
-        return ServiceRequestModel.objects.filter(pk=pk).first()
+        return (
+            ServiceRequestModel.objects.select_related("requester", "responded_by")
+            .filter(pk=pk)
+            .first()
+        )
 
     def create(self, data):
         return ServiceRequestModel.objects.create(**data)
@@ -48,3 +74,19 @@ class DjangoServiceRequestRepository(IServiceRequestRepository):
 
     def delete(self, instance):
         instance.delete()
+
+    def count_by_status(self, status=None):
+        qs = ServiceRequestModel.objects.all()
+        if status:
+            qs = qs.filter(status=status)
+        return qs.count()
+
+    @staticmethod
+    def _apply_filters(qs, status, priority, service_type):
+        if status:
+            qs = qs.filter(status=status)
+        if priority:
+            qs = qs.filter(priority=priority)
+        if service_type:
+            qs = qs.filter(service_type=service_type)
+        return qs

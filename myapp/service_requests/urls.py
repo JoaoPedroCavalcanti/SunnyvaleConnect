@@ -1,9 +1,10 @@
 from django.urls import path
 
 from service_requests.views import (
-    AcceptOrDeclineServiceRequestView,
+    ServiceRequestCompleteView,
     ServiceRequestDetailView,
     ServiceRequestListCreateView,
+    ServiceRequestRespondView,
 )
 
 app_name = "service_requests"
@@ -12,16 +13,21 @@ urlpatterns = [
     path(
         "",
         ServiceRequestListCreateView.as_view(),
-        name="service_requests_list_and_create",
+        name="list-create",
     ),
     path(
         "<int:pk>/",
         ServiceRequestDetailView.as_view(),
-        name="service_request_detail_retrieve_and_delete",
+        name="detail",
     ),
     path(
-        "accept_or_decline/<int:pk>/<str:accept_or_decline>/",
-        AcceptOrDeclineServiceRequestView.as_view(),
-        name="accept_request",
+        "<int:pk>/respond/",
+        ServiceRequestRespondView.as_view(),
+        name="respond",
+    ),
+    path(
+        "<int:pk>/complete/",
+        ServiceRequestCompleteView.as_view(),
+        name="complete",
     ),
 ]
