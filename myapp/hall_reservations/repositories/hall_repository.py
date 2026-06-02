@@ -14,7 +14,7 @@ class IHallRepository(ABC):
     def get_by_id(self, pk: int) -> HallReservationModel | None: ...
 
     @abstractmethod
-    def exists_for_date(self, reservation_date: date) -> bool: ...
+    def list_for_date(self, reservation_date: date): ...
 
     @abstractmethod
     def latest_date_for_household(self, household_id: int) -> date | None: ...
@@ -45,10 +45,10 @@ class DjangoHallRepository(IHallRepository):
             .first()
         )
 
-    def exists_for_date(self, reservation_date):
+    def list_for_date(self, reservation_date):
         return HallReservationModel.objects.filter(
             reservation_date=reservation_date
-        ).exists()
+        ).only("id", "start_time", "end_time", "reservation_date")
 
     def latest_date_for_household(self, household_id):
         last = (

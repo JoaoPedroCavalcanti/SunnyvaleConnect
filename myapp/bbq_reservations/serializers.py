@@ -20,6 +20,8 @@ class BBQReservationInputSerializer(serializers.Serializer):
         allow_null=True,
     )
     reservation_date = serializers.DateField(required=True)
+    start_time = serializers.TimeField(required=False, allow_null=True)
+    end_time = serializers.TimeField(required=False, allow_null=True)
     guest_count = serializers.IntegerField(
         min_value=0, required=False, allow_null=True
     )
@@ -32,6 +34,8 @@ class BBQReservationPatchSerializer(serializers.Serializer):
         allow_null=True,
     )
     reservation_date = serializers.DateField(required=False)
+    start_time = serializers.TimeField(required=False, allow_null=True)
+    end_time = serializers.TimeField(required=False, allow_null=True)
     guest_count = serializers.IntegerField(
         min_value=0, required=False, allow_null=True
     )
@@ -54,6 +58,8 @@ class BBQReservationOutputSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "reservation_date",
+            "start_time",
+            "end_time",
             "guest_count",
             "household",
             "reservation_user",

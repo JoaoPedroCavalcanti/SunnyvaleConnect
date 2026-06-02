@@ -7,13 +7,14 @@ member of the same apartment shares the cool-down.
 """
 
 from abc import ABC, abstractmethod
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 
 from bbq_reservations.models import BBQReservationModel
 from bbq_reservations.repositories.bbq_repository import IBBQRepository
 from households.models import HouseholdMembership
 from households.repositories.membership_repository import IMembershipRepository
 from shared.exceptions import BusinessRuleError, NotFoundError
+from shared.time_slots import slots_overlap
 
 
 class IBBQReservationService(ABC):
@@ -63,7 +64,10 @@ class BBQReservationService(IBBQReservationService):
         data["household"] = household
 
         reservation_date = data.get("reservation_date")
+        start_time = data.get("start_time")
+        end_time = data.get("end_time")
         self._validate_date(reservation_date)
+        self._validate_slot(reservation_date, start_time, end_time)
 
         if not user.is_staff:
             self._validate_30_day_window(household.id, reservation_date)
@@ -115,11 +119,38 @@ class BBQReservationService(IBBQReservationService):
             raise BusinessRuleError(
                 "The date is invalid.", field="reservation_date"
             )
-        if self._repo.exists_for_date(reservation_date):
+
+    def _validate_slot(
+        self,
+        reservation_date: date,
+        start_time: time | None,
+        end_time: time | None,
+    ):
+        """Enforce slot sanity and detect overlap with same-day bookings.
+
+        Semantics:
+          - missing ``start_time`` → 00:00:00
+          - missing ``end_time``   → 23:59:59
+          - ``start_time >= end_time`` is invalid.
+          - Two reservations on the same day are allowed as long as their
+            (normalized) intervals do not overlap. Adjacent intervals
+            (one ends exactly when the next starts) are allowed.
+        """
+        if start_time and end_time and start_time >= end_time:
             raise BusinessRuleError(
-                "The Barbecue has already been booked.",
-                field="reservation_date",
+                "start_time must be earlier than end_time.",
+                field="start_time",
             )
+        for existing in self._repo.list_for_date(reservation_date):
+            if slots_overlap(
+                start_time, end_time,
+                existing.start_time, existing.end_time,
+            ):
+                raise BusinessRuleError(
+                    "The Barbecue already has a booking in this time "
+                    "window.",
+                    field="reservation_date",
+                )
 
     def _validate_30_day_window(
         self, household_id: int, reservation_date: date

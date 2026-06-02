@@ -27,5 +27,7 @@ class BBQReservationModel(models.Model):
         default=None,
     )
     reservation_date = models.DateField()
+    start_time = models.TimeField(blank=True, null=True)
+    end_time = models.TimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     guest_count = models.PositiveIntegerField(blank=True, null=True)

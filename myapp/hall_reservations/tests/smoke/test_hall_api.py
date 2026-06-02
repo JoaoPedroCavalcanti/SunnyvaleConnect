@@ -90,3 +90,30 @@ class HallAPISmoke(BaseTestsUsers):
             LIST_URL, data={"reservation_date": self._future()}
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_two_non_overlapping_slots_same_day(self):
+        self._seed_household_with(self.user_a, "1101", "A")
+        self._seed_household_with(self.user_b, "1102", "A")
+
+        self.authenticate(self.user_a)
+        r1 = self.client.post(
+            LIST_URL,
+            data={
+                "reservation_date": self._future(),
+                "start_time": "12:00",
+                "end_time": "18:00",
+            },
+        )
+        self.assertEqual(r1.status_code, 201, r1.data)
+        self.assertEqual(r1.data["end_time"], "18:00:00")
+
+        self.authenticate(self.user_b)
+        r2 = self.client.post(
+            LIST_URL,
+            data={
+                "reservation_date": self._future(),
+                "start_time": "18:00",
+                "end_time": "22:00",
+            },
+        )
+        self.assertEqual(r2.status_code, 201, r2.data)

@@ -1,6 +1,6 @@
 """Unit tests for HallReservationService."""
 
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -25,10 +25,10 @@ class FakeHallRepository(IHallRepository):
     def get_by_id(self, pk):
         return next((i for i in self._items if i.id == pk), None)
 
-    def exists_for_date(self, reservation_date):
-        return any(
-            i.reservation_date == reservation_date for i in self._items
-        )
+    def list_for_date(self, reservation_date):
+        return [
+            i for i in self._items if i.reservation_date == reservation_date
+        ]
 
     def latest_date_for_household(self, household_id):
         dates = [
@@ -40,7 +40,14 @@ class FakeHallRepository(IHallRepository):
         return max(dates) if dates else None
 
     def create(self, data):
-        item = SimpleNamespace(id=self._next_id, **data)
+        item = SimpleNamespace(
+            id=self._next_id,
+            start_time=data.get("start_time"),
+            end_time=data.get("end_time"),
+            **{k: v for k, v in data.items() if k not in (
+                "start_time", "end_time"
+            )},
+        )
         self._next_id += 1
         self._items.append(item)
         return item
@@ -159,7 +166,7 @@ def test_past_date_rejected(fixtures):
         )
 
 
-def test_date_collision(fixtures):
+def test_full_day_collides_with_full_day(fixtures):
     f = fixtures
     d = _future()
     f["service"].create(f["holder"], {"reservation_date": d})
@@ -167,6 +174,124 @@ def test_date_collision(fixtures):
     f["memberships"].add(other.id, _household(2, "1102", "A"))
     with pytest.raises(BusinessRuleError):
         f["service"].create(other, {"reservation_date": d})
+
+
+def test_full_day_collides_with_any_slot(fixtures):
+    f = fixtures
+    d = _future()
+    f["service"].create(f["holder"], {"reservation_date": d})
+    other = _user(2)
+    f["memberships"].add(other.id, _household(2, "1102", "A"))
+    with pytest.raises(BusinessRuleError):
+        f["service"].create(
+            other,
+            {
+                "reservation_date": d,
+                "start_time": time(14, 0),
+                "end_time": time(18, 0),
+            },
+        )
+
+
+def test_adjacent_slots_are_allowed(fixtures):
+    f = fixtures
+    d = _future()
+    f["service"].create(
+        f["holder"],
+        {
+            "reservation_date": d,
+            "start_time": time(12, 0),
+            "end_time": time(18, 0),
+        },
+    )
+    other = _user(2)
+    f["memberships"].add(other.id, _household(2, "1102", "A"))
+    item = f["service"].create(
+        other,
+        {
+            "reservation_date": d,
+            "start_time": time(18, 0),
+            "end_time": time(22, 0),
+        },
+    )
+    assert item.start_time == time(18, 0)
+
+
+def test_overlapping_slots_collide(fixtures):
+    f = fixtures
+    d = _future()
+    f["service"].create(
+        f["holder"],
+        {
+            "reservation_date": d,
+            "start_time": time(12, 0),
+            "end_time": time(18, 0),
+        },
+    )
+    other = _user(2)
+    f["memberships"].add(other.id, _household(2, "1102", "A"))
+    with pytest.raises(BusinessRuleError):
+        f["service"].create(
+            other,
+            {
+                "reservation_date": d,
+                "start_time": time(17, 0),
+                "end_time": time(22, 0),
+            },
+        )
+
+
+def test_open_end_blocks_late_window(fixtures):
+    f = fixtures
+    d = _future()
+    f["service"].create(
+        f["holder"],
+        {"reservation_date": d, "start_time": time(15, 0)},
+    )
+    other = _user(2)
+    f["memberships"].add(other.id, _household(2, "1102", "A"))
+    with pytest.raises(BusinessRuleError):
+        f["service"].create(
+            other,
+            {
+                "reservation_date": d,
+                "start_time": time(20, 0),
+                "end_time": time(22, 0),
+            },
+        )
+
+
+def test_open_end_allows_earlier_window(fixtures):
+    f = fixtures
+    d = _future()
+    f["service"].create(
+        f["holder"],
+        {"reservation_date": d, "start_time": time(15, 0)},
+    )
+    other = _user(2)
+    f["memberships"].add(other.id, _household(2, "1102", "A"))
+    item = f["service"].create(
+        other,
+        {
+            "reservation_date": d,
+            "start_time": time(8, 0),
+            "end_time": time(15, 0),
+        },
+    )
+    assert item is not None
+
+
+def test_invalid_slot_start_after_end(fixtures):
+    f = fixtures
+    with pytest.raises(BusinessRuleError):
+        f["service"].create(
+            f["holder"],
+            {
+                "reservation_date": _future(),
+                "start_time": time(18, 0),
+                "end_time": time(12, 0),
+            },
+        )
 
 
 def test_30_day_window_is_per_household(fixtures):
