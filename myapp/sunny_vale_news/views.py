@@ -1,6 +1,6 @@
 """Plain APIViews for SunnyVale news. All logic in the service."""
 
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from shared.container import container
+from sunny_vale_news.models import SunnyValeNewsModel
 from sunny_vale_news.serializers import (
     SunnyValeNewsInputSerializer,
     SunnyValeNewsOutputSerializer,
@@ -19,9 +20,22 @@ from sunny_vale_news.serializers import (
 class SunnyValeNewsListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(responses={200: SunnyValeNewsOutputSerializer(many=True)})
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="kind",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                enum=[c for c, _ in SunnyValeNewsModel.Kind.choices],
+                description="Filter by announcement kind.",
+            ),
+        ],
+        responses={200: SunnyValeNewsOutputSerializer(many=True)},
+    )
     def get(self, request):
-        queryset = container.sunny_vale_news_service.list()
+        kind = request.query_params.get("kind") or None
+        queryset = container.sunny_vale_news_service.list(kind=kind)
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request, view=self)
         serializer = SunnyValeNewsOutputSerializer(page, many=True)

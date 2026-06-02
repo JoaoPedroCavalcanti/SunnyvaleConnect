@@ -196,6 +196,7 @@ SPECTACULAR_SETTINGS = {
         "MembershipStatusEnum": "households.models.HouseholdMembership.Status",
         "MembershipRoleEnum": "households.models.HouseholdMembership.Role",
         "UserRoleEnum": "users.models.UserRole",
+        "NewsKindEnum": "sunny_vale_news.models.SunnyValeNewsModel.Kind",
     },
 }
 

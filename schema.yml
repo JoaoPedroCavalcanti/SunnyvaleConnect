@@ -1233,6 +1233,16 @@ paths:
   /sunny_vale_news/:
     get:
       operationId: sunny_vale_news_list
+      parameters:
+      - in: query
+        name: kind
+        schema:
+          type: string
+          enum:
+          - EVENT
+          - MAINTENANCE
+          - NOTICE
+        description: Filter by announcement kind.
       tags:
       - sunny_vale_news
       security:
@@ -2265,6 +2275,38 @@ components:
       - id
       - phone
       - username
+    NewsAuthor:
+      type: object
+      description: |-
+        Authorship snapshot embedded inside news listings.
+
+        ``id`` is null when the original author user has been deleted; in
+        that case the front falls back to rendering only ``full_name``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+          nullable: true
+        full_name:
+          type: string
+          readOnly: true
+        role:
+          type: string
+          readOnly: true
+      required:
+      - full_name
+      - id
+      - role
+    NewsKindEnum:
+      enum:
+      - NOTICE
+      - MAINTENANCE
+      - EVENT
+      type: string
+      description: |-
+        * `NOTICE` - Aviso
+        * `MAINTENANCE` - Manutenção
+        * `EVENT` - Evento
     PatchedBBQReservationPatchRequest:
       type: object
       properties:
@@ -2401,10 +2443,8 @@ components:
         description:
           type: string
           minLength: 1
-        author:
-          type: string
-          minLength: 1
-          maxLength: 50
+        kind:
+          $ref: '#/components/schemas/NewsKindEnum'
         priority_level:
           $ref: '#/components/schemas/PriorityEnum'
     PatchedUserPatchRequest:
@@ -2616,20 +2656,27 @@ components:
         description:
           type: string
           minLength: 1
-        author:
-          type: string
-          minLength: 1
-          maxLength: 50
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/NewsKindEnum'
+          default: NOTICE
         priority_level:
           allOf:
           - $ref: '#/components/schemas/PriorityEnum'
           default: low
       required:
-      - author
       - description
       - title
     SunnyValeNewsOutput:
       type: object
+      description: |-
+        Listing/detail payload.
+
+        ``created_by`` exposes the authorship denormalized snapshot
+        (``author`` / ``author_role``) under a single object so the front
+        can render "criado por João Pedro · Administrador" with one line of
+        JSX. ``id`` inside ``created_by`` is null when the original author
+        has been deleted (FK is nullable).
       properties:
         id:
           type: integer
@@ -2639,11 +2686,14 @@ components:
           maxLength: 200
         description:
           type: string
-        author:
-          type: string
-          maxLength: 50
+        kind:
+          $ref: '#/components/schemas/NewsKindEnum'
         priority_level:
           $ref: '#/components/schemas/PriorityEnum'
+        created_by:
+          allOf:
+          - $ref: '#/components/schemas/NewsAuthor'
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -2653,8 +2703,8 @@ components:
           format: date-time
           readOnly: true
       required:
-      - author
       - created_at
+      - created_by
       - description
       - id
       - updated_at

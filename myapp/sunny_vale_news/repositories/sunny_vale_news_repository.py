@@ -11,6 +11,9 @@ class ISunnyValeNewsRepository(ABC):
     def list_all(self) -> Iterable[SunnyValeNewsModel]: ...
 
     @abstractmethod
+    def list_by_kind(self, kind: str) -> Iterable[SunnyValeNewsModel]: ...
+
+    @abstractmethod
     def get_by_id(self, news_id: int) -> SunnyValeNewsModel | None: ...
 
     @abstractmethod
@@ -25,10 +28,25 @@ class ISunnyValeNewsRepository(ABC):
 
 class DjangoSunnyValeNewsRepository(ISunnyValeNewsRepository):
     def list_all(self):
-        return SunnyValeNewsModel.objects.all().order_by("-created_at")
+        return (
+            SunnyValeNewsModel.objects.select_related("created_by")
+            .all()
+            .order_by("-created_at")
+        )
+
+    def list_by_kind(self, kind):
+        return (
+            SunnyValeNewsModel.objects.select_related("created_by")
+            .filter(kind=kind)
+            .order_by("-created_at")
+        )
 
     def get_by_id(self, news_id):
-        return SunnyValeNewsModel.objects.filter(pk=news_id).first()
+        return (
+            SunnyValeNewsModel.objects.select_related("created_by")
+            .filter(pk=news_id)
+            .first()
+        )
 
     def create(self, data):
         return SunnyValeNewsModel.objects.create(**data)
