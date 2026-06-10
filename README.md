@@ -613,6 +613,13 @@ If you are not staff you can delete **just one of yours** BBQ Reservations.
 > | `False`         | `200`         | `None`        | `None`                                                     |
 > | `True` / `False`         | `404`         | `JSON`        | `Detail of Not found `                                                     |
 
+Para rodar:
+```
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose-debug.override.yml \
+  up -d --build
+```
 
 
 </details>

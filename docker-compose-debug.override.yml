@@ -1,0 +1,9 @@
+services:
+  myapp:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    ports:
+      - "8000:8000"
+      - "5678:5678"
+    command: ["sh", "-c", "/scripts/debug.sh"]
