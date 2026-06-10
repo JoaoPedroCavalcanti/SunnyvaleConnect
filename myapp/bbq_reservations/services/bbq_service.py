@@ -186,7 +186,8 @@ class BBQReservationService(IBBQReservationService):
     def _validate_date(self, reservation_date: date):
         if reservation_date < date.today():
             raise BusinessRuleError(
-                "The date is invalid.", field="reservation_date"
+                "You can not book the barbecue for a past date.",
+                field="reservation_date",
             )
 
     def _validate_slot(
