@@ -85,7 +85,7 @@ class VisitorAccessAPISmoke(BaseTestsUsers):
             visitor_name="Guest",
             checkin_code="",
             checkout_code="",
-            status="Scheduled",
+            status=VisitorAccessModel.Status.SCHEDULED,
             scheduled_date=timezone.now() - timedelta(minutes=5),
             checkin_date_time=timezone.now() - timedelta(minutes=5),
             checkout_date_time=timezone.now() + timedelta(hours=2),
@@ -102,7 +102,7 @@ class VisitorAccessAPISmoke(BaseTestsUsers):
             visitor_name="Guest",
             checkin_code="",
             checkout_code="",
-            status="Scheduled",
+            status=VisitorAccessModel.Status.SCHEDULED,
             scheduled_date=timezone.now() + timedelta(hours=2),
             checkin_date_time=timezone.now() + timedelta(hours=2),
             checkout_date_time=timezone.now() + timedelta(hours=5),
@@ -110,14 +110,74 @@ class VisitorAccessAPISmoke(BaseTestsUsers):
         response = self.client.get(checkout_url(str(obj.id)))
         self.assertEqual(response.status_code, 400)
 
-    def test_cannot_delete_past(self):
+    def test_cannot_cancel_past(self):
         obj = baker.make(
             VisitorAccessModel,
             host_user=self.user_a,
             scheduled_date=timezone.now() - timedelta(days=1),
+            status=VisitorAccessModel.Status.SCHEDULED,
         )
         self.authenticate(self.user_a)
         self.assertEqual(self.client.delete(detail_url(obj.id)).status_code, 400)
+
+    def test_delete_soft_cancels_future_visit(self):
+        obj = baker.make(
+            VisitorAccessModel,
+            host_user=self.user_a,
+            scheduled_date=timezone.now() + timedelta(days=2),
+            status=VisitorAccessModel.Status.SCHEDULED,
+        )
+        self.authenticate(self.user_a)
+        response = self.client.delete(detail_url(obj.id))
+        self.assertEqual(response.status_code, 204)
+        obj.refresh_from_db()
+        self.assertEqual(obj.status, VisitorAccessModel.Status.CANCELLED)
+
+    def test_list_filters_by_period_future(self):
+        future = baker.make(
+            VisitorAccessModel,
+            host_user=self.user_a,
+            scheduled_date=timezone.now() + timedelta(days=2),
+            status=VisitorAccessModel.Status.SCHEDULED,
+        )
+        baker.make(
+            VisitorAccessModel,
+            host_user=self.user_a,
+            scheduled_date=timezone.now() - timedelta(days=2),
+            status=VisitorAccessModel.Status.CHECKED_OUT,
+        )
+        self.authenticate(self.user_a)
+        response = self.client.get(LIST_URL + "?period=future")
+        self.assertEqual(response.status_code, 200)
+        ids = {row["id"] for row in response.data["results"]}
+        self.assertEqual(ids, {future.id})
+
+    def test_list_filters_by_status_no_show(self):
+        no_show = baker.make(
+            VisitorAccessModel,
+            host_user=self.user_a,
+            scheduled_date=timezone.now() - timedelta(days=1),
+            status=VisitorAccessModel.Status.SCHEDULED,
+        )
+        baker.make(
+            VisitorAccessModel,
+            host_user=self.user_a,
+            scheduled_date=timezone.now() + timedelta(days=1),
+            status=VisitorAccessModel.Status.SCHEDULED,
+        )
+        self.authenticate(self.user_a)
+        response = self.client.get(LIST_URL + "?status=NO_SHOW")
+        self.assertEqual(response.status_code, 200)
+        ids = {row["id"] for row in response.data["results"]}
+        self.assertEqual(ids, {no_show.id})
+        # display_status surfaces the derived state
+        row = response.data["results"][0]
+        self.assertEqual(row["status"], "NO_SHOW")
+
+    def test_list_invalid_status_returns_400(self):
+        self.authenticate(self.user_a)
+        response = self.client.get(LIST_URL + "?status=BANANA")
+        self.assertEqual(response.status_code, 400)
 
     def test_all_day_visit_covers_full_day(self):
         self.authenticate(self.user_a)

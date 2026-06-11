@@ -621,5 +621,9 @@ docker compose \
   up -d --build
 ```
 
+Pra gerar documentacao de rotas para o front:
+```
+make schema
+```
 
 </details>

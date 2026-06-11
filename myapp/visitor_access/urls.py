@@ -8,6 +8,7 @@ from visitor_access.views import (
     VisitorGroupDetailView,
     VisitorGroupListCreateView,
     VisitorGroupScheduleView,
+    VisitorGroupVisitsListView,
 )
 
 app_name = "visitor_access"
@@ -28,6 +29,11 @@ urlpatterns = [
         "groups/",
         VisitorGroupListCreateView.as_view(),
         name="groups-list-create",
+    ),
+    path(
+        "groups/visits/",
+        VisitorGroupVisitsListView.as_view(),
+        name="groups-visits-list",
     ),
     path(
         "groups/<int:pk>/",

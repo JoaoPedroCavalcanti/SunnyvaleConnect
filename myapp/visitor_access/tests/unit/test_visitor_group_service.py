@@ -120,7 +120,7 @@ class FakeAccessService(IVisitorAccessService):
         self.created: list[dict] = []
         self._next = 1
 
-    def list_for(self, user):  # pragma: no cover - not used here
+    def list_for(self, user, period=None, status=None, is_group=None):  # pragma: no cover - not used here
         return []
 
     def get_for(self, user, pk):  # pragma: no cover - not used here
@@ -128,6 +128,7 @@ class FakeAccessService(IVisitorAccessService):
 
     def create(self, user, payload: dict):
         self.created.append({"user": user, "payload": payload})
+        group = payload.get("visitor_group")
         item = SimpleNamespace(
             id=self._next,
             host_user=user,
@@ -135,7 +136,8 @@ class FakeAccessService(IVisitorAccessService):
             email=payload.get("email", ""),
             scheduled_date=payload.get("scheduled_date"),
             all_day=payload.get("all_day", False),
-            visitor_group=payload.get("visitor_group"),
+            visitor_group=group,
+            visitor_group_id=getattr(group, "id", None),
         )
         self._next += 1
         return item
@@ -254,12 +256,13 @@ class TestVisibility:
 
 
 class TestSchedule:
-    def test_schedules_visit_for_each_member(self, service, access):
+    def test_schedules_single_visit_for_whole_group(self, service, access):
+        """schedule_visit produces one VisitorAccess row, not N."""
         u = _user(1)
         group = service.create(
             u,
             {
-                "name": "G",
+                "name": "Família Pai",
                 "members": [
                     {"name": "A", "email": "a@x.com"},
                     {"name": "B", "email": "b@x.com"},
@@ -273,13 +276,15 @@ class TestSchedule:
             {"scheduled_date": when, "all_day": False},
         )
 
-        assert len(result) == 2
-        assert len(access.created) == 2
-        names = [c["payload"]["visitor_name"] for c in access.created]
-        assert sorted(names) == ["A", "B"]
-        for call in access.created:
-            assert call["payload"]["visitor_group"] is group
-            assert call["payload"]["scheduled_date"] == when
+        assert len(access.created) == 1
+        call = access.created[0]
+        assert call["payload"]["visitor_group"] is group
+        assert call["payload"]["visitor_name"] == "Família Pai"
+        assert call["payload"]["email"] == ""
+        assert call["payload"]["scheduled_date"] == when
+        # returns the single visit, not a list
+        assert result.visitor_group is group
+        assert result.visitor_name == "Família Pai"
 
     def test_schedule_all_day_propagates(self, service, access):
         u = _user(1)

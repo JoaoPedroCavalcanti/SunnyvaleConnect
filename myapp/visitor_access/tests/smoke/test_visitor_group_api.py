@@ -26,6 +26,10 @@ def schedule_url(pk):
     return reverse("visitor_access:groups-schedule", kwargs={"pk": pk})
 
 
+GROUP_VISITS_LIST_URL = reverse("visitor_access:groups-visits-list")
+SOLO_VISITS_LIST_URL = reverse("visitor_access:list-create")
+
+
 class VisitorGroupAPISmoke(BaseTestsUsers):
     def setUp(self):
         super().setUp()
@@ -112,9 +116,9 @@ class VisitorGroupAPISmoke(BaseTestsUsers):
         self.assertEqual(self.client.get(detail_url(group.id)).status_code, 404)
 
     # ------------------------------------------------------------------ #
-    # schedule                                                           #
+    # schedule (one visit per group, not per member)                     #
     # ------------------------------------------------------------------ #
-    def test_schedule_creates_visit_per_member(self):
+    def test_schedule_creates_single_visit_for_whole_group(self):
         group = VisitorGroupModel.objects.create(host_user=self.user_a, name="G")
         group.members.create(name="A", email="a@x.com")
         group.members.create(name="B", email="b@x.com")
@@ -125,10 +129,16 @@ class VisitorGroupAPISmoke(BaseTestsUsers):
             format="json",
         )
         self.assertEqual(response.status_code, 201, response.data)
-        self.assertEqual(len(response.data), 2)
+        # response is now a single object, not a list
+        self.assertIsInstance(response.data, dict)
+        self.assertEqual(response.data["visitor_group"], group.id)
+        self.assertEqual(response.data["visitor_name"], "G")
+        self.assertTrue(response.data["is_group"])
+        self.assertEqual(len(response.data["group_members"]), 2)
+
         visits = VisitorAccessModel.objects.filter(visitor_group=group)
-        self.assertEqual(visits.count(), 2)
-        self.assertTrue(all(v.host_user_id == self.user_a.id for v in visits))
+        self.assertEqual(visits.count(), 1)
+        self.assertEqual(visits.first().host_user_id, self.user_a.id)
 
     def test_schedule_all_day_visit(self):
         group = VisitorGroupModel.objects.create(host_user=self.user_a, name="G")
@@ -146,3 +156,87 @@ class VisitorGroupAPISmoke(BaseTestsUsers):
         local_out = timezone.localtime(visit.checkout_date_time)
         self.assertEqual(local_in.hour, 0)
         self.assertEqual(local_out.hour, 23)
+
+    def test_empty_group_cannot_be_scheduled(self):
+        group = VisitorGroupModel.objects.create(host_user=self.user_a, name="G")
+        self.authenticate(self.user_a)
+        response = self.client.post(
+            schedule_url(group.id),
+            data={"scheduled_date": self._future()},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    # ------------------------------------------------------------------ #
+    # listing separation: solo vs group visits                           #
+    # ------------------------------------------------------------------ #
+    def test_solo_listing_excludes_group_visits(self):
+        VisitorAccessModel.objects.create(
+            host_user=self.user_a,
+            visitor_name="Solo",
+            scheduled_date=timezone.now() + timedelta(days=1),
+            checkin_date_time=timezone.now() + timedelta(days=1),
+            checkout_date_time=timezone.now() + timedelta(days=1, hours=3),
+            status=VisitorAccessModel.Status.SCHEDULED,
+        )
+        group = VisitorGroupModel.objects.create(host_user=self.user_a, name="G")
+        group.members.create(name="A", email="a@x.com")
+        VisitorAccessModel.objects.create(
+            host_user=self.user_a,
+            visitor_group=group,
+            visitor_name="G",
+            scheduled_date=timezone.now() + timedelta(days=1),
+            checkin_date_time=timezone.now() + timedelta(days=1),
+            checkout_date_time=timezone.now() + timedelta(days=1, hours=3),
+            status=VisitorAccessModel.Status.SCHEDULED,
+        )
+
+        self.authenticate(self.user_a)
+        solo = self.client.get(SOLO_VISITS_LIST_URL)
+        self.assertEqual(solo.status_code, 200)
+        names = [r["visitor_name"] for r in solo.data["results"]]
+        self.assertEqual(names, ["Solo"])
+
+        groups = self.client.get(GROUP_VISITS_LIST_URL)
+        self.assertEqual(groups.status_code, 200)
+        names = [r["visitor_name"] for r in groups.data["results"]]
+        self.assertEqual(names, ["G"])
+        self.assertTrue(groups.data["results"][0]["is_group"])
+        self.assertEqual(len(groups.data["results"][0]["group_members"]), 1)
+
+    def test_group_visits_list_other_user_isolated(self):
+        group_a = VisitorGroupModel.objects.create(host_user=self.user_a, name="GA")
+        group_a.members.create(name="A")
+        VisitorAccessModel.objects.create(
+            host_user=self.user_a,
+            visitor_group=group_a,
+            visitor_name="GA",
+            scheduled_date=timezone.now() + timedelta(days=1),
+            checkin_date_time=timezone.now() + timedelta(days=1),
+            checkout_date_time=timezone.now() + timedelta(days=1, hours=3),
+            status=VisitorAccessModel.Status.SCHEDULED,
+        )
+        self.authenticate(self.user_b)
+        response = self.client.get(GROUP_VISITS_LIST_URL)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["results"], [])
+
+    def test_group_visit_cancellation_uses_shared_detail_endpoint(self):
+        group = VisitorGroupModel.objects.create(host_user=self.user_a, name="G")
+        group.members.create(name="A", email="a@x.com")
+        visit = VisitorAccessModel.objects.create(
+            host_user=self.user_a,
+            visitor_group=group,
+            visitor_name="G",
+            scheduled_date=timezone.now() + timedelta(days=2),
+            checkin_date_time=timezone.now() + timedelta(days=2),
+            checkout_date_time=timezone.now() + timedelta(days=2, hours=3),
+            status=VisitorAccessModel.Status.SCHEDULED,
+        )
+        self.authenticate(self.user_a)
+        response = self.client.delete(
+            reverse("visitor_access:detail", kwargs={"pk": visit.id})
+        )
+        self.assertEqual(response.status_code, 204)
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, VisitorAccessModel.Status.CANCELLED)

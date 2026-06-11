@@ -318,6 +318,7 @@ class Container:
             "visitor_access_service",
             lambda: VisitorAccessService(
                 repository=self.visitor_access_repository,
+                group_repository=self.visitor_group_repository,
                 email_sender=self.email_sender,
                 code_generator=self.code_generator,
                 string_mixer=self.string_mixer,

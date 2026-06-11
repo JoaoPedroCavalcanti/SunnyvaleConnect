@@ -1,6 +1,11 @@
 """Plain APIViews for visitor access."""
 
-from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    inline_serializer,
+)
 from rest_framework import serializers, status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -8,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from shared.container import container
+from visitor_access.models import VisitorAccessModel
 from visitor_access.serializers import (
     VisitorAccessInputSerializer,
     VisitorAccessOutputSerializer,
@@ -28,13 +34,47 @@ _CheckoutResponse = inline_serializer(
 )
 
 
+_STATUS_PARAM = OpenApiParameter(
+    name="status",
+    required=False,
+    type=str,
+    enum=[c.value for c in VisitorAccessModel.Status],
+    description=(
+        "Filter by visit status. NO_SHOW and EXPIRED are "
+        "derived from the persisted SCHEDULED/CHECKED_IN "
+        "rows whose window has already elapsed."
+    ),
+)
+_PERIOD_PARAM = OpenApiParameter(
+    name="period",
+    required=False,
+    type=str,
+    enum=["future", "past"],
+    description=(
+        "Filter by scheduled_date relative to now. "
+        "'future' returns visits with scheduled_date >= now; "
+        "'past' returns visits with scheduled_date < now."
+    ),
+)
+
+
 @extend_schema(tags=["visitor_access"])
 class VisitorAccessListCreateView(APIView):
+    """Solo visitors only (group visits live under /groups/visits/)."""
+
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(responses={200: VisitorAccessOutputSerializer(many=True)})
+    @extend_schema(
+        parameters=[_PERIOD_PARAM, _STATUS_PARAM],
+        responses={200: VisitorAccessOutputSerializer(many=True)},
+    )
     def get(self, request):
-        queryset = container.visitor_access_service.list_for(request.user)
+        queryset = container.visitor_access_service.list_for(
+            request.user,
+            period=request.query_params.get("period"),
+            status=request.query_params.get("status"),
+            is_group=False,
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request, view=self)
         serializer = VisitorAccessOutputSerializer(page, many=True)
@@ -58,6 +98,8 @@ class VisitorAccessListCreateView(APIView):
 
 @extend_schema(tags=["visitor_access"])
 class VisitorAccessDetailView(APIView):
+    """Shared by solo and group visits (a group visit is a single row)."""
+
     permission_classes = [IsAuthenticated]
 
     @extend_schema(responses={200: VisitorAccessOutputSerializer})
@@ -89,6 +131,28 @@ class VisitorAccessCheckinView(APIView):
         return Response(result)
 
 
+@extend_schema(tags=["visitor_access"])
+class VisitorAccessCheckoutView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        responses={
+            200: OpenApiResponse(
+                response=_CheckoutResponse,
+                description="Returns the check-out code if inside the allowed window.",
+            )
+        }
+    )
+    def get(self, request, visitor_access_link_checkout: str):
+        result = container.visitor_access_service.checkout(
+            visitor_access_link_checkout
+        )
+        return Response(result)
+
+
+# ---------------------------------------------------------------------- #
+# Visitor groups (template) — CRUD                                       #
+# ---------------------------------------------------------------------- #
 @extend_schema(tags=["visitor_access"])
 class VisitorGroupListCreateView(APIView):
     permission_classes = [IsAuthenticated]
@@ -146,38 +210,48 @@ class VisitorGroupDetailView(APIView):
 
 @extend_schema(tags=["visitor_access"])
 class VisitorGroupScheduleView(APIView):
+    """Schedule a single visit that represents the whole group."""
+
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
         request=VisitorGroupScheduleInputSerializer,
-        responses={201: VisitorAccessOutputSerializer(many=True)},
+        responses={201: VisitorAccessOutputSerializer},
     )
     def post(self, request, pk: int):
         serializer = VisitorGroupScheduleInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        visits = container.visitor_group_service.schedule_visit(
+        visit = container.visitor_group_service.schedule_visit(
             request.user, pk, serializer.validated_data
         )
         return Response(
-            VisitorAccessOutputSerializer(visits, many=True).data,
+            VisitorAccessOutputSerializer(visit).data,
             status=status.HTTP_201_CREATED,
         )
 
 
 @extend_schema(tags=["visitor_access"])
-class VisitorAccessCheckoutView(APIView):
-    permission_classes = [AllowAny]
+class VisitorGroupVisitsListView(APIView):
+    """List scheduled *group* visits (one row per scheduled group visit).
+
+    Same status/period filters as the solo listing — but here every row
+    represents a group, not a single visitor.
+    """
+
+    permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        responses={
-            200: OpenApiResponse(
-                response=_CheckoutResponse,
-                description="Returns the check-out code if inside the allowed window.",
-            )
-        }
+        parameters=[_PERIOD_PARAM, _STATUS_PARAM],
+        responses={200: VisitorAccessOutputSerializer(many=True)},
     )
-    def get(self, request, visitor_access_link_checkout: str):
-        result = container.visitor_access_service.checkout(
-            visitor_access_link_checkout
+    def get(self, request):
+        queryset = container.visitor_access_service.list_for(
+            request.user,
+            period=request.query_params.get("period"),
+            status=request.query_params.get("status"),
+            is_group=True,
         )
-        return Response(result)
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        serializer = VisitorAccessOutputSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)

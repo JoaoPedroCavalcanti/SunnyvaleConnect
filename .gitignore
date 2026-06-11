@@ -15,6 +15,9 @@ db.sqlite3
 # Backup files #
 *.bak
 
+# Generated OpenAPI schema (run `make schema-docker` to regenerate)
+/schema.yml
+
 # If you are using PyCharm #
 # User-specific stuff
 .idea/**/workspace.xml

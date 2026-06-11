@@ -27,7 +27,7 @@ class IVisitorGroupService(ABC):
     def delete(self, user, pk: int) -> None: ...
 
     @abstractmethod
-    def schedule_visit(self, user, pk: int, payload: dict) -> list: ...
+    def schedule_visit(self, user, pk: int, payload: dict): ...
 
 
 class VisitorGroupService(IVisitorGroupService):
@@ -108,10 +108,15 @@ class VisitorGroupService(IVisitorGroupService):
     # ------------------------------------------------------------------ #
     # schedule a visit for the whole group                               #
     # ------------------------------------------------------------------ #
-    def schedule_visit(self, user, pk: int, payload: dict) -> list:
+    def schedule_visit(self, user, pk: int, payload: dict):
+        """Create a single visit row representing the whole group.
+
+        The visit reuses VisitorAccessModel (so it inherits status,
+        check-in/out, links). The downstream access service expands the
+        members list when sending invites and notifications.
+        """
         group = self.get_for(user, pk)
-        members = list(group.members.all())
-        if not members:
+        if group.members.count() == 0:
             raise BusinessRuleError(
                 "This group has no members. Add members before scheduling a visit."
             )
@@ -122,31 +127,22 @@ class VisitorGroupService(IVisitorGroupService):
                 "scheduled_date is required.", field="scheduled_date"
             )
 
-        base = {
-            "scheduled_date": scheduled_date,
-            "all_day": payload.get("all_day", False),
-            "description": payload.get("description", "") or "",
-        }
-        if not base["all_day"] and payload.get("checkout_date_time"):
-            base["checkout_date_time"] = payload["checkout_date_time"]
-
         # admin schedules in name of the group's owner
         host_user = group.host_user
         acting_user = host_user if user.is_staff else user
 
-        results = []
-        for member in members:
-            visit = self._access.create(
-                acting_user,
-                {
-                    **base,
-                    "visitor_name": member.name,
-                    "email": member.email or "",
-                    "visitor_group": group,
-                },
-            )
-            results.append(visit)
-        return results
+        visit_payload = {
+            "scheduled_date": scheduled_date,
+            "all_day": payload.get("all_day", False),
+            "description": payload.get("description", "") or "",
+            "visitor_name": group.name,
+            "email": "",
+            "visitor_group": group,
+        }
+        if not visit_payload["all_day"] and payload.get("checkout_date_time"):
+            visit_payload["checkout_date_time"] = payload["checkout_date_time"]
+
+        return self._access.create(acting_user, visit_payload)
 
     # ------------------------------------------------------------------ #
     # helpers                                                            #
