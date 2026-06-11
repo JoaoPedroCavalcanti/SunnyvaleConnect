@@ -7,4 +7,6 @@ class AdminDashboardOverviewSerializer(serializers.Serializer):
     active_residents = serializers.IntegerField(read_only=True)
     total_reservations = serializers.IntegerField(read_only=True)
     pending_reservations = serializers.IntegerField(read_only=True)
+    pending_bbq_reservations = serializers.IntegerField(read_only=True)
+    pending_hall_reservations = serializers.IntegerField(read_only=True)
     published_news = serializers.IntegerField(read_only=True)

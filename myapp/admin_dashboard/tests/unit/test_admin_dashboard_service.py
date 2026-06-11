@@ -208,6 +208,8 @@ def test_admin_gets_overview_with_aggregated_counts():
     assert result.total_reservations == 4
     # PENDING only: 2 (BBQ) + 4 (Hall) = 6
     assert result.pending_reservations == 6
+    assert result.pending_bbq_reservations == 2
+    assert result.pending_hall_reservations == 4
     assert result.published_news == 7
 
 
@@ -216,6 +218,8 @@ def test_overview_zeros_when_repos_empty():
     assert result.active_residents == 0
     assert result.total_reservations == 0
     assert result.pending_reservations == 0
+    assert result.pending_bbq_reservations == 0
+    assert result.pending_hall_reservations == 0
     assert result.published_news == 0
 
 
@@ -232,6 +236,8 @@ def test_rejected_reservations_do_not_count_as_total():
     result = svc.overview(_admin())
     assert result.total_reservations == 0
     assert result.pending_reservations == 0
+    assert result.pending_bbq_reservations == 0
+    assert result.pending_hall_reservations == 0
 
 
 def test_overview_is_cached_with_one_hour_ttl():
@@ -249,6 +255,8 @@ def test_second_call_hits_cache_and_skips_repos():
         active_residents=42,
         total_reservations=7,
         pending_reservations=3,
+        pending_bbq_reservations=1,
+        pending_hall_reservations=2,
         published_news=11,
     )
     # Repos report different numbers; if the service hits them we'd see those.
@@ -257,6 +265,8 @@ def test_second_call_hits_cache_and_skips_repos():
     assert result.active_residents == 42
     assert result.total_reservations == 7
     assert result.pending_reservations == 3
+    assert result.pending_bbq_reservations == 1
+    assert result.pending_hall_reservations == 2
     assert result.published_news == 11
     # No new write happened, the cached value was simply returned.
     assert cache.set_calls == []
@@ -268,6 +278,8 @@ def test_permission_check_runs_before_cache_lookup():
         active_residents=1,
         total_reservations=1,
         pending_reservations=1,
+        pending_bbq_reservations=1,
+        pending_hall_reservations=0,
         published_news=1,
     )
     svc = _service(cache=cache)

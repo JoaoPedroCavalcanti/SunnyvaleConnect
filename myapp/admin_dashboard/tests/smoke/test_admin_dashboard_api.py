@@ -60,13 +60,27 @@ class AdminDashboardOverviewSmoke(BaseTestsUsers):
             end_time=time(15, 0),
             status=BBQReservationModel.Status.REJECTED,
         )
-        # 1 approved Hall
+        # 1 approved Hall + 2 pending Hall
         baker.make(
             HallReservationModel,
             reservation_date=tomorrow,
             start_time=time(10, 0),
             end_time=time(11, 0),
             status=HallReservationModel.Status.APPROVED,
+        )
+        baker.make(
+            HallReservationModel,
+            reservation_date=tomorrow,
+            start_time=time(12, 0),
+            end_time=time(13, 0),
+            status=HallReservationModel.Status.PENDING,
+        )
+        baker.make(
+            HallReservationModel,
+            reservation_date=tomorrow,
+            start_time=time(14, 0),
+            end_time=time(15, 0),
+            status=HallReservationModel.Status.PENDING,
         )
         # 2 news
         baker.make(SunnyValeNewsModel, _quantity=2)
@@ -79,8 +93,10 @@ class AdminDashboardOverviewSmoke(BaseTestsUsers):
         self.assertEqual(response.data["active_residents"], 3)
         # 1 BBQ approved + 1 Hall approved
         self.assertEqual(response.data["total_reservations"], 2)
-        # 1 BBQ pending
-        self.assertEqual(response.data["pending_reservations"], 1)
+        # 1 BBQ pending + 2 Hall pending
+        self.assertEqual(response.data["pending_reservations"], 3)
+        self.assertEqual(response.data["pending_bbq_reservations"], 1)
+        self.assertEqual(response.data["pending_hall_reservations"], 2)
         self.assertEqual(response.data["published_news"], 2)
 
     def test_admin_overview_zeros_when_empty(self):
@@ -89,6 +105,8 @@ class AdminDashboardOverviewSmoke(BaseTestsUsers):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["total_reservations"], 0)
         self.assertEqual(response.data["pending_reservations"], 0)
+        self.assertEqual(response.data["pending_bbq_reservations"], 0)
+        self.assertEqual(response.data["pending_hall_reservations"], 0)
         self.assertEqual(response.data["published_news"], 0)
 
     def test_overview_response_is_cached_for_subsequent_requests(self):

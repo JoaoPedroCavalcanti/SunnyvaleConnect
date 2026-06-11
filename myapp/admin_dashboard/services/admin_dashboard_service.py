@@ -30,6 +30,8 @@ class AdminDashboardOverview:
     active_residents: int
     total_reservations: int
     pending_reservations: int
+    pending_bbq_reservations: int
+    pending_hall_reservations: int
     published_news: int
 
 
@@ -82,13 +84,13 @@ class AdminDashboardService(IAdminDashboardService):
             self._bbq.count_by_status(BBQReservationModel.Status.APPROVED)
             + self._hall.count_by_status(HallReservationModel.Status.APPROVED)
         )
-        pending = (
-            self._bbq.count_by_status(BBQReservationModel.Status.PENDING)
-            + self._hall.count_by_status(HallReservationModel.Status.PENDING)
-        )
+        pending_bbq = self._bbq.count_by_status(BBQReservationModel.Status.PENDING)
+        pending_hall = self._hall.count_by_status(HallReservationModel.Status.PENDING)
         return AdminDashboardOverview(
             active_residents=self._users.count_active(),
             total_reservations=approved,
-            pending_reservations=pending,
+            pending_reservations=pending_bbq + pending_hall,
+            pending_bbq_reservations=pending_bbq,
+            pending_hall_reservations=pending_hall,
             published_news=self._news.count_all(),
         )
