@@ -31,6 +31,10 @@ from shared.infrastructure.password_policy import (
     IPasswordPolicy,
 )
 from shared.infrastructure.string_mixer import IStringMixer, SecretStringMixer
+from shared.infrastructure.transactions import (
+    DjangoTransactionRunner,
+    ITransactionRunner,
+)
 
 
 _SECRET_MIXIN = "1783645917351"
@@ -75,6 +79,10 @@ class Container:
     @property
     def email_sender(self) -> IEmailSender:
         return self._resolve("email_sender", DjangoEmailSender)
+
+    @property
+    def transaction_runner(self) -> ITransactionRunner:
+        return self._resolve("transaction_runner", DjangoTransactionRunner)
 
     @property
     def code_generator(self) -> ICodeGenerator:
@@ -349,6 +357,7 @@ class Container:
                 membership_repository=self.membership_repository,
                 user_repository=self.user_repository,
                 email_sender=self.email_sender,
+                transaction_runner=self.transaction_runner,
             ),
         )
 
@@ -364,6 +373,7 @@ class Container:
                 user_repository=self.user_repository,
                 email_sender=self.email_sender,
                 decision_repository=self.membership_decision_repository,
+                transaction_runner=self.transaction_runner,
             ),
         )
 

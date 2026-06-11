@@ -1,11 +1,14 @@
 """Email sender abstraction so services don't talk to Django mail directly."""
 
+import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 
 from django.conf import settings
 from django.core.mail import send_mail
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 
 class IEmailSender(ABC):
@@ -78,8 +81,25 @@ class IEmailSender(ABC):
 
 
 class DjangoEmailSender(IEmailSender):
+    """SMTP-backed sender. Failures are logged and swallowed so a flaky mail
+    server never breaks the request that triggered the side-effect."""
+
     def _send(self, subject: str, message: str, to_email: str) -> None:
-        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [to_email])
+        if not to_email:
+            logger.warning("Skipping email '%s': empty recipient.", subject)
+            return
+        try:
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [to_email],
+                fail_silently=False,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to send email '%s' to %s", subject, to_email
+            )
 
     def send_visitor_invite(
         self,

@@ -6,7 +6,7 @@ from delivery_notification.models import DeliveryNotificationModel
 from delivery_notification.repositories.delivery_notification_repository import (
     IDeliveryNotificationRepository,
 )
-from shared.exceptions import NotFoundError
+from shared.exceptions import BusinessRuleError, NotFoundError
 from shared.infrastructure.email_sender import IEmailSender
 from users.repositories.user_repository import IUserRepository
 
@@ -46,6 +46,11 @@ class DeliveryNotificationService(IDeliveryNotificationService):
         user = self._user_repo.get_by_id(payload["user_to_delivery"].id if hasattr(payload["user_to_delivery"], "id") else payload["user_to_delivery"])
         if not user:
             raise NotFoundError("User to deliver not found.")
+        if not user.email:
+            raise BusinessRuleError(
+                "Recipient has no email registered; cannot notify delivery.",
+                field="user_to_delivery",
+            )
 
         instance = self._repo.create(payload)
 

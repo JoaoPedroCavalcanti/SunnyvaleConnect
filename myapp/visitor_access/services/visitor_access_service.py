@@ -180,16 +180,20 @@ class VisitorAccessService(IVisitorAccessService):
         mixed = self._mixer.mix(str(instance.id))
         instance.link_checkin = f"{self._base_url}/checkin/{mixed}"
 
-        for to_email, name in self._invite_recipients(instance):
+        # Persist before notifying: a failed save must not produce invite
+        # emails pointing to a record that was rolled back.
+        saved = self._repo.save(instance)
+
+        for to_email, name in self._invite_recipients(saved):
             self._email.send_visitor_invite(
                 to_email=to_email,
-                link=instance.link_checkin,
-                user_name=instance.host_user,
-                datetime_checkin=instance.checkin_date_time,
+                link=saved.link_checkin,
+                user_name=saved.host_user,
+                datetime_checkin=saved.checkin_date_time,
                 visitor_name=name,
             )
 
-        return self._repo.save(instance)
+        return saved
 
     # ------------------------------------------------------------------ #
     # delete = soft cancel                                               #

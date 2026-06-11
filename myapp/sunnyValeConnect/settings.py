@@ -213,15 +213,27 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-# settings.py
-# Change from console to smtp when is not developer
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = "pythondjango703@gmail.com"
-EMAIL_HOST_PASSWORD = "Toszo0-qursoz-fatjif"
-DEFAULT_FROM_EMAIL = "pythondjango703@gmail.com"
+# Email
+# - Tests: locmem (assertable via mail.outbox)
+# - Dev (DEBUG=1) without EMAIL_HOST_USER: console (prints to stdout)
+# - Prod / dev with creds: SMTP via env vars
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = bool(int(os.getenv("EMAIL_USE_TLS", "1")))
+EMAIL_USE_SSL = bool(int(os.getenv("EMAIL_USE_SSL", "0")))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "10"))
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "no-reply@sunnyvale.local")
+
+_default_email_backend = (
+    "django.core.mail.backends.smtp.EmailBackend"
+    if EMAIL_HOST_USER
+    else "django.core.mail.backends.console.EmailBackend"
+)
+# `or` (not getenv default) so an empty value in .env still falls back —
+# os.getenv only honors the default when the var is absent, not when blank.
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND") or _default_email_backend
 
 if TESTING:
     EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"

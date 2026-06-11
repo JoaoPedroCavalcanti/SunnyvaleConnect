@@ -15,6 +15,7 @@ from shared.exceptions import (
     NotFoundError,
     PermissionDeniedError,
 )
+from shared.infrastructure.transactions import NullTransactionRunner
 from shared.test_doubles.fakes import FakeEmailSender
 
 
@@ -32,6 +33,7 @@ def deps():
         membership_repository=memberships,
         user_repository=users,
         email_sender=email,
+        transaction_runner=NullTransactionRunner(),
     )
     return service, households, memberships, users, email
 

@@ -10,7 +10,7 @@ from delivery_notification.repositories.delivery_notification_repository import 
 from delivery_notification.services.delivery_notification_service import (
     DeliveryNotificationService,
 )
-from shared.exceptions import NotFoundError
+from shared.exceptions import BusinessRuleError, NotFoundError
 from shared.test_doubles.fakes import FakeEmailSender
 from users.repositories.user_repository import IUserRepository
 
@@ -147,3 +147,17 @@ def test_send_with_unknown_user_raises(service):
 def test_get_not_found(service):
     with pytest.raises(NotFoundError):
         service.get(123)
+
+
+def test_send_with_user_without_email_raises(service, user_repo, email_sender):
+    user_repo.add(SimpleNamespace(id=2, email="", username="no_email"))
+    with pytest.raises(BusinessRuleError):
+        service.send(
+            {
+                "user_to_delivery": user_repo.get_by_id(2),
+                "title": "x",
+                "delivery_from": "z",
+                "delivery_platform": "ifood",
+            }
+        )
+    assert email_sender.sent == []

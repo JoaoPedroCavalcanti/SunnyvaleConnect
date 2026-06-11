@@ -11,6 +11,7 @@ from shared.exceptions import (
     PermissionDeniedError,
 )
 from shared.infrastructure.email_sender import IEmailSender
+from shared.infrastructure.transactions import ITransactionRunner
 from users.repositories.user_repository import IUserRepository
 
 
@@ -51,11 +52,13 @@ class HouseholdService(IHouseholdService):
         membership_repository: IMembershipRepository,
         user_repository: IUserRepository,
         email_sender: IEmailSender,
+        transaction_runner: ITransactionRunner,
     ):
         self._repo = household_repository
         self._memberships = membership_repository
         self._users = user_repository
         self._email = email_sender
+        self._tx = transaction_runner
 
     # ---- queries -------------------------------------------------------- #
     def search_public(self, apartment, block):
@@ -122,27 +125,31 @@ class HouseholdService(IHouseholdService):
                 field="apartment",
             )
 
-        household = self._repo.create(
-            {
-                "apartment": apartment,
-                "block": block,
-                "status": Household.Status.PENDING_ADMIN,
-            }
-        )
+        with self._tx.atomic():
+            household = self._repo.create(
+                {
+                    "apartment": apartment,
+                    "block": block,
+                    "status": Household.Status.PENDING_ADMIN,
+                }
+            )
 
-        self._memberships.create(
-            {
-                "household": household,
-                "user": user,
-                "role": HouseholdMembership.Role.HOLDER,
-                "status": HouseholdMembership.Status.PENDING_ADMIN,
-            }
-        )
+            self._memberships.create(
+                {
+                    "household": household,
+                    "user": user,
+                    "role": HouseholdMembership.Role.HOLDER,
+                    "status": HouseholdMembership.Status.PENDING_ADMIN,
+                }
+            )
 
+        # Notify admins after the DB transaction is committed: a mail blip
+        # must not roll back the household creation.
+        requester_name = user.full_name or user.username
         for admin_email in self._users.list_admin_emails():
             self._email.send_household_creation_request(
                 to_email=admin_email,
-                requester_name=user.full_name or user.username,
+                requester_name=requester_name,
                 apartment=apartment,
                 block=block,
             )
@@ -162,27 +169,38 @@ class HouseholdService(IHouseholdService):
                 "This household is not pending admin approval."
             )
 
-        self._repo.update(household, {"status": Household.Status.ACTIVE})
+        # Snapshot recipients inside the atomic block so we don't email
+        # anyone if the multi-row update rolls back halfway.
+        recipients: list[tuple[str, str]] = []
+        with self._tx.atomic():
+            self._repo.update(household, {"status": Household.Status.ACTIVE})
 
-        pending_memberships = [
-            m
-            for m in self._memberships.list_for_household(household.id)
-            if m.status == HouseholdMembership.Status.PENDING_ADMIN
-        ]
-        for membership in pending_memberships:
-            self._memberships.update(
-                membership, {"status": HouseholdMembership.Status.ACTIVE}
-            )
-            self._users.set_active(membership.user, True)
-            if membership.user.email:
-                self._email.send_household_request_approved(
-                    to_email=membership.user.email,
-                    requester_name=(
-                        membership.user.full_name or membership.user.username
-                    ),
-                    apartment=household.apartment,
-                    block=household.block,
+            pending_memberships = [
+                m
+                for m in self._memberships.list_for_household(household.id)
+                if m.status == HouseholdMembership.Status.PENDING_ADMIN
+            ]
+            for membership in pending_memberships:
+                self._memberships.update(
+                    membership, {"status": HouseholdMembership.Status.ACTIVE}
                 )
+                self._users.set_active(membership.user, True)
+                if membership.user.email:
+                    recipients.append(
+                        (
+                            membership.user.email,
+                            membership.user.full_name
+                            or membership.user.username,
+                        )
+                    )
+
+        for to_email, requester_name in recipients:
+            self._email.send_household_request_approved(
+                to_email=to_email,
+                requester_name=requester_name,
+                apartment=household.apartment,
+                block=household.block,
+            )
 
         return household
 
@@ -198,23 +216,34 @@ class HouseholdService(IHouseholdService):
                 "This household is not pending admin approval."
             )
 
-        memberships = list(self._memberships.list_for_household(household.id))
-        users_to_purge = []
-        for membership in memberships:
-            user = membership.user
-            if user.email:
-                self._email.send_household_request_rejected(
-                    to_email=user.email,
-                    requester_name=user.full_name or user.username,
-                    apartment=household.apartment,
-                    block=household.block,
-                    reason=reason,
-                )
-            if not user.is_active and not self._memberships.list_active_for_user(
-                user.id
-            ):
-                users_to_purge.append(user)
+        apartment = household.apartment
+        block = household.block
 
-        self._repo.delete(household)
-        for user in users_to_purge:
-            self._users.delete(user)
+        recipients: list[tuple[str, str]] = []
+        with self._tx.atomic():
+            memberships = list(self._memberships.list_for_household(household.id))
+            users_to_purge = []
+            for membership in memberships:
+                user = membership.user
+                if user.email:
+                    recipients.append(
+                        (user.email, user.full_name or user.username)
+                    )
+                if (
+                    not user.is_active
+                    and not self._memberships.list_active_for_user(user.id)
+                ):
+                    users_to_purge.append(user)
+
+            self._repo.delete(household)
+            for user in users_to_purge:
+                self._users.delete(user)
+
+        for to_email, requester_name in recipients:
+            self._email.send_household_request_rejected(
+                to_email=to_email,
+                requester_name=requester_name,
+                apartment=apartment,
+                block=block,
+                reason=reason,
+            )

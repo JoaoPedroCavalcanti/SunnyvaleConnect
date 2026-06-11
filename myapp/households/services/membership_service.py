@@ -21,6 +21,7 @@ from shared.exceptions import (
     PermissionDeniedError,
 )
 from shared.infrastructure.email_sender import IEmailSender
+from shared.infrastructure.transactions import ITransactionRunner
 from users.repositories.user_repository import IUserRepository
 
 
@@ -68,12 +69,14 @@ class MembershipService(IMembershipService):
         user_repository: IUserRepository,
         email_sender: IEmailSender,
         decision_repository: IMembershipDecisionRepository,
+        transaction_runner: ITransactionRunner,
     ):
         self._repo = membership_repository
         self._households = household_repository
         self._users = user_repository
         self._email = email_sender
         self._decisions = decision_repository
+        self._tx = transaction_runner
 
     # ---- queries ------------------------------------------------------- #
     def list_for_household(self, user, household_id):
@@ -114,25 +117,33 @@ class MembershipService(IMembershipService):
         if self._repo.list_pending_for_user(user.id):
             raise BusinessRuleError("User already has a pending household request.")
 
-        membership = self._repo.create(
-            {
-                "household": household,
-                "user": user,
-                "role": HouseholdMembership.Role.RESIDENT,
-                "status": HouseholdMembership.Status.PENDING_HOLDER,
-            }
-        )
-
-        for holder_m in self._repo.list_active_holders(household.id):
-            holder = holder_m.user
-            if holder.email:
-                self._email.send_household_join_request(
-                    to_email=holder.email,
-                    holder_name=holder.full_name or holder.username,
-                    requester_name=user.full_name or user.username,
-                    apartment=household.apartment,
-                    block=household.block,
+        with self._tx.atomic():
+            membership = self._repo.create(
+                {
+                    "household": household,
+                    "user": user,
+                    "role": HouseholdMembership.Role.RESIDENT,
+                    "status": HouseholdMembership.Status.PENDING_HOLDER,
+                }
+            )
+            recipients = [
+                (
+                    holder_m.user.email,
+                    holder_m.user.full_name or holder_m.user.username,
                 )
+                for holder_m in self._repo.list_active_holders(household.id)
+                if holder_m.user.email
+            ]
+
+        requester_name = user.full_name or user.username
+        for to_email, holder_name in recipients:
+            self._email.send_household_join_request(
+                to_email=to_email,
+                holder_name=holder_name,
+                requester_name=requester_name,
+                apartment=household.apartment,
+                block=household.block,
+            )
 
         return membership
 
@@ -146,8 +157,19 @@ class MembershipService(IMembershipService):
                 "This membership is not pending holder approval."
             )
 
-        self._repo.update(membership, {"status": HouseholdMembership.Status.ACTIVE})
-        self._users.set_active(membership.user, True)
+        with self._tx.atomic():
+            self._repo.update(
+                membership, {"status": HouseholdMembership.Status.ACTIVE}
+            )
+            self._users.set_active(membership.user, True)
+            self._decisions.record(
+                self._build_decision_payload(
+                    membership,
+                    actor=holder,
+                    action=MembershipDecision.Action.APPROVED,
+                    reason="",
+                )
+            )
 
         if membership.user.email:
             self._email.send_household_request_approved(
@@ -159,14 +181,6 @@ class MembershipService(IMembershipService):
                 block=membership.household.block,
             )
 
-        self._decisions.record(
-            self._build_decision_payload(
-                membership,
-                actor=holder,
-                action=MembershipDecision.Action.APPROVED,
-                reason="",
-            )
-        )
         return membership
 
     def reject(self, holder, membership_id, reason=""):
@@ -180,33 +194,37 @@ class MembershipService(IMembershipService):
 
         user = membership.user
         household = membership.household
-        if user.email:
+        recipient_email = user.email
+        recipient_name = user.full_name or user.username
+
+        with self._tx.atomic():
+            # Snapshot *before* delete so the audit row keeps the requester
+            # data even when the user is purged below.
+            self._decisions.record(
+                self._build_decision_payload(
+                    membership,
+                    actor=holder,
+                    action=MembershipDecision.Action.REJECTED,
+                    reason=reason,
+                )
+            )
+
+            self._repo.delete(membership)
+            if (
+                not user.is_active
+                and not self._repo.list_active_for_user(user.id)
+                and not self._repo.list_pending_for_user(user.id)
+            ):
+                self._users.delete(user)
+
+        if recipient_email:
             self._email.send_household_request_rejected(
-                to_email=user.email,
-                requester_name=user.full_name or user.username,
+                to_email=recipient_email,
+                requester_name=recipient_name,
                 apartment=household.apartment,
                 block=household.block,
                 reason=reason,
             )
-
-        # Snapshot *before* delete so the audit row keeps the requester
-        # data even when the user is purged below.
-        self._decisions.record(
-            self._build_decision_payload(
-                membership,
-                actor=holder,
-                action=MembershipDecision.Action.REJECTED,
-                reason=reason,
-            )
-        )
-
-        self._repo.delete(membership)
-        if (
-            not user.is_active
-            and not self._repo.list_active_for_user(user.id)
-            and not self._repo.list_pending_for_user(user.id)
-        ):
-            self._users.delete(user)
 
     # ---- promote / demote --------------------------------------------- #
     def promote(self, holder, membership_id):

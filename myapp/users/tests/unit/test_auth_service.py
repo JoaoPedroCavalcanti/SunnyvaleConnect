@@ -12,6 +12,7 @@ from households.tests.unit._fakes import (
 )
 from households.models import HouseholdMembership
 from households.services.household_service import HouseholdService
+from shared.infrastructure.transactions import NullTransactionRunner
 from shared.test_doubles.fakes import FakeEmailSender
 from users.services.auth_service import (
     AuthService,
@@ -37,6 +38,7 @@ def env():
         membership_repository=memberships,
         user_repository=users,
         email_sender=email,
+        transaction_runner=NullTransactionRunner(),
     )
     return {
         "auth": auth,

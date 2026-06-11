@@ -23,6 +23,7 @@ from shared.infrastructure.document_validators import (
     BrazilianPhoneValidator,
 )
 from shared.infrastructure.password_policy import DefaultPasswordPolicy
+from shared.infrastructure.transactions import NullTransactionRunner
 from shared.test_doubles.fakes import FakeEmailSender
 from users.services.user_service import UserService
 
@@ -48,11 +49,13 @@ def env():
         cpf_validator=BrazilianCPFValidator(),
         phone_validator=BrazilianPhoneValidator(),
     )
+    tx = NullTransactionRunner()
     household_service = HouseholdService(
         household_repository=households,
         membership_repository=memberships,
         user_repository=users,
         email_sender=email,
+        transaction_runner=tx,
     )
     membership_service = MembershipService(
         membership_repository=memberships,
@@ -60,6 +63,7 @@ def env():
         user_repository=users,
         email_sender=email,
         decision_repository=FakeMembershipDecisionRepository(),
+        transaction_runner=tx,
     )
     signup = SignupService(
         user_service=user_service,

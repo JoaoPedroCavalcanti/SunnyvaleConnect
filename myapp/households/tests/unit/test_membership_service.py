@@ -17,6 +17,7 @@ from shared.exceptions import (
     NotFoundError,
     PermissionDeniedError,
 )
+from shared.infrastructure.transactions import NullTransactionRunner
 from shared.test_doubles.fakes import FakeEmailSender
 
 
@@ -30,12 +31,14 @@ def fixtures():
     users = FakeUserRepository()
     decisions = FakeMembershipDecisionRepository()
     email = FakeEmailSender()
+    tx = NullTransactionRunner()
 
     household_service = HouseholdService(
         household_repository=households,
         membership_repository=memberships,
         user_repository=users,
         email_sender=email,
+        transaction_runner=tx,
     )
     membership_service = MembershipService(
         membership_repository=memberships,
@@ -43,6 +46,7 @@ def fixtures():
         user_repository=users,
         email_sender=email,
         decision_repository=decisions,
+        transaction_runner=tx,
     )
 
     holder = make_user(1, email="h@x.com", full_name="Holder")
