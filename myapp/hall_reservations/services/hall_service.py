@@ -16,6 +16,7 @@ from shared.exceptions import (
     NotFoundError,
     PermissionDeniedError,
 )
+from shared.infrastructure.email_sender import IEmailSender
 from shared.time_slots import slots_overlap
 
 
@@ -39,7 +40,7 @@ class IHallReservationService(ABC):
     def approve(self, user, pk: int) -> HallReservationModel: ...
 
     @abstractmethod
-    def reject(self, user, pk: int) -> HallReservationModel: ...
+    def reject(self, user, pk: int, reason: str = "") -> HallReservationModel: ...
 
 
 class HallReservationService(IHallReservationService):
@@ -49,9 +50,11 @@ class HallReservationService(IHallReservationService):
         self,
         repository: IHallRepository,
         membership_repository: IMembershipRepository,
+        email_sender: IEmailSender,
     ):
         self._repo = repository
         self._memberships = membership_repository
+        self._email = email_sender
 
     def list(self, status=None):
         normalized = self._normalize_status_filter(status)
@@ -132,11 +135,13 @@ class HallReservationService(IHallReservationService):
             self._validate_30_day_window(
                 instance.household_id, instance.reservation_date
             )
-        return self._repo.update(
+        updated = self._repo.update(
             instance, {"status": HallReservationModel.Status.APPROVED}
         )
+        self._notify_reservation_approved(updated, resource_name="party hall")
+        return updated
 
-    def reject(self, user, pk):
+    def reject(self, user, pk, reason=""):
         if not user.is_staff:
             raise PermissionDeniedError(
                 "Only admins can reject a hall booking."
@@ -144,11 +149,44 @@ class HallReservationService(IHallReservationService):
         instance = self.get(pk)
         if instance.status == HallReservationModel.Status.REJECTED:
             return instance
-        return self._repo.update(
+        updated = self._repo.update(
             instance, {"status": HallReservationModel.Status.REJECTED}
         )
+        self._notify_reservation_rejected(
+            updated, resource_name="party hall", reason=reason
+        )
+        return updated
 
     # --- internal rules ----------------------------------------------- #
+    def _notify_reservation_approved(self, instance, resource_name: str) -> None:
+        user = instance.reservation_user
+        if not user or not getattr(user, "email", None):
+            return
+        self._email.send_reservation_approved(
+            to_email=user.email,
+            user_name=getattr(user, "full_name", None) or user.username,
+            resource_name=resource_name,
+            reservation_date=instance.reservation_date,
+            start_time=instance.start_time,
+            end_time=instance.end_time,
+        )
+
+    def _notify_reservation_rejected(
+        self, instance, resource_name: str, reason: str = ""
+    ) -> None:
+        user = instance.reservation_user
+        if not user or not getattr(user, "email", None):
+            return
+        self._email.send_reservation_rejected(
+            to_email=user.email,
+            user_name=getattr(user, "full_name", None) or user.username,
+            resource_name=resource_name,
+            reservation_date=instance.reservation_date,
+            start_time=instance.start_time,
+            end_time=instance.end_time,
+            reason=reason,
+        )
+
     def _resolve_reservation_user(self, requester, passed_user):
         if requester.is_staff:
             if not passed_user:

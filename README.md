@@ -627,3 +627,46 @@ make schema
 ```
 
 </details>
+
+---
+
+## E-mails disparados
+
+Todos os e-mails do sistema passam por `shared/infrastructure/email_sender.py` (`DjangoEmailSender`). Falhas de SMTP são logadas e **não** quebram a request que disparou o envio. Destinatário vazio é ignorado (exceto entrega, que retorna erro antes de criar o registro).
+
+| # | Assunto | Destinatário | Gatilho (endpoint) | Condições / observações |
+|---|---------|--------------|--------------------|-------------------------|
+| 1 | `Welcome to Sunnyvale` | E-mail do visitante | `POST /visitor_access/` | Enviado após criar a visita. Visita solo: `email` do payload. Se vazio, **não envia**. |
+| 1b | `Welcome to Sunnyvale` | E-mail de cada membro do grupo | `POST /visitor_access/groups/{id}/schedule/` | Um convite por membro que tenha e-mail cadastrado no grupo. |
+| 2 | `Check-in notification` | Mesmo(s) e-mail(s) do convite | `GET /visitor_access/checkin/{link}/` | Só no **primeiro** check-in bem-sucedido, dentro da janela `checkin_date_time` → `checkout_date_time`. |
+| 3 | `Check-out notification` | Mesmo(s) e-mail(s) do convite | `GET /visitor_access/checkout/{link}/` | Só no **primeiro** check-out bem-sucedido; visita precisa estar `CHECKED_IN` e dentro da janela de checkout (10 h antes do `scheduled_date`). |
+| 4 | `Delivery notification` | Morador (`user_to_delivery`) | `POST /delivery_notification/` | Staff registra entrega na portaria. **Falha com 400** se o morador não tiver e-mail. |
+| 5 | `New resident request` | Titular(es) ativo(s) da unidade | `POST /user/` (signup com `household_request` → `join_existing`) | Novo morador pede entrada numa household já existente. Um e-mail por titular com e-mail. |
+| 6 | `New household creation request` | Todos os admins (`is_staff=True`, ativos, com e-mail) | `POST /user/` (signup com `household_request` → `create_new`) | Novo morador pede criação de household nova (aguarda aprovação admin). |
+| 7 | `Your account is approved` | Morador aprovado | `POST /households/{pk}/approve/` **ou** `POST /households/{pk}/memberships/{mid}/approve/` | Admin aprova household nova → todos os memberships `PENDING_ADMIN` com e-mail. Titular aprova entrada → requester com e-mail. |
+| 8 | `Your request was rejected` | Morador rejeitado | `POST /households/{pk}/reject/` **ou** `POST /households/{pk}/memberships/{mid}/reject/` | Admin rejeita household → todos os membros com e-mail (motivo opcional no body). Titular rejeita entrada → requester com e-mail (motivo opcional). |
+| 9 | `Your barbecue area reservation is approved` | `reservation_user` da reserva | `POST /bbq/{pk}/approve/` | Admin aprova reserva `PENDING`. Se sem e-mail, **não envia** (aprovação segue). Idempotente: re-aprovar não reenvia. |
+| 10 | `Your party hall reservation is approved` | `reservation_user` da reserva | `POST /hall/{pk}/approve/` | Mesmas regras da churrasqueira. |
+| 11 | `Your barbecue area reservation was rejected` | `reservation_user` da reserva | `POST /bbq/{pk}/reject/` | Admin rejeita reserva `PENDING`. Motivo opcional no body (`reason`). Idempotente: re-rejeitar não reenvia. |
+| 12 | `Your party hall reservation was rejected` | `reservation_user` da reserva | `POST /hall/{pk}/reject/` | Mesmas regras da churrasqueira. |
+
+### O que **não** envia e-mail
+
+- Login, refresh/verify de token, CRUD de usuário (exceto signup com `household_request`)
+- Criação de reservas (churrasqueira/salão), pagamentos, notícias, solicitações de serviço
+- Cancelamento de visita (`DELETE /visitor_access/{id}/`)
+- Promover/rebaixar/remover membro, sair da household, transferir titularidade
+- Cadastro de dependentes
+
+### Configuração
+
+Variáveis em `.env` (ver `sunnyValeConnect/settings.py`):
+
+| Variável | Uso |
+|----------|-----|
+| `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_USE_SSL` | SMTP |
+| `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` | Credenciais |
+| `DEFAULT_FROM_EMAIL` | Remetente (`From`) |
+| `EMAIL_BACKEND` | Override opcional do backend Django |
+
+Sem `EMAIL_HOST_USER` em dev, os e-mails vão para o **console** (stdout). Em testes, usa `locmem` (`mail.outbox`).

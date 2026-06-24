@@ -14,6 +14,7 @@ from shared.exceptions import (
     NotFoundError,
     PermissionDeniedError,
 )
+from shared.test_doubles.fakes import FakeEmailSender
 
 
 pytestmark = pytest.mark.unit
@@ -106,8 +107,14 @@ def _household(pk=1, apt="1101", block="A"):
     return SimpleNamespace(id=pk, apartment=apt, block=block)
 
 
-def _user(pk=1, is_staff=False):
-    return SimpleNamespace(id=pk, is_staff=is_staff)
+def _user(pk=1, is_staff=False, email="user@example.com", username="user1"):
+    return SimpleNamespace(
+        id=pk,
+        is_staff=is_staff,
+        email=email,
+        username=username,
+        full_name="",
+    )
 
 
 def _future(days=10):
@@ -118,8 +125,11 @@ def _future(days=10):
 def fixtures():
     repo = FakeHallRepository()
     memberships = FakeMembershipRepo()
+    email = FakeEmailSender()
     service = HallReservationService(
-        repository=repo, membership_repository=memberships
+        repository=repo,
+        membership_repository=memberships,
+        email_sender=email,
     )
     house = _household(1, "1101", "A")
     holder = _user(1)
@@ -135,6 +145,7 @@ def fixtures():
         "service": service,
         "repo": repo,
         "memberships": memberships,
+        "email": email,
         "house": house,
         "holder": holder,
         "admin": admin,
@@ -378,14 +389,50 @@ class TestApproveReject:
         )
         approved = f["service"].approve(f["admin"], item.id)
         assert approved.status == HallReservationModel.Status.APPROVED
+        assert len(f["email"].sent) == 1
+        assert f["email"].sent[0]["kind"] == "reservation_approved"
+        assert f["email"].sent[0]["resource_name"] == "party hall"
+
+    def test_approve_skips_email_when_user_has_no_email(self, fixtures):
+        f = fixtures
+        holder = _user(1, email="")
+        f["memberships"].add(holder.id, f["house"])
+        item = f["service"].create(
+            holder, {"reservation_date": _future()}
+        )
+        f["service"].approve(f["admin"], item.id)
+        assert f["email"].sent == []
 
     def test_reject_flips_status(self, fixtures):
         f = fixtures
         item = f["service"].create(
             f["holder"], {"reservation_date": _future()}
         )
-        rejected = f["service"].reject(f["admin"], item.id)
+        rejected = f["service"].reject(f["admin"], item.id, reason="maintenance")
         assert rejected.status == HallReservationModel.Status.REJECTED
+        assert len(f["email"].sent) == 1
+        assert f["email"].sent[0]["kind"] == "reservation_rejected"
+        assert f["email"].sent[0]["resource_name"] == "party hall"
+        assert f["email"].sent[0]["reason"] == "maintenance"
+
+    def test_reject_skips_email_when_user_has_no_email(self, fixtures):
+        f = fixtures
+        holder = _user(1, email="")
+        f["memberships"].add(holder.id, f["house"])
+        item = f["service"].create(
+            holder, {"reservation_date": _future()}
+        )
+        f["service"].reject(f["admin"], item.id, reason="nope")
+        assert f["email"].sent == []
+
+    def test_reject_idempotent_does_not_resend_email(self, fixtures):
+        f = fixtures
+        item = f["service"].create(
+            f["holder"], {"reservation_date": _future()}
+        )
+        f["service"].reject(f["admin"], item.id, reason="busy")
+        f["service"].reject(f["admin"], item.id, reason="busy again")
+        assert len(f["email"].sent) == 1
 
     def test_approving_revalidates_against_current_state(self, fixtures):
         f = fixtures

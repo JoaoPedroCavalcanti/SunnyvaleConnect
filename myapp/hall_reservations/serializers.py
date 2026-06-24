@@ -34,6 +34,10 @@ class HallReservationPatchSerializer(serializers.Serializer):
     )
 
 
+class HallReservationRejectSerializer(serializers.Serializer):
+    reason = serializers.CharField(required=False, allow_blank=True, default="")
+
+
 class HallReservationOutputSerializer(serializers.ModelSerializer):
     """Output payload with the household (apartment) inlined."""
 

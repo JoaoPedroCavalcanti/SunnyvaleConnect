@@ -1,0 +1,11 @@
+{% extends "emails/base.html" %}
+
+{% block title %}Your account is approved{% endblock %}
+
+{% block content %}
+<p style="margin:0 0 16px;">Dear {{ requester_name }},</p>
+<p style="margin:0 0 16px;">
+  Your request to join <strong>{{ unit }}</strong> was approved.
+  You can now log in and use Sunnyvale.
+</p>
+{% endblock %}

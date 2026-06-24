@@ -1,0 +1,12 @@
+{% extends "emails/base.html" %}
+
+{% block title %}New household creation request{% endblock %}
+
+{% block content %}
+<p style="margin:0 0 16px;">Hello,</p>
+<p style="margin:0 0 16px;">
+  <strong>{{ requester_name }}</strong> requested to register a new household.
+</p>
+{% include "emails/partials/details_box.html" with details=details %}
+<p style="margin:16px 0 0;">Open the admin panel to approve or reject the request.</p>
+{% endblock %}

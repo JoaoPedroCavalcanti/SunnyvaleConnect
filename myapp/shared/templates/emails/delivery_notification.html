@@ -1,0 +1,12 @@
+{% extends "emails/base.html" %}
+
+{% block title %}Delivery notification{% endblock %}
+
+{% block content %}
+<p style="margin:0 0 16px;">Dear {{ user_name }},</p>
+<p style="margin:0 0 16px;">
+  A delivery has arrived for you at the entrance of Sunnyvale.
+</p>
+{% include "emails/partials/details_box.html" with details=details %}
+<p style="margin:16px 0 0;">Please pick it up at the front desk when convenient.</p>
+{% endblock %}

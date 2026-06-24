@@ -90,6 +90,46 @@ class FakeEmailSender(IEmailSender):
             "reason": reason,
         })
 
+    def send_reservation_approved(
+        self,
+        to_email,
+        user_name,
+        resource_name,
+        reservation_date,
+        start_time,
+        end_time,
+    ):
+        self.sent.append({
+            "kind": "reservation_approved",
+            "to": to_email,
+            "user_name": user_name,
+            "resource_name": resource_name,
+            "reservation_date": reservation_date,
+            "start_time": start_time,
+            "end_time": end_time,
+        })
+
+    def send_reservation_rejected(
+        self,
+        to_email,
+        user_name,
+        resource_name,
+        reservation_date,
+        start_time,
+        end_time,
+        reason="",
+    ):
+        self.sent.append({
+            "kind": "reservation_rejected",
+            "to": to_email,
+            "user_name": user_name,
+            "resource_name": resource_name,
+            "reservation_date": reservation_date,
+            "start_time": start_time,
+            "end_time": end_time,
+            "reason": reason,
+        })
+
 
 class FakeCodeGenerator(ICodeGenerator):
     def __init__(self, value: str = "12345"):

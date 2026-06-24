@@ -11,6 +11,7 @@ from bbq_reservations.serializers import (
     BBQReservationInputSerializer,
     BBQReservationOutputSerializer,
     BBQReservationPatchSerializer,
+    BBQReservationRejectSerializer,
 )
 from shared.container import container
 
@@ -102,8 +103,15 @@ class BBQReservationRejectView(APIView):
     permission_classes = [IsAdminUser]
 
     @extend_schema(
-        request=None, responses={200: BBQReservationOutputSerializer}
+        request=BBQReservationRejectSerializer,
+        responses={200: BBQReservationOutputSerializer},
     )
     def post(self, request, pk: int):
-        instance = container.bbq_service.reject(request.user, pk)
+        serializer = BBQReservationRejectSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instance = container.bbq_service.reject(
+            request.user,
+            pk,
+            reason=serializer.validated_data.get("reason", ""),
+        )
         return Response(BBQReservationOutputSerializer(instance).data)

@@ -1,0 +1,14 @@
+{% extends "emails/base.html" %}
+
+{% block title %}{{ subject }}{% endblock %}
+
+{% block content %}
+<p style="margin:0 0 16px;">Dear {{ user_name }},</p>
+<p style="margin:0 0 16px;">
+  Your reservation for the <strong>{{ resource_name }}</strong> was rejected.
+</p>
+{% include "emails/partials/details_box.html" with details=details %}
+{% if reason %}
+{% include "emails/partials/notice_box.html" with text=reason_label %}
+{% endif %}
+{% endblock %}

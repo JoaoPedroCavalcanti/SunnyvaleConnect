@@ -1,7 +1,8 @@
-.PHONY: help install test test-cov test-docker test-fast lint schema schema-docker clean
+.PHONY: help install test test-cov test-docker test-fast lint schema schema-docker dc_up dc_restart clean
 
 SCHEMA_FILE ?= schema.yml
 MYAPP_CONTAINER ?= myapp
+DC_COMPOSE = docker compose -f docker-compose.yml -f docker-compose-debug.override.yml
 
 help:
 	@echo "Common targets:"
@@ -12,6 +13,8 @@ help:
 	@echo "  make test-docker    Run tests inside the docker-compose 'test' service"
 	@echo "  make schema         Generate OpenAPI schema (uses local Poetry env)"
 	@echo "  make schema-docker  Generate OpenAPI schema inside the running 'myapp' container"
+	@echo "  make dc_up          Start docker-compose stack (debug override, detached + build)"
+	@echo "  make dc_restart     Stop stack and start again (down + up --build)"
 	@echo "  make clean          Remove caches, coverage artefacts"
 
 install:
@@ -37,6 +40,13 @@ schema-docker:
 	docker exec $(MYAPP_CONTAINER) sh -c "cd /myapp && TESTING=1 python manage.py spectacular --file /tmp/schema.yml"
 	docker cp $(MYAPP_CONTAINER):/tmp/schema.yml ./$(SCHEMA_FILE)
 	@echo "OpenAPI schema written to $(SCHEMA_FILE)"
+
+dc_up:
+	$(DC_COMPOSE) up -d --build
+
+dc_restart:
+	$(DC_COMPOSE) down
+	$(DC_COMPOSE) up -d --build
 
 clean:
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +

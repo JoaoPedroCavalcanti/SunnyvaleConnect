@@ -257,6 +257,7 @@ class Container:
             lambda: BBQReservationService(
                 repository=self.bbq_repository,
                 membership_repository=self.membership_repository,
+                email_sender=self.email_sender,
             ),
         )
 
@@ -269,6 +270,7 @@ class Container:
             lambda: HallReservationService(
                 repository=self.hall_repository,
                 membership_repository=self.membership_repository,
+                email_sender=self.email_sender,
             ),
         )
 

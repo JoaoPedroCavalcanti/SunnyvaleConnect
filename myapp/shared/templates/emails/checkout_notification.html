@@ -1,0 +1,11 @@
+{% extends "emails/base.html" %}
+
+{% block title %}Check-out notification{% endblock %}
+
+{% block content %}
+<p style="margin:0 0 16px;">Dear {{ user_name }},</p>
+<p style="margin:0 0 16px;">
+  <strong>{{ visitor_name }}</strong> checked out from Sunnyvale.
+</p>
+{% include "emails/partials/details_box.html" with details=details %}
+{% endblock %}

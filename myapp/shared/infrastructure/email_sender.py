@@ -2,11 +2,13 @@
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import date, datetime, time
 
 from django.conf import settings
 from django.core.mail import send_mail
 from django.utils import timezone
+
+from shared.infrastructure.email_renderer import render_email
 
 logger = logging.getLogger(__name__)
 
@@ -79,27 +81,64 @@ class IEmailSender(ABC):
         reason: str,
     ) -> None: ...
 
+    @abstractmethod
+    def send_reservation_approved(
+        self,
+        to_email: str,
+        user_name: str,
+        resource_name: str,
+        reservation_date: date,
+        start_time: time | None,
+        end_time: time | None,
+    ) -> None: ...
+
+    @abstractmethod
+    def send_reservation_rejected(
+        self,
+        to_email: str,
+        user_name: str,
+        resource_name: str,
+        reservation_date: date,
+        start_time: time | None,
+        end_time: time | None,
+        reason: str = "",
+    ) -> None: ...
+
 
 class DjangoEmailSender(IEmailSender):
     """SMTP-backed sender. Failures are logged and swallowed so a flaky mail
     server never breaks the request that triggered the side-effect."""
 
-    def _send(self, subject: str, message: str, to_email: str) -> None:
+    def _send(
+        self,
+        subject: str,
+        plain_message: str,
+        to_email: str,
+        *,
+        html_message: str,
+    ) -> None:
         if not to_email:
             logger.warning("Skipping email '%s': empty recipient.", subject)
             return
         try:
             send_mail(
                 subject,
-                message,
+                plain_message,
                 settings.DEFAULT_FROM_EMAIL,
                 [to_email],
+                html_message=html_message,
                 fail_silently=False,
             )
         except Exception:
             logger.exception(
                 "Failed to send email '%s' to %s", subject, to_email
             )
+
+    def _render_and_send(
+        self, subject: str, template_name: str, context: dict, to_email: str
+    ) -> None:
+        html_message, plain_message = render_email(template_name, context)
+        self._send(subject, plain_message, to_email, html_message=html_message)
 
     def send_visitor_invite(
         self,
@@ -110,40 +149,68 @@ class DjangoEmailSender(IEmailSender):
         visitor_name: str,
     ) -> None:
         subject = "Welcome to Sunnyvale"
-        message = (
-            f"Dear {visitor_name},\n\n"
-            f"You have been invited by {user_name} to visit Sunnyvale. "
-            f"Please use the following link to check-in at the scheduled time: {link}.\n"
-            f"Note: The link will only be accessible after your scheduled check-in time: {datetime_checkin}.\n\n"
-            f"Thank you and we look forward to your visit!\n"
-            f"Best regards,\n"
-            f"Sunnyvale Management"
+        checkin_label = timezone.localtime(datetime_checkin).strftime(
+            "%B %d, %Y at %I:%M %p"
         )
-        self._send(subject, message, to_email)
+        self._render_and_send(
+            subject,
+            "visitor_invite",
+            {
+                "heading": "You're invited to Sunnyvale",
+                "visitor_name": visitor_name,
+                "user_name": user_name,
+                "link": link,
+                "access_note": (
+                    f"The check-in link will only be accessible after your "
+                    f"scheduled time: {checkin_label}."
+                ),
+            },
+            to_email,
+        )
 
     def send_checkin_notification(
         self, to_email: str, user_name: str, visitor_name: str
     ) -> None:
         subject = "Check-in notification"
-        message = (
-            f"Dear {user_name},\n\n"
-            f"{visitor_name} checked-in in Sunny Vale at time: {timezone.now()}\n"
-            f"Best regards,\n"
-            f"Sunnyvale Management"
+        checked_in_at = timezone.localtime(timezone.now()).strftime(
+            "%B %d, %Y at %I:%M %p"
         )
-        self._send(subject, message, to_email)
+        self._render_and_send(
+            subject,
+            "checkin_notification",
+            {
+                "heading": "Visitor checked in",
+                "user_name": user_name,
+                "visitor_name": visitor_name,
+                "details": [
+                    {"label": "Visitor", "value": visitor_name},
+                    {"label": "Checked in at", "value": checked_in_at},
+                ],
+            },
+            to_email,
+        )
 
     def send_checkout_notification(
         self, to_email: str, user_name: str, visitor_name: str
     ) -> None:
         subject = "Check-out notification"
-        message = (
-            f"Dear {user_name},\n\n"
-            f"{visitor_name} checked-out from Sunny Vale at time: {timezone.now()}\n"
-            f"Best regards,\n"
-            f"Sunnyvale Management"
+        checked_out_at = timezone.localtime(timezone.now()).strftime(
+            "%B %d, %Y at %I:%M %p"
         )
-        self._send(subject, message, to_email)
+        self._render_and_send(
+            subject,
+            "checkout_notification",
+            {
+                "heading": "Visitor checked out",
+                "user_name": user_name,
+                "visitor_name": visitor_name,
+                "details": [
+                    {"label": "Visitor", "value": visitor_name},
+                    {"label": "Checked out at", "value": checked_out_at},
+                ],
+            },
+            to_email,
+        )
 
     def send_delivery_notification(
         self,
@@ -153,19 +220,27 @@ class DjangoEmailSender(IEmailSender):
         delivery_from: str | None,
     ) -> None:
         subject = "Delivery notification"
-        message = (
-            f"Dear {user_name},\n\n"
-            f"We would like to inform you that a delivery has arrived for you at the entrance of Sunnyvale.\n"
-            "Delivery Details:\n"
+        received_at = timezone.localtime(timezone.now()).strftime(
+            "%B %d, %Y at %I:%M %p"
         )
+        details = [{"label": "Received at", "value": received_at}]
         if delivery_platform:
-            message += f" • Delivery Service: {delivery_platform}\n"
+            details.insert(0, {"label": "Delivery service", "value": delivery_platform})
         if delivery_from:
-            message += f" • Delivery From: {delivery_from}\n"
-        received_at = timezone.now().strftime("%B %d, %Y at %I:%M %p")
-        message += f" • Received At: {received_at}\n"
-        message += "Best regards,\nSunnyvale Management"
-        self._send(subject, message, to_email)
+            details.insert(
+                1 if delivery_platform else 0,
+                {"label": "Delivery from", "value": delivery_from},
+            )
+        self._render_and_send(
+            subject,
+            "delivery_notification",
+            {
+                "heading": "Delivery arrived",
+                "user_name": user_name,
+                "details": details,
+            },
+            to_email,
+        )
 
     def _format_unit(self, apartment: str, block: str) -> str:
         return f"Apt {apartment} / Block {block}" if block else f"Apt {apartment}"
@@ -175,50 +250,135 @@ class DjangoEmailSender(IEmailSender):
     ) -> None:
         unit = self._format_unit(apartment, block)
         subject = "New resident request"
-        message = (
-            f"Dear {holder_name},\n\n"
-            f"{requester_name} requested to join your household ({unit}).\n"
-            f"Open the app to approve or reject the request.\n\n"
-            f"Best regards,\nSunnyvale Management"
+        self._render_and_send(
+            subject,
+            "household_join_request",
+            {
+                "heading": "New resident request",
+                "holder_name": holder_name,
+                "requester_name": requester_name,
+                "details": [{"label": "Unit", "value": unit}],
+            },
+            to_email,
         )
-        self._send(subject, message, to_email)
 
     def send_household_creation_request(
         self, to_email, requester_name, apartment, block
     ) -> None:
         unit = self._format_unit(apartment, block)
         subject = "New household creation request"
-        message = (
-            f"Hello,\n\n"
-            f"{requester_name} requested to register a new household ({unit}).\n"
-            f"Open the admin panel to approve or reject the request.\n\n"
-            f"Best regards,\nSunnyvale Management"
+        self._render_and_send(
+            subject,
+            "household_creation_request",
+            {
+                "heading": "New household request",
+                "requester_name": requester_name,
+                "details": [{"label": "Unit", "value": unit}],
+            },
+            to_email,
         )
-        self._send(subject, message, to_email)
 
     def send_household_request_approved(
         self, to_email, requester_name, apartment, block
     ) -> None:
         unit = self._format_unit(apartment, block)
         subject = "Your account is approved"
-        message = (
-            f"Dear {requester_name},\n\n"
-            f"Your request to join {unit} was approved. "
-            f"You can now log in and use Sunnyvale.\n\n"
-            f"Best regards,\nSunnyvale Management"
+        self._render_and_send(
+            subject,
+            "household_request_approved",
+            {
+                "heading": "Account approved",
+                "requester_name": requester_name,
+                "unit": unit,
+            },
+            to_email,
         )
-        self._send(subject, message, to_email)
 
     def send_household_request_rejected(
         self, to_email, requester_name, apartment, block, reason
     ) -> None:
         unit = self._format_unit(apartment, block)
         subject = "Your request was rejected"
-        message = (
-            f"Dear {requester_name},\n\n"
-            f"Your request to join {unit} was rejected.\n"
-        )
+        context = {
+            "heading": "Request rejected",
+            "requester_name": requester_name,
+            "unit": unit,
+        }
         if reason:
-            message += f"Reason: {reason}\n"
-        message += "\nBest regards,\nSunnyvale Management"
-        self._send(subject, message, to_email)
+            context["reason"] = reason
+            context["reason_label"] = f"Reason: {reason}"
+        self._render_and_send(
+            subject,
+            "household_request_rejected",
+            context,
+            to_email,
+        )
+
+    @staticmethod
+    def _format_time_slot(
+        start_time: time | None, end_time: time | None
+    ) -> str:
+        if not start_time and not end_time:
+            return "All day"
+        start = start_time.strftime("%I:%M %p") if start_time else "12:00 AM"
+        end = end_time.strftime("%I:%M %p") if end_time else "11:59 PM"
+        return f"{start} – {end}"
+
+    def send_reservation_approved(
+        self,
+        to_email: str,
+        user_name: str,
+        resource_name: str,
+        reservation_date: date,
+        start_time: time | None,
+        end_time: time | None,
+    ) -> None:
+        subject = f"Your {resource_name} reservation is approved"
+        slot = self._format_time_slot(start_time, end_time)
+        self._render_and_send(
+            subject,
+            "reservation_approved",
+            {
+                "subject": subject,
+                "heading": "Reservation approved",
+                "user_name": user_name,
+                "resource_name": resource_name,
+                "details": [
+                    {"label": "Date", "value": reservation_date.strftime("%B %d, %Y")},
+                    {"label": "Time", "value": slot},
+                ],
+            },
+            to_email,
+        )
+
+    def send_reservation_rejected(
+        self,
+        to_email: str,
+        user_name: str,
+        resource_name: str,
+        reservation_date: date,
+        start_time: time | None,
+        end_time: time | None,
+        reason: str = "",
+    ) -> None:
+        subject = f"Your {resource_name} reservation was rejected"
+        slot = self._format_time_slot(start_time, end_time)
+        context = {
+            "subject": subject,
+            "heading": "Reservation rejected",
+            "user_name": user_name,
+            "resource_name": resource_name,
+            "details": [
+                {"label": "Date", "value": reservation_date.strftime("%B %d, %Y")},
+                {"label": "Time", "value": slot},
+            ],
+        }
+        if reason:
+            context["reason"] = reason
+            context["reason_label"] = f"Reason: {reason}"
+        self._render_and_send(
+            subject,
+            "reservation_rejected",
+            context,
+            to_email,
+        )

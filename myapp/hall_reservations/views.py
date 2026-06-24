@@ -11,6 +11,7 @@ from hall_reservations.serializers import (
     HallReservationInputSerializer,
     HallReservationOutputSerializer,
     HallReservationPatchSerializer,
+    HallReservationRejectSerializer,
 )
 from shared.container import container
 
@@ -102,8 +103,15 @@ class HallReservationRejectView(APIView):
     permission_classes = [IsAdminUser]
 
     @extend_schema(
-        request=None, responses={200: HallReservationOutputSerializer}
+        request=HallReservationRejectSerializer,
+        responses={200: HallReservationOutputSerializer},
     )
     def post(self, request, pk: int):
-        instance = container.hall_service.reject(request.user, pk)
+        serializer = HallReservationRejectSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instance = container.hall_service.reject(
+            request.user,
+            pk,
+            reason=serializer.validated_data.get("reason", ""),
+        )
         return Response(HallReservationOutputSerializer(instance).data)

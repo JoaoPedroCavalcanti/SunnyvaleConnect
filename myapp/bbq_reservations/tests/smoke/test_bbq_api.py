@@ -3,6 +3,7 @@
 from datetime import date, timedelta
 
 import pytest
+from django.core import mail
 from django.urls import reverse
 
 from households.models import Household, HouseholdMembership
@@ -185,6 +186,9 @@ class BBQAPISmoke(BaseTestsUsers):
         approved = self.client.post(approve_url)
         self.assertEqual(approved.status_code, 200, approved.data)
         self.assertEqual(approved.data["status"], "APPROVED")
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [self.user_a.email])
+        self.assertIn("barbecue area", mail.outbox[0].subject)
 
     def test_admin_rejects_pending_booking(self):
         self._seed_household_with(self.user_a)
@@ -196,9 +200,15 @@ class BBQAPISmoke(BaseTestsUsers):
 
         self.authenticate(self.admin)
         reject_url = reverse("bbq_reservations:reject", kwargs={"pk": pk})
-        rejected = self.client.post(reject_url)
+        rejected = self.client.post(
+            reject_url, data={"reason": "slot unavailable"}, format="json"
+        )
         self.assertEqual(rejected.status_code, 200, rejected.data)
         self.assertEqual(rejected.data["status"], "REJECTED")
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [self.user_a.email])
+        self.assertIn("barbecue area", mail.outbox[0].subject)
+        self.assertIn("slot unavailable", mail.outbox[0].body)
 
     def test_regular_user_cannot_approve(self):
         self._seed_household_with(self.user_a)

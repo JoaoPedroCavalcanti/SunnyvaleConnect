@@ -80,7 +80,7 @@ ROOT_URLCONF = "sunnyValeConnect.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "shared" / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [

@@ -1,0 +1,18 @@
+{% extends "emails/base.html" %}
+
+{% block title %}Welcome to Sunnyvale{% endblock %}
+
+{% block content %}
+<p style="margin:0 0 16px;">Dear {{ visitor_name }},</p>
+<p style="margin:0 0 16px;">
+  You have been invited by <strong>{{ user_name }}</strong> to visit Sunnyvale.
+  Please use the button below to check in at your scheduled time.
+</p>
+{% include "emails/partials/cta_button.html" with cta_url=link cta_label="Check in now" %}
+{% include "emails/partials/notice_box.html" with text=access_note %}
+<p style="margin:16px 0 0;color:#6b7280;font-size:13px;">
+  If the button does not work, copy and paste this link into your browser:<br>
+  <a href="{{ link }}" style="color:#d97706;word-break:break-all;">{{ link }}</a>
+</p>
+<p style="margin:16px 0 0;">Thank you and we look forward to your visit!</p>
+{% endblock %}
