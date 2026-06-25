@@ -14,6 +14,15 @@ class IUserRepository(ABC):
     def list_by_role(self, role: str) -> Iterable: ...
 
     @abstractmethod
+    def list_filtered(
+        self,
+        *,
+        role: str | None = None,
+        is_active: bool | None = None,
+        employee_type: str | None = None,
+    ) -> Iterable: ...
+
+    @abstractmethod
     def get_by_id(self, pk: int): ...
 
     @abstractmethod
@@ -59,6 +68,16 @@ class DjangoUserRepository(IUserRepository):
 
     def list_by_role(self, role):
         return self._model().objects.filter(role=role).order_by("id")
+
+    def list_filtered(self, *, role=None, is_active=None, employee_type=None):
+        qs = self._model().objects.all()
+        if role is not None:
+            qs = qs.filter(role=role)
+        if is_active is not None:
+            qs = qs.filter(is_active=is_active)
+        if employee_type is not None:
+            qs = qs.filter(employee_types__contains=[employee_type])
+        return qs.order_by("id")
 
     def get_by_id(self, pk):
         return self._model().objects.filter(pk=pk).first()

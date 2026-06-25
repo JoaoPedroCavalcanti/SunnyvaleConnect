@@ -4,13 +4,14 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from shared.container import container
-from users.models import UserRole
+from users.models import EmployeeType, UserRole
 from users.serializers import (
     LoginInputSerializer,
     LoginOutputSerializer,
@@ -26,6 +27,17 @@ from users.services.auth_service import (
 )
 
 
+def _parse_optional_bool(raw: str | None) -> bool | None:
+    if raw is None or raw == "":
+        return None
+    normalized = raw.strip().lower()
+    if normalized in {"true", "1"}:
+        return True
+    if normalized in {"false", "0"}:
+        return False
+    raise ValueError(f"Invalid boolean query value: {raw!r}.")
+
+
 @extend_schema(tags=["users"])
 class UserListCreateView(APIView):
     parser_classes = [JSONParser, FormParser, MultiPartParser]
@@ -36,6 +48,14 @@ class UserListCreateView(APIView):
         return [IsAuthenticated()]
 
     @extend_schema(
+        summary="List users",
+        description=(
+            "Admins receive every account (residents, admins, employees). "
+            "Other callers only see themselves. "
+            "Omit `role` to list all roles; use `role=RESIDENT`, `ADMIN` or "
+            "`EMPLOYEE` to filter. "
+            "Combine with `is_active` and `employee_type` when needed."
+        ),
         parameters=[
             OpenApiParameter(
                 name="role",
@@ -43,14 +63,42 @@ class UserListCreateView(APIView):
                 location=OpenApiParameter.QUERY,
                 required=False,
                 enum=[c for c, _ in UserRole.choices],
-                description="Filter by role (admin only).",
+                description="Filter by role (admin only). Omit to list all users.",
+            ),
+            OpenApiParameter(
+                name="is_active",
+                type=bool,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Filter by active status (admin only).",
+            ),
+            OpenApiParameter(
+                name="employee_type",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                enum=[c for c, _ in EmployeeType.choices],
+                description=(
+                    "Filter employees by subtype (admin only). "
+                    "Use with or without `role=EMPLOYEE`."
+                ),
             ),
         ],
         responses={200: UserOutputSerializer(many=True)},
     )
     def get(self, request):
         role = request.query_params.get("role") or None
-        queryset = container.user_service.list_for(request.user, role=role)
+        try:
+            is_active = _parse_optional_bool(request.query_params.get("is_active"))
+        except ValueError as exc:
+            raise ValidationError({"is_active": str(exc)}) from exc
+        employee_type = request.query_params.get("employee_type") or None
+        queryset = container.user_service.list_for(
+            request.user,
+            role=role,
+            is_active=is_active,
+            employee_type=employee_type,
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(list(queryset), request, view=self)
         serializer = UserOutputSerializer(page, many=True)

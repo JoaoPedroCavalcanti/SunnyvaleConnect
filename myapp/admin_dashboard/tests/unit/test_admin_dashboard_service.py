@@ -39,6 +39,9 @@ class _CountUserRepo(IUserRepository):
     def list_by_role(self, role):  # pragma: no cover
         raise NotImplementedError
 
+    def list_filtered(self, **kwargs):  # pragma: no cover
+        raise NotImplementedError
+
     def get_by_id(self, pk):  # pragma: no cover
         raise NotImplementedError
 

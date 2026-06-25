@@ -156,6 +156,27 @@ class UsersAPISmoke(BaseTestsUsers):
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["role"], "EMPLOYEE")
 
+    def test_admin_list_without_role_includes_employee(self):
+        self.authenticate(self.admin)
+        emp_payload = self.create_random_user_from_faker()
+        emp_payload["role"] = "EMPLOYEE"
+        emp_payload["employee_types"] = ["DOORMAN"]
+        emp_payload.pop("apartment", None)
+        emp_payload.pop("block", None)
+        create_response = self.client.post(LIST_URL, data=emp_payload)
+        self.assertEqual(create_response.status_code, 201, create_response.data)
+
+        response = self.client.get(LIST_URL)
+        self.assertEqual(response.status_code, 200)
+        roles = {item["role"] for item in response.data["results"]}
+        self.assertIn("EMPLOYEE", roles)
+        employee_ids = {
+            item["id"]
+            for item in response.data["results"]
+            if item["role"] == "EMPLOYEE"
+        }
+        self.assertIn(create_response.data["id"], employee_ids)
+
 
 LOGIN_URL = "/api/token/"
 

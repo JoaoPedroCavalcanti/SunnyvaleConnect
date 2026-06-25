@@ -50,6 +50,7 @@ class _FakeUser:
         self.block = ""
         self.photo = None
         self.is_staff = is_staff
+        self.is_active = True
         self.is_authenticated = is_authenticated
         self.role = role
         self.employee_types = list(employee_types or [])
@@ -69,6 +70,20 @@ class FakeUserRepository(IUserRepository):
 
     def list_by_role(self, role):
         return [u for u in self._users.values() if u.role == role]
+
+    def list_filtered(self, *, role=None, is_active=None, employee_type=None):
+        users = list(self._users.values())
+        if role is not None:
+            users = [u for u in users if u.role == role]
+        if is_active is not None:
+            users = [u for u in users if u.is_active == is_active]
+        if employee_type is not None:
+            users = [
+                u
+                for u in users
+                if employee_type in (u.employee_types or [])
+            ]
+        return users
 
     def get_by_id(self, pk):
         return self._users.get(int(pk))
@@ -431,3 +446,69 @@ class TestListByRole:
         admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
         with pytest.raises(BusinessRuleError):
             list(service.list_for(admin, role="GHOST"))
+
+    def test_admin_list_without_role_includes_all_roles(self, service):
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        service.create(_anon(), _valid_payload())
+        service.create(
+            admin,
+            _valid_payload(
+                username="emp",
+                email="emp@x.com",
+                cpf=VALID_CPF_B,
+                role=UserRole.EMPLOYEE,
+                employee_types=[EmployeeType.CLEANING],
+                apartment="",
+                block="",
+            ),
+        )
+        roles = {u.role for u in service.list_for(admin)}
+        assert UserRole.RESIDENT in roles
+        assert UserRole.EMPLOYEE in roles
+
+    def test_is_active_filter(self, service):
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        active = service.create(_anon(), _valid_payload())
+        inactive = service.create(
+            admin,
+            _valid_payload(
+                username="inactive",
+                email="inactive@x.com",
+                cpf=VALID_CPF_B,
+            ),
+        )
+        service._repo.set_active(inactive, False)
+        active_only = list(service.list_for(admin, is_active=True))
+        assert active_only == [active]
+
+    def test_employee_type_filter(self, service):
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        service.create(
+            admin,
+            _valid_payload(
+                username="porteiro",
+                email="porteiro@x.com",
+                cpf=VALID_CPF_B,
+                role=UserRole.EMPLOYEE,
+                employee_types=[EmployeeType.DOORMAN],
+                apartment="",
+                block="",
+            ),
+        )
+        service.create(
+            admin,
+            _valid_payload(
+                username="zelador",
+                email="zelador@x.com",
+                cpf="52998224725",
+                role=UserRole.EMPLOYEE,
+                employee_types=[EmployeeType.CLEANING],
+                apartment="",
+                block="",
+            ),
+        )
+        doormen = list(
+            service.list_for(admin, employee_type=EmployeeType.DOORMAN)
+        )
+        assert len(doormen) == 1
+        assert doormen[0].username == "porteiro"

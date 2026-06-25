@@ -8,7 +8,7 @@ from shared.infrastructure.document_validators import (
     IPhoneValidator,
 )
 from shared.infrastructure.password_policy import IPasswordPolicy
-from shared.roles import ensure_not_employee, is_employee
+from shared.roles import ensure_not_employee, is_admin, is_employee
 from users.models import EmployeeType, UserRole
 from users.repositories.user_repository import IUserRepository
 
@@ -20,7 +20,14 @@ _VALID_EMPLOYEE_TYPES = {choice for choice, _ in EmployeeType.choices}
 
 class IUserService(ABC):
     @abstractmethod
-    def list_for(self, user, role: str | None = None): ...
+    def list_for(
+        self,
+        user,
+        role: str | None = None,
+        *,
+        is_active: bool | None = None,
+        employee_type: str | None = None,
+    ): ...
 
     @abstractmethod
     def get_for(self, user, pk: int): ...
@@ -57,22 +64,32 @@ class UserService(IUserService):
         self._cpf = cpf_validator
         self._phone = phone_validator
 
-    def list_for(self, user, role=None):
-        if not user.is_staff:
+    def list_for(self, user, role=None, *, is_active=None, employee_type=None):
+        if not is_admin(user):
             return [user]
-        if role is not None:
-            if role not in _VALID_ROLES:
+        if role is not None and role not in _VALID_ROLES:
+            raise BusinessRuleError(
+                message=f"Invalid role filter: {role!r}.", field="role"
+            )
+        normalized_employee_type = None
+        if employee_type is not None:
+            normalized_employee_type = str(employee_type).upper()
+            if normalized_employee_type not in _VALID_EMPLOYEE_TYPES:
                 raise BusinessRuleError(
-                    message=f"Invalid role filter: {role!r}.", field="role"
+                    message=f"Invalid employee type filter: {employee_type!r}.",
+                    field="employee_type",
                 )
-            return self._repo.list_by_role(role)
-        return self._repo.list_all()
+        return self._repo.list_filtered(
+            role=role,
+            is_active=is_active,
+            employee_type=normalized_employee_type,
+        )
 
     def get_for(self, user, pk):
         instance = self._repo.get_by_id(pk)
         if not instance:
             raise NotFoundError("No user matches the given query.")
-        if not user.is_staff and instance.id != user.id:
+        if not is_admin(user) and instance.id != user.id:
             raise NotFoundError("No user matches the given query.")
         return instance
 

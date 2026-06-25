@@ -58,6 +58,20 @@ class FakeUserRepository(IUserRepository):
     def list_by_role(self, role):
         return [u for u in self._users.values() if getattr(u, "role", None) == role]
 
+    def list_filtered(self, *, role=None, is_active=None, employee_type=None):
+        users = list(self._users.values())
+        if role is not None:
+            users = [u for u in users if getattr(u, "role", None) == role]
+        if is_active is not None:
+            users = [u for u in users if getattr(u, "is_active", True) == is_active]
+        if employee_type is not None:
+            users = [
+                u
+                for u in users
+                if employee_type in (getattr(u, "employee_types", None) or [])
+            ]
+        return users
+
     def get_by_id(self, pk):
         return self._users.get(int(pk))
 
