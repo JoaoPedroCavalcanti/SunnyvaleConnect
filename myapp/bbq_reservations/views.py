@@ -82,7 +82,7 @@ class BBQReservationDetailView(APIView):
 
     @extend_schema(responses={204: None})
     def delete(self, request, pk: int):
-        container.bbq_service.delete(pk)
+        container.bbq_service.delete(request.user, pk)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

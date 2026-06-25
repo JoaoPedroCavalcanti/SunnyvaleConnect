@@ -1,5 +1,6 @@
 """Role and employee-type helpers for business rules."""
 
+from shared.exceptions import PermissionDeniedError
 from users.models import EmployeeType, UserRole
 
 
@@ -42,6 +43,12 @@ def can_doorman_ops(user) -> bool:
 
 def can_manage_service_requests(user) -> bool:
     return has_employee_type(user, EmployeeType.CLEANING)
+
+
+def ensure_not_employee(user, *, action: str) -> None:
+    """Block write operations that are outside the employee role scope."""
+    if is_employee(user):
+        raise PermissionDeniedError(f"Employees cannot {action}.")
 
 
 def can_see_all_visits(user) -> bool:

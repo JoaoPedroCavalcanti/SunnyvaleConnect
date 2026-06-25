@@ -82,7 +82,7 @@ class HallReservationDetailView(APIView):
 
     @extend_schema(responses={204: None})
     def delete(self, request, pk: int):
-        container.hall_service.delete(pk)
+        container.hall_service.delete(request.user, pk)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

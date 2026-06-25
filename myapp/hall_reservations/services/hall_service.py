@@ -17,6 +17,7 @@ from shared.exceptions import (
     PermissionDeniedError,
 )
 from shared.infrastructure.email_sender import IEmailSender
+from shared.roles import ensure_not_employee
 from shared.time_slots import slots_overlap
 
 
@@ -34,7 +35,7 @@ class IHallReservationService(ABC):
     def update(self, user, pk: int, payload: dict) -> HallReservationModel: ...
 
     @abstractmethod
-    def delete(self, pk: int) -> None: ...
+    def delete(self, user, pk: int) -> None: ...
 
     @abstractmethod
     def approve(self, user, pk: int) -> HallReservationModel: ...
@@ -81,6 +82,7 @@ class HallReservationService(IHallReservationService):
         return instance
 
     def create(self, user, payload: dict):
+        ensure_not_employee(user, action="book reservations")
         data = dict(payload)
         reservation_user = self._resolve_reservation_user(
             user, data.get("reservation_user")
@@ -109,10 +111,12 @@ class HallReservationService(IHallReservationService):
         return self._repo.create(data)
 
     def update(self, user, pk, payload):
+        ensure_not_employee(user, action="book reservations")
         instance = self.get(pk)
         return self._repo.update(instance, payload)
 
-    def delete(self, pk):
+    def delete(self, user, pk):
+        ensure_not_employee(user, action="book reservations")
         instance = self.get(pk)
         self._repo.delete(instance)
 

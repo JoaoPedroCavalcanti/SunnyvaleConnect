@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 
 from shared.exceptions import BusinessRuleError, NotFoundError
+from shared.roles import ensure_not_employee, is_admin
 from visitor_access.models import VisitorGroupModel
 from visitor_access.repositories.visitor_group_repository import (
     IVisitorGroupRepository,
@@ -59,6 +60,7 @@ class VisitorGroupService(IVisitorGroupService):
     # create / update / delete                                           #
     # ------------------------------------------------------------------ #
     def create(self, user, payload: dict):
+        ensure_not_employee(user, action="manage visitor groups")
         data = dict(payload)
         members = data.pop("members", []) or []
         name = (data.get("name") or "").strip()
@@ -78,6 +80,7 @@ class VisitorGroupService(IVisitorGroupService):
         return self._repo.get_by_id(group.id)
 
     def update(self, user, pk: int, payload: dict):
+        ensure_not_employee(user, action="manage visitor groups")
         instance = self.get_for(user, pk)
         data = dict(payload)
 
@@ -102,6 +105,7 @@ class VisitorGroupService(IVisitorGroupService):
         return self._repo.get_by_id(instance.id)
 
     def delete(self, user, pk: int) -> None:
+        ensure_not_employee(user, action="manage visitor groups")
         instance = self.get_for(user, pk)
         self._repo.delete(instance)
 
@@ -109,6 +113,7 @@ class VisitorGroupService(IVisitorGroupService):
     # schedule a visit for the whole group                               #
     # ------------------------------------------------------------------ #
     def schedule_visit(self, user, pk: int, payload: dict):
+        ensure_not_employee(user, action="schedule visits")
         """Create a single visit row representing the whole group.
 
         The visit reuses VisitorAccessModel (so it inherits status,
@@ -129,7 +134,7 @@ class VisitorGroupService(IVisitorGroupService):
 
         # admin schedules in name of the group's owner
         host_user = group.host_user
-        acting_user = host_user if user.is_staff else user
+        acting_user = host_user if is_admin(user) else user
 
         visit_payload = {
             "scheduled_date": scheduled_date,

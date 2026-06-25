@@ -257,6 +257,51 @@ class TestUpdateSelf:
         assert user.username == "joao"
 
 
+class TestEmployeeRestrictions:
+    def test_employee_cannot_update_self(self, service):
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        emp = service.create(
+            admin,
+            _valid_payload(
+                role=UserRole.EMPLOYEE,
+                employee_types=[EmployeeType.DOORMAN],
+                apartment="",
+                block="",
+            ),
+        )
+        with pytest.raises(PermissionDeniedError):
+            service.update_self(emp, {"full_name": "Hacked"})
+
+    def test_admin_can_update_employee(self, service):
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        emp = service.create(
+            admin,
+            _valid_payload(
+                role=UserRole.EMPLOYEE,
+                employee_types=[EmployeeType.DOORMAN],
+                apartment="",
+                block="",
+            ),
+        )
+        updated = service.update(admin, emp.id, {"full_name": "New Name"})
+        assert updated.full_name == "New Name"
+
+    def test_employee_apartment_stripped_on_admin_update(self, service):
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        emp = service.create(
+            admin,
+            _valid_payload(
+                role=UserRole.EMPLOYEE,
+                employee_types=[EmployeeType.DOORMAN],
+                apartment="",
+                block="",
+            ),
+        )
+        updated = service.update(admin, emp.id, {"apartment": "101", "block": "A"})
+        assert updated.apartment == ""
+        assert updated.block == ""
+
+
 class TestRoleOnCreate:
     def test_anonymous_signup_defaults_to_resident(self, service):
         user = service.create(_anon(), _valid_payload())

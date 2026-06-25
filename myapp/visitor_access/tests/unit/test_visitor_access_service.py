@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 from django.utils import timezone
 
-from shared.exceptions import BusinessRuleError, NotFoundError
+from shared.exceptions import BusinessRuleError, NotFoundError, PermissionDeniedError
 from shared.test_doubles.fakes import (
     FakeCodeGenerator,
     FakeEmailSender,
@@ -223,13 +223,13 @@ def service(email_sender, group_repo):
     )
 
 
-def _user(pk=1, is_staff=False, role=None):
+def _user(pk=1, is_staff=False, role=None, employee_types=None):
     return SimpleNamespace(
         id=pk,
         is_staff=is_staff,
         is_authenticated=True,
         role=role or ("ADMIN" if is_staff else "RESIDENT"),
-        employee_types=[],
+        employee_types=list(employee_types or []),
     )
 
 
@@ -264,6 +264,22 @@ class TestCreate:
     def test_admin_must_pass_host_user(self, service):
         with pytest.raises(BusinessRuleError):
             service.create(_user(is_staff=True), _payload())
+
+    def test_employee_cannot_create_visit(self, service):
+        with pytest.raises(PermissionDeniedError):
+            service.create(
+                _user(2, role="EMPLOYEE", employee_types=["DOORMAN"]),
+                _payload(),
+            )
+
+    def test_employee_cannot_cancel_visit(self, service):
+        host = _user(1)
+        item = service.create(host, _payload())
+        with pytest.raises(PermissionDeniedError):
+            service.delete(
+                _user(2, role="EMPLOYEE", employee_types=["DOORMAN"]),
+                item.id,
+            )
 
     def test_past_date_rejected(self, service):
         with pytest.raises(BusinessRuleError):

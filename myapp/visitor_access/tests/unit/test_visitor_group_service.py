@@ -173,8 +173,14 @@ def service(repo, access):
     return VisitorGroupService(repository=repo, visitor_access_service=access)
 
 
-def _user(pk=1, is_staff=False):
-    return SimpleNamespace(id=pk, is_staff=is_staff)
+def _user(pk=1, is_staff=False, role=None):
+    return SimpleNamespace(
+        id=pk,
+        is_staff=is_staff,
+        is_authenticated=True,
+        role=role or ("ADMIN" if is_staff else "RESIDENT"),
+        employee_types=[],
+    )
 
 
 # ---------------------------------------------------------------------- #

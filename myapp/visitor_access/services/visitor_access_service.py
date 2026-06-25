@@ -9,7 +9,7 @@ from shared.exceptions import BusinessRuleError, NotFoundError, PermissionDenied
 from shared.infrastructure.code_generator import ICodeGenerator
 from shared.infrastructure.email_sender import IEmailSender
 from shared.infrastructure.string_mixer import IStringMixer
-from shared.roles import can_doorman_ops, can_see_all_visits
+from shared.roles import can_doorman_ops, can_see_all_visits, ensure_not_employee, is_admin
 from visitor_access.models import VisitorAccessModel
 from visitor_access.repositories.visitor_access_repository import (
     IVisitorAccessRepository,
@@ -122,6 +122,7 @@ class VisitorAccessService(IVisitorAccessService):
     # create                                                             #
     # ------------------------------------------------------------------ #
     def create(self, user, payload: dict):
+        ensure_not_employee(user, action="register visitors")
         data = dict(payload)
         scheduled_date = data.get("scheduled_date")
         if scheduled_date and scheduled_date < timezone.now():
@@ -139,7 +140,7 @@ class VisitorAccessService(IVisitorAccessService):
                     field="Scheduled_date",
                 )
 
-        if can_doorman_ops(user):
+        if is_admin(user):
             if not data.get("host_user"):
                 raise BusinessRuleError(
                     "Selecione o morador anfitrião da visita.",
@@ -203,6 +204,7 @@ class VisitorAccessService(IVisitorAccessService):
     # delete = soft cancel                                               #
     # ------------------------------------------------------------------ #
     def delete(self, user, pk):
+        ensure_not_employee(user, action="cancel visits")
         instance = self.get_for(user, pk)
         if instance.scheduled_date < timezone.now():
             raise BusinessRuleError("You can not cancel a past visitor access.")

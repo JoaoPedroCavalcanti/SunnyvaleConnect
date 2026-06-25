@@ -8,6 +8,7 @@ from shared.infrastructure.document_validators import (
     IPhoneValidator,
 )
 from shared.infrastructure.password_policy import IPasswordPolicy
+from shared.roles import ensure_not_employee, is_employee
 from users.models import EmployeeType, UserRole
 from users.repositories.user_repository import IUserRepository
 
@@ -166,6 +167,10 @@ class UserService(IUserService):
         return self._update(user, instance, payload)
 
     def update_self(self, user, payload):
+        if is_employee(user):
+            raise PermissionDeniedError(
+                "Employees cannot edit their own profile."
+            )
         return self._update(user, user, payload)
 
     def _update(self, requester, instance, payload):
@@ -238,6 +243,10 @@ class UserService(IUserService):
             if phone_error:
                 raise BusinessRuleError(message=phone_error, field="phone")
             payload["phone"] = phone
+
+        if getattr(instance, "role", None) == UserRole.EMPLOYEE:
+            payload.pop("apartment", None)
+            payload.pop("block", None)
 
         return self._repo.update(instance, payload)
 
