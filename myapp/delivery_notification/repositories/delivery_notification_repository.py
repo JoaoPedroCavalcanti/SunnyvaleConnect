@@ -16,6 +16,9 @@ class IDeliveryNotificationRepository(ABC):
     @abstractmethod
     def create(self, data: dict) -> DeliveryNotificationModel: ...
 
+    @abstractmethod
+    def count_created_between(self, start, end) -> int: ...
+
 
 class DjangoDeliveryNotificationRepository(IDeliveryNotificationRepository):
     def list_all(self):
@@ -26,3 +29,9 @@ class DjangoDeliveryNotificationRepository(IDeliveryNotificationRepository):
 
     def create(self, data):
         return DeliveryNotificationModel.objects.create(**data)
+
+    def count_created_between(self, start, end):
+        return DeliveryNotificationModel.objects.filter(
+            created_at__gte=start,
+            created_at__lt=end,
+        ).count()

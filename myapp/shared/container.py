@@ -454,5 +454,20 @@ class Container:
             ),
         )
 
+    @property
+    def employee_dashboard_service(self):
+        from employee_dashboard.services.employee_dashboard_service import (
+            EmployeeDashboardService,
+        )
+
+        return self._resolve(
+            "employee_dashboard_service",
+            lambda: EmployeeDashboardService(
+                delivery_repository=self.delivery_notification_repository,
+                visitor_repository=self.visitor_access_repository,
+                service_request_repository=self.service_request_repository,
+            ),
+        )
+
 
 container = Container()

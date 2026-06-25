@@ -128,6 +128,40 @@ class FakeVisitorAccessRepo(IVisitorAccessRepository):
             out = [r for r in out if getattr(r, "visitor_group_id", None) is None]
         return out
 
+    def count_scheduled_between(
+        self, start, end, *, exclude_statuses=None
+    ):
+        rows = self._filtered(
+            self._items.values(), None, start, end, None
+        )
+        if exclude_statuses:
+            excluded = set(exclude_statuses)
+            rows = [r for r in rows if r.status not in excluded]
+        return len(rows)
+
+    def count_with_scheduled_after(
+        self, after, *, status_in=None, exclude_statuses=None
+    ):
+        rows = self._filtered(
+            self._items.values(), status_in, after, None, None
+        )
+        if exclude_statuses:
+            excluded = set(exclude_statuses)
+            rows = [r for r in rows if r.status not in excluded]
+        return len(rows)
+
+    def list_upcoming(
+        self, after, *, limit=10, status_in=None, exclude_statuses=None
+    ):
+        rows = self._filtered(
+            self._items.values(), status_in, after, None, None
+        )
+        if exclude_statuses:
+            excluded = set(exclude_statuses)
+            rows = [r for r in rows if r.status not in excluded]
+        rows.sort(key=lambda r: r.scheduled_date)
+        return rows[:limit]
+
 
 class FakeGroupRepo(IVisitorGroupRepository):
     """Only ``list_members`` is exercised by the access service."""

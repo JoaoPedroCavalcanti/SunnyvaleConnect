@@ -35,6 +35,9 @@ class FakeDeliveryRepo(IDeliveryNotificationRepository):
         self._next_id += 1
         return item
 
+    def count_created_between(self, start, end):
+        return 0
+
 
 class FakeUserRepo(IUserRepository):
     def __init__(self):

@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "sunny_vale_news",
     "households",
     "admin_dashboard",
+    "employee_dashboard",
 ]
 
 MIDDLEWARE = [
@@ -190,14 +191,23 @@ SPECTACULAR_SETTINGS = {
     "COMPONENT_SPLIT_REQUEST": True,
     "ENUM_NAME_OVERRIDES": {
         "CondoPaymentStatusEnum": "condo_payments.models.CondoPaymentModel.STATUS",
-        "ServiceRequestStatusEnum": "service_requests.models.ServiceRequestModel.STATUS",
-        # Priority levels happen to share (low/medium/high) across 3 apps; unify.
-        "PriorityEnum": "service_requests.models.ServiceRequestModel.PRIORITY_LEVEL",
+        "ServiceRequestStatusEnum": "service_requests.models.ServiceRequestModel.Status",
+        # BBQ + hall share PENDING / APPROVED / REJECTED — one name only.
+        "ReservationApprovalStatusEnum": (
+            "bbq_reservations.models.BBQReservationModel.Status"
+        ),
+        "VisitorAccessStatusEnum": "visitor_access.models.VisitorAccessModel.Status",
         "HouseholdStatusEnum": "households.models.Household.Status",
         "MembershipStatusEnum": "households.models.HouseholdMembership.Status",
         "MembershipRoleEnum": "households.models.HouseholdMembership.Role",
         "UserRoleEnum": "users.models.UserRole",
+        "EmployeeTypeEnum": "users.models.EmployeeType",
         "NewsKindEnum": "sunny_vale_news.models.SunnyValeNewsModel.Kind",
+        "ServiceRequestPriorityEnum": "service_requests.models.ServiceRequestModel.Priority",
+        # Delivery + news share low / medium / high — one name only.
+        "LowMediumHighPriorityEnum": (
+            "delivery_notification.models.DeliveryNotificationModel.PRIORITY"
+        ),
     },
 }
 

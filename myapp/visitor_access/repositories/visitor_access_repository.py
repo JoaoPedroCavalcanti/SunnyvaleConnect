@@ -42,6 +42,34 @@ class IVisitorAccessRepository(ABC):
     @abstractmethod
     def delete(self, instance: VisitorAccessModel) -> None: ...
 
+    @abstractmethod
+    def count_scheduled_between(
+        self,
+        start: datetime,
+        end: datetime,
+        *,
+        exclude_statuses: Iterable[str] | None = None,
+    ) -> int: ...
+
+    @abstractmethod
+    def count_with_scheduled_after(
+        self,
+        after: datetime,
+        *,
+        status_in: Iterable[str] | None = None,
+        exclude_statuses: Iterable[str] | None = None,
+    ) -> int: ...
+
+    @abstractmethod
+    def list_upcoming(
+        self,
+        after: datetime,
+        *,
+        limit: int = 10,
+        status_in: Iterable[str] | None = None,
+        exclude_statuses: Iterable[str] | None = None,
+    ): ...
+
 
 class DjangoVisitorAccessRepository(IVisitorAccessRepository):
     def list_all(
@@ -103,3 +131,51 @@ class DjangoVisitorAccessRepository(IVisitorAccessRepository):
         elif is_group is False:
             qs = qs.filter(visitor_group__isnull=True)
         return qs
+
+    def count_scheduled_between(
+        self,
+        start: datetime,
+        end: datetime,
+        *,
+        exclude_statuses: Iterable[str] | None = None,
+    ) -> int:
+        qs = VisitorAccessModel.objects.filter(
+            scheduled_date__gte=start,
+            scheduled_date__lt=end,
+        )
+        if exclude_statuses:
+            qs = qs.exclude(status__in=list(exclude_statuses))
+        return qs.count()
+
+    def count_with_scheduled_after(
+        self,
+        after: datetime,
+        *,
+        status_in: Iterable[str] | None = None,
+        exclude_statuses: Iterable[str] | None = None,
+    ) -> int:
+        qs = VisitorAccessModel.objects.filter(scheduled_date__gte=after)
+        if status_in:
+            qs = qs.filter(status__in=list(status_in))
+        if exclude_statuses:
+            qs = qs.exclude(status__in=list(exclude_statuses))
+        return qs.count()
+
+    def list_upcoming(
+        self,
+        after: datetime,
+        *,
+        limit: int = 10,
+        status_in: Iterable[str] | None = None,
+        exclude_statuses: Iterable[str] | None = None,
+    ):
+        qs = (
+            VisitorAccessModel.objects.select_related("host_user", "visitor_group")
+            .filter(scheduled_date__gte=after)
+            .order_by("scheduled_date")
+        )
+        if status_in:
+            qs = qs.filter(status__in=list(status_in))
+        if exclude_statuses:
+            qs = qs.exclude(status__in=list(exclude_statuses))
+        return qs[:limit]

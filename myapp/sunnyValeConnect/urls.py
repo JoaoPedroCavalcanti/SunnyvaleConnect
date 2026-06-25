@@ -27,6 +27,10 @@ urlpatterns = [
         "admin_dashboard/",
         include(("admin_dashboard.urls"), namespace="admin_dashboard"),
     ),
+    path(
+        "employee_dashboard/",
+        include(("employee_dashboard.urls"), namespace="employee_dashboard"),
+    ),
     path("api/token/", LoginView.as_view(), name="token_obtain_pair"),
     path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/token/verify/", TokenVerifyView.as_view(), name="token_verify"),
