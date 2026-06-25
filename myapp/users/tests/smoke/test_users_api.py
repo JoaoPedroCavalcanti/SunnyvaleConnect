@@ -93,6 +93,7 @@ class UsersAPISmoke(BaseTestsUsers):
         self.authenticate(self.admin)
         payload = self.create_random_user_from_faker()
         payload["role"] = "EMPLOYEE"
+        payload["employee_types"] = ["CLEANING"]
         payload.pop("apartment", None)
         payload.pop("block", None)
         response = self.client.post(LIST_URL, data=payload)
@@ -136,7 +137,7 @@ class UsersAPISmoke(BaseTestsUsers):
         self.authenticate(self.admin)
         response = self.client.patch(
             detail_url(self.user_a.id),
-            data={"role": "EMPLOYEE"},
+            data={"role": "EMPLOYEE", "employee_types": ["DOORMAN"]},
         )
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["role"], "EMPLOYEE")
@@ -145,6 +146,7 @@ class UsersAPISmoke(BaseTestsUsers):
         self.authenticate(self.admin)
         emp_payload = self.create_random_user_from_faker()
         emp_payload["role"] = "EMPLOYEE"
+        emp_payload["employee_types"] = ["CLEANING"]
         emp_payload.pop("apartment", None)
         emp_payload.pop("block", None)
         self.client.post(LIST_URL, data=emp_payload)

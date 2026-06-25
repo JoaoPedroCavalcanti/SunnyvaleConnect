@@ -14,7 +14,7 @@ from shared.infrastructure.document_validators import (
     BrazilianPhoneValidator,
 )
 from shared.infrastructure.password_policy import DefaultPasswordPolicy
-from users.models import UserRole
+from users.models import EmployeeType, UserRole
 from users.repositories.user_repository import IUserRepository
 from users.services.user_service import UserService
 
@@ -36,6 +36,7 @@ class _FakeUser:
         is_staff=False,
         is_authenticated=True,
         role=UserRole.RESIDENT,
+        employee_types=None,
     ):
         self.id = pk
         self.pk = pk
@@ -51,6 +52,7 @@ class _FakeUser:
         self.is_staff = is_staff
         self.is_authenticated = is_authenticated
         self.role = role
+        self.employee_types = list(employee_types or [])
 
 
 def _anon():
@@ -279,7 +281,15 @@ class TestRoleOnCreate:
 
     def test_admin_can_create_employee_without_is_staff(self, service):
         admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
-        emp = service.create(admin, _valid_payload(role=UserRole.EMPLOYEE))
+        emp = service.create(
+            admin,
+            _valid_payload(
+                role=UserRole.EMPLOYEE,
+                employee_types=[EmployeeType.CLEANING],
+                apartment="",
+                block="",
+            ),
+        )
         assert emp.role == UserRole.EMPLOYEE
         assert emp.is_staff is False
 
@@ -294,7 +304,14 @@ class TestRoleOnUpdate:
     def test_admin_can_promote_resident_to_employee(self, service):
         admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
         target = service.create(_anon(), _valid_payload())
-        result = service.update(admin, target.id, {"role": UserRole.EMPLOYEE})
+        result = service.update(
+            admin,
+            target.id,
+            {
+                "role": UserRole.EMPLOYEE,
+                "employee_types": [EmployeeType.DOORMAN],
+            },
+        )
         assert result.role == UserRole.EMPLOYEE
         assert result.is_staff is False
 
@@ -350,6 +367,9 @@ class TestListByRole:
                 email="emp@x.com",
                 cpf=VALID_CPF_B,
                 role=UserRole.EMPLOYEE,
+                employee_types=[EmployeeType.CLEANING],
+                apartment="",
+                block="",
             ),
         )
         residents = list(service.list_for(admin, role=UserRole.RESIDENT))

@@ -8,12 +8,13 @@ from shared.infrastructure.document_validators import (
     IPhoneValidator,
 )
 from shared.infrastructure.password_policy import IPasswordPolicy
-from users.models import UserRole
+from users.models import EmployeeType, UserRole
 from users.repositories.user_repository import IUserRepository
 
 
 _IMMUTABLE_ON_PATCH = {"username", "cpf"}
 _VALID_ROLES = {choice for choice, _ in UserRole.choices}
+_VALID_EMPLOYEE_TYPES = {choice for choice, _ in EmployeeType.choices}
 
 
 class IUserService(ABC):
@@ -132,6 +133,17 @@ class UserService(IUserService):
         if phone_error:
             raise BusinessRuleError(message=phone_error, field="phone")
 
+        employee_types = self._normalize_employee_types(
+            role, payload.pop("employee_types", None)
+        )
+        apartment = payload.get("apartment", "") or ""
+        block = payload.get("block", "") or ""
+        if role == UserRole.EMPLOYEE and (apartment or block):
+            raise BusinessRuleError(
+                "Employees cannot be linked to an apartment.",
+                field="apartment",
+            )
+
         return self._repo.create_user(
             username=username,
             password=password,
@@ -140,12 +152,13 @@ class UserService(IUserService):
             birth_date=payload["birth_date"],
             cpf=cpf,
             phone=phone,
-            apartment=payload.get("apartment", ""),
-            block=payload.get("block", ""),
+            apartment=apartment if role != UserRole.EMPLOYEE else "",
+            block=block if role != UserRole.EMPLOYEE else "",
             photo=payload.get("photo"),
             is_active=is_active,
             role=role,
             is_staff=role == UserRole.ADMIN,
+            employee_types=employee_types,
         )
 
     def update(self, user, pk, payload):
@@ -158,6 +171,13 @@ class UserService(IUserService):
     def _update(self, requester, instance, payload):
         for field in _IMMUTABLE_ON_PATCH & payload.keys():
             payload.pop(field)
+
+        if "is_active" in payload:
+            if not getattr(requester, "is_staff", False):
+                raise PermissionDeniedError("Only admins can change account status.")
+            self._repo.set_active(instance, bool(payload.pop("is_active")))
+            if not payload:
+                return instance
 
         if "role" in payload:
             new_role = payload["role"]
@@ -176,6 +196,25 @@ class UserService(IUserService):
                     "Admins cannot demote themselves."
                 )
             payload["is_staff"] = new_role == UserRole.ADMIN
+            if new_role != UserRole.EMPLOYEE:
+                payload["employee_types"] = []
+            if new_role == UserRole.EMPLOYEE:
+                payload.setdefault(
+                    "employee_types",
+                    list(getattr(instance, "employee_types", None) or []),
+                )
+                payload["apartment"] = ""
+                payload["block"] = ""
+
+        if "employee_types" in payload:
+            if not getattr(requester, "is_staff", False):
+                raise PermissionDeniedError(
+                    "Only admins can change employee types."
+                )
+            effective_role = payload.get("role", instance.role)
+            payload["employee_types"] = self._normalize_employee_types(
+                effective_role, payload["employee_types"]
+            )
 
         if "password" in payload:
             errors = self._policy.validate(payload["password"])
@@ -209,4 +248,39 @@ class UserService(IUserService):
             and getattr(instance, "role", None) == UserRole.ADMIN
         ):
             raise PermissionDeniedError("Admins cannot delete themselves.")
+        if getattr(instance, "role", None) == UserRole.EMPLOYEE:
+            raise PermissionDeniedError(
+                "Employees cannot be deleted. Deactivate the account instead."
+            )
         self._repo.delete(instance)
+
+    @staticmethod
+    def _normalize_employee_types(role: str, raw) -> list[str]:
+        if role != UserRole.EMPLOYEE:
+            return []
+        if raw is None:
+            raise BusinessRuleError(
+                "Employee accounts require at least one employee type.",
+                field="employee_types",
+            )
+        if not isinstance(raw, (list, tuple)):
+            raise BusinessRuleError(
+                "employee_types must be a list.",
+                field="employee_types",
+            )
+        normalized: list[str] = []
+        for value in raw:
+            upper = str(value).upper()
+            if upper not in _VALID_EMPLOYEE_TYPES:
+                raise BusinessRuleError(
+                    message=f"Invalid employee type: {value!r}.",
+                    field="employee_types",
+                )
+            if upper not in normalized:
+                normalized.append(upper)
+        if not normalized:
+            raise BusinessRuleError(
+                "Employee accounts require at least one employee type.",
+                field="employee_types",
+            )
+        return normalized

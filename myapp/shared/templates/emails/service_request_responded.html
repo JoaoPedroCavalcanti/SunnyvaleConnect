@@ -1,0 +1,12 @@
+{% extends "emails/base.html" %}
+
+{% block title %}Service request update{% endblock %}
+
+{% block content %}
+<p style="margin:0 0 16px;">Dear {{ requester_name }},</p>
+<p style="margin:0 0 16px;">
+  Your service request <strong>{{ title }}</strong> was
+  <strong>{{ status_label|lower }}</strong> by {{ responder_name }}.
+</p>
+{% include "emails/partials/details_box.html" with details=details %}
+{% endblock %}

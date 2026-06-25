@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from households.serializers import HouseholdRequestSerializer
-from users.models import UserRole
+from users.models import EmployeeType, UserRole
 
 
 class UserInputSerializer(serializers.Serializer):
@@ -18,6 +18,11 @@ class UserInputSerializer(serializers.Serializer):
     photo = serializers.ImageField(required=False, allow_null=True)
     role = serializers.ChoiceField(
         choices=UserRole.choices, required=False, default=UserRole.RESIDENT
+    )
+    employee_types = serializers.ListField(
+        child=serializers.ChoiceField(choices=EmployeeType.choices),
+        required=False,
+        allow_empty=False,
     )
     household_request = HouseholdRequestSerializer(required=False, allow_null=True)
 
@@ -34,6 +39,12 @@ class UserPatchSerializer(serializers.Serializer):
     block = serializers.CharField(required=False, allow_blank=True, max_length=10)
     photo = serializers.ImageField(required=False, allow_null=True)
     role = serializers.ChoiceField(choices=UserRole.choices, required=False)
+    employee_types = serializers.ListField(
+        child=serializers.ChoiceField(choices=EmployeeType.choices),
+        required=False,
+        allow_empty=False,
+    )
+    is_active = serializers.BooleanField(required=False)
 
 
 class UserOutputSerializer(serializers.ModelSerializer):
@@ -53,6 +64,8 @@ class UserOutputSerializer(serializers.ModelSerializer):
             "block",
             "photo",
             "role",
+            "employee_types",
+            "is_active",
         ]
 
 

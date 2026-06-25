@@ -151,6 +151,9 @@ class FakeAccessService(IVisitorAccessService):
     def checkout(self, mixed_link):  # pragma: no cover
         return None
 
+    def notify_arrival(self, user, pk):  # pragma: no cover
+        return None
+
 
 # ---------------------------------------------------------------------- #
 # fixtures                                                               #

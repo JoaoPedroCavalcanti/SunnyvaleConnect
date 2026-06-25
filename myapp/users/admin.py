@@ -28,6 +28,7 @@ class UserAdmin(DjangoUserAdmin):
             {
                 "fields": (
                     "role",
+                    "employee_types",
                     "is_active",
                     "is_staff",
                     "is_superuser",
@@ -55,6 +56,7 @@ class UserAdmin(DjangoUserAdmin):
                     "apartment",
                     "block",
                     "role",
+                    "employee_types",
                 ),
             },
         ),

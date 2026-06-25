@@ -5,6 +5,7 @@ from visitor_access.views import (
     VisitorAccessCheckoutView,
     VisitorAccessDetailView,
     VisitorAccessListCreateView,
+    VisitorAccessNotifyArrivalView,
     VisitorGroupDetailView,
     VisitorGroupListCreateView,
     VisitorGroupScheduleView,
@@ -44,6 +45,11 @@ urlpatterns = [
         "groups/<int:pk>/schedule/",
         VisitorGroupScheduleView.as_view(),
         name="groups-schedule",
+    ),
+    path(
+        "<int:pk>/notify-arrival/",
+        VisitorAccessNotifyArrivalView.as_view(),
+        name="notify-arrival",
     ),
     path("<int:pk>/", VisitorAccessDetailView.as_view(), name="detail"),
 ]

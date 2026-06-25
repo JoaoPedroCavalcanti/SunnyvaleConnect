@@ -5,10 +5,11 @@ from datetime import datetime, timedelta
 
 from django.utils import timezone
 
-from shared.exceptions import BusinessRuleError, NotFoundError
+from shared.exceptions import BusinessRuleError, NotFoundError, PermissionDeniedError
 from shared.infrastructure.code_generator import ICodeGenerator
 from shared.infrastructure.email_sender import IEmailSender
 from shared.infrastructure.string_mixer import IStringMixer
+from shared.roles import can_doorman_ops, can_see_all_visits
 from visitor_access.models import VisitorAccessModel
 from visitor_access.repositories.visitor_access_repository import (
     IVisitorAccessRepository,
@@ -49,6 +50,9 @@ class IVisitorAccessService(ABC):
 
     @abstractmethod
     def checkout(self, mixed_link: str): ...
+
+    @abstractmethod
+    def notify_arrival(self, user, pk: int) -> VisitorAccessModel: ...
 
 
 class VisitorAccessService(IVisitorAccessService):
@@ -91,7 +95,7 @@ class VisitorAccessService(IVisitorAccessService):
             now=now, period=period, status=status
         )
 
-        if user.is_staff:
+        if can_see_all_visits(user):
             return self._repo.list_all(
                 status_in=status_in,
                 scheduled_after=scheduled_after,
@@ -110,7 +114,7 @@ class VisitorAccessService(IVisitorAccessService):
         instance = self._repo.get_by_id(pk)
         if not instance:
             raise NotFoundError("No visitor access matches the given query.")
-        if not user.is_staff and instance.host_user_id != user.id:
+        if not can_see_all_visits(user) and instance.host_user_id != user.id:
             raise NotFoundError("No visitor access matches the given query.")
         return instance
 
@@ -135,7 +139,7 @@ class VisitorAccessService(IVisitorAccessService):
                     field="Scheduled_date",
                 )
 
-        if user.is_staff:
+        if can_doorman_ops(user):
             if not data.get("host_user"):
                 raise BusinessRuleError(
                     "Selecione o morador anfitrião da visita.",
@@ -276,6 +280,38 @@ class VisitorAccessService(IVisitorAccessService):
             return {"checkout_code": code}
 
         return None
+
+    def notify_arrival(self, user, pk: int) -> VisitorAccessModel:
+        if not can_doorman_ops(user):
+            raise PermissionDeniedError(
+                "Only admins or doorman staff can notify visitor arrival."
+            )
+        instance = self._fetch_or_404(pk)
+        if instance.status == self.Status.CANCELLED:
+            raise BusinessRuleError("This visitor access has been cancelled.")
+        if instance.status == self.Status.CHECKED_OUT:
+            raise BusinessRuleError("This visit is already concluded.")
+
+        host = instance.host_user
+        if not host or not getattr(host, "email", ""):
+            raise BusinessRuleError(
+                "The host has no email registered; cannot notify arrival.",
+                field="host_user",
+            )
+
+        visitor_name = instance.visitor_name
+        self._email.send_visitor_arrival_notification(
+            to_email=host.email,
+            user_name=getattr(host, "full_name", "") or host.username,
+            visitor_name=visitor_name,
+        )
+        return instance
+
+    def _fetch_or_404(self, pk: int) -> VisitorAccessModel:
+        instance = self._repo.get_by_id(pk)
+        if not instance:
+            raise NotFoundError("No visitor access matches the given query.")
+        return instance
 
     # ------------------------------------------------------------------ #
     # recipients helpers                                                 #

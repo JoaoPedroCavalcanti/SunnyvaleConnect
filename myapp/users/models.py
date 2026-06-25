@@ -8,6 +8,11 @@ class UserRole(models.TextChoices):
     EMPLOYEE = "EMPLOYEE", "Employee"
 
 
+class EmployeeType(models.TextChoices):
+    DOORMAN = "DOORMAN", "Doorman"
+    CLEANING = "CLEANING", "Cleaning"
+
+
 class User(AbstractUser):
     first_name = None
     last_name = None
@@ -24,6 +29,7 @@ class User(AbstractUser):
         choices=UserRole.choices,
         default=UserRole.RESIDENT,
     )
+    employee_types = models.JSONField(default=list, blank=True)
 
     REQUIRED_FIELDS = ["email", "full_name", "birth_date", "cpf", "phone"]
 

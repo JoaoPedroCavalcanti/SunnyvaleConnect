@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from shared.container import container
+from shared.permissions import IsAdminOrDoorman
 from visitor_access.models import VisitorAccessModel
 from visitor_access.serializers import (
     VisitorAccessInputSerializer,
@@ -111,6 +112,21 @@ class VisitorAccessDetailView(APIView):
     def delete(self, request, pk: int):
         container.visitor_access_service.delete(request.user, pk)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@extend_schema(tags=["visitor_access"])
+class VisitorAccessNotifyArrivalView(APIView):
+    """Doorman manually notifies the host that a visitor has arrived."""
+
+    permission_classes = [IsAuthenticated, IsAdminOrDoorman]
+
+    @extend_schema(
+        request=None,
+        responses={200: VisitorAccessOutputSerializer},
+    )
+    def post(self, request, pk: int):
+        instance = container.visitor_access_service.notify_arrival(request.user, pk)
+        return Response(VisitorAccessOutputSerializer(instance).data)
 
 
 @extend_schema(tags=["visitor_access"])

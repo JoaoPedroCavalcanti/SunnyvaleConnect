@@ -87,13 +87,13 @@ class ServiceRequestsAPISmoke(BaseTestsUsers):
         self.assertEqual(response.data["status"], "PENDING")
 
     # --- list ------------------------------------------------------ #
-    def test_resident_only_sees_own_in_list(self):
+    def test_all_users_see_every_request_in_list(self):
         _make_request(self.user_a, title="mine")
         _make_request(self.user_b, title="theirs")
         self.authenticate(self.user_a)
         response = self.client.get(LIST_URL)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["count"], 2)
 
     def test_admin_sees_all_in_list(self):
         _make_request(self.user_a)
@@ -111,12 +111,12 @@ class ServiceRequestsAPISmoke(BaseTestsUsers):
         self.assertEqual(response.data["count"], 1)
 
     # --- detail / 404 --------------------------------------------- #
-    def test_resident_cannot_read_others(self):
+    def test_any_user_can_read_others(self):
         item = _make_request(self.user_b)
         self.authenticate(self.user_a)
-        self.assertEqual(
-            self.client.get(detail_url(item.id)).status_code, 404
-        )
+        response = self.client.get(detail_url(item.id))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["title"], item.title)
 
     # --- respond --------------------------------------------------- #
     def test_admin_accepts_with_message(self):

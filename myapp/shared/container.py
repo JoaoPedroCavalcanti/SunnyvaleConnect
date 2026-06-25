@@ -306,7 +306,10 @@ class Container:
 
         return self._resolve(
             "service_request_service",
-            lambda: ServiceRequestService(repository=self.service_request_repository),
+            lambda: ServiceRequestService(
+                repository=self.service_request_repository,
+                email_sender=self.email_sender,
+            ),
         )
 
     @property

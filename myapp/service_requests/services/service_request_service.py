@@ -1,15 +1,11 @@
 """Business rules for service requests.
 
 Workflow:
-  • Any authenticated user opens a request (always PENDING, scoped to
-    ``request.user``).
-  • The owner can edit / delete *only while it is still PENDING*. Once
-    an admin responds the request becomes immutable from the owner's
-    perspective.
-  • An admin lists every request, can apply filters (status / priority
-    / service_type) and must ``respond`` with a non-empty justification
-    when accepting or declining.
-  • An admin may later mark an ACCEPTED request as COMPLETED.
+  • Residents and admins open requests (always PENDING). Employees cannot.
+  • Any authenticated user can list and read every request.
+  • The owner can edit / delete only while PENDING.
+  • Admins and cleaning employees respond (accept/decline) with a message.
+  • Admins and cleaning employees may mark ACCEPTED requests COMPLETED.
 """
 
 from abc import ABC, abstractmethod
@@ -25,6 +21,8 @@ from shared.exceptions import (
     NotFoundError,
     PermissionDeniedError,
 )
+from shared.infrastructure.email_sender import IEmailSender
+from shared.roles import can_manage_service_requests, is_admin, is_employee
 
 
 class IServiceRequestService(ABC):
@@ -51,22 +49,24 @@ class IServiceRequestService(ABC):
 
     @abstractmethod
     def respond(
-        self, admin, pk: int, action: str, response: str
+        self, operator, pk: int, action: str, response: str
     ) -> ServiceRequestModel: ...
 
     @abstractmethod
-    def complete(self, admin, pk: int) -> ServiceRequestModel: ...
+    def complete(self, operator, pk: int) -> ServiceRequestModel: ...
 
 
 class ServiceRequestService(IServiceRequestService):
     _VALID_ACTIONS = ("accept", "decline")
 
-    def __init__(self, repository: IServiceRequestRepository):
+    def __init__(
+        self,
+        repository: IServiceRequestRepository,
+        email_sender: IEmailSender,
+    ):
         self._repo = repository
+        self._email = email_sender
 
-    # ------------------------------------------------------------------ #
-    # read                                                               #
-    # ------------------------------------------------------------------ #
     def list(self, user, status=None, priority=None, service_type=None):
         status = self._normalize_choice(
             status, ServiceRequestModel.Status, "status"
@@ -77,36 +77,23 @@ class ServiceRequestService(IServiceRequestService):
         service_type = self._normalize_choice(
             service_type, ServiceRequestModel.ServiceType, "service_type"
         )
-
-        if user.is_staff:
-            return self._repo.list_all(
-                status=status,
-                priority=priority,
-                service_type=service_type,
-            )
-        return self._repo.list_for_user(
-            user.id,
+        return self._repo.list_all(
             status=status,
             priority=priority,
             service_type=service_type,
         )
 
     def get(self, user, pk):
-        instance = self._fetch_or_404(pk)
-        if not user.is_staff and instance.requester_id != user.id:
-            # Hide existence from non-owners just like BBQ does.
-            raise NotFoundError("No service request matches the given query.")
-        return instance
+        return self._fetch_or_404(pk)
 
-    # ------------------------------------------------------------------ #
-    # write                                                              #
-    # ------------------------------------------------------------------ #
     def create(self, user, payload: dict):
+        if is_employee(user):
+            raise PermissionDeniedError(
+                "Employees cannot open service requests."
+            )
         data = dict(payload or {})
-        # Requester is always the caller — never trust the client.
         data["requester"] = user
         data["status"] = ServiceRequestModel.Status.PENDING
-        # Admin-only fields never leak in via create.
         for field in ("admin_response", "responded_by", "responded_at"):
             data.pop(field, None)
         return self._repo.create(data)
@@ -116,12 +103,15 @@ class ServiceRequestService(IServiceRequestService):
             raise BusinessRuleError("Empty payload.")
         instance = self.get(user, pk)
 
-        if not user.is_staff:
+        if not is_admin(user):
+            if instance.requester_id != user.id:
+                raise PermissionDeniedError(
+                    "You can only edit your own service requests."
+                )
             if instance.status != ServiceRequestModel.Status.PENDING:
                 raise BusinessRuleError(
                     "You can only edit a request while it is pending."
                 )
-            # Owner is not allowed to touch admin / status fields.
             forbidden = {
                 "status",
                 "admin_response",
@@ -136,19 +126,21 @@ class ServiceRequestService(IServiceRequestService):
 
     def delete(self, user, pk):
         instance = self.get(user, pk)
-        if not user.is_staff and instance.status != ServiceRequestModel.Status.PENDING:
-            raise BusinessRuleError(
-                "You can only delete a request while it is pending."
-            )
+        if not is_admin(user):
+            if instance.requester_id != user.id:
+                raise PermissionDeniedError(
+                    "You can only delete your own service requests."
+                )
+            if instance.status != ServiceRequestModel.Status.PENDING:
+                raise BusinessRuleError(
+                    "You can only delete a request while it is pending."
+                )
         self._repo.delete(instance)
 
-    # ------------------------------------------------------------------ #
-    # admin actions                                                      #
-    # ------------------------------------------------------------------ #
-    def respond(self, admin, pk, action, response):
-        if not admin.is_staff:
+    def respond(self, operator, pk, action, response):
+        if not can_manage_service_requests(operator):
             raise PermissionDeniedError(
-                "Only admins can respond to a service request."
+                "Only admins or cleaning staff can respond to a service request."
             )
         if action not in self._VALID_ACTIONS:
             raise BusinessRuleError(
@@ -172,20 +164,22 @@ class ServiceRequestService(IServiceRequestService):
             if action == "accept"
             else ServiceRequestModel.Status.DECLINED
         )
-        return self._repo.update(
+        updated = self._repo.update(
             instance,
             {
                 "status": new_status,
                 "admin_response": message,
-                "responded_by": admin,
+                "responded_by": operator,
                 "responded_at": timezone.now(),
             },
         )
+        self._notify_requester(updated, action, operator)
+        return updated
 
-    def complete(self, admin, pk):
-        if not admin.is_staff:
+    def complete(self, operator, pk):
+        if not can_manage_service_requests(operator):
             raise PermissionDeniedError(
-                "Only admins can complete a service request."
+                "Only admins or cleaning staff can complete a service request."
             )
         instance = self._fetch_or_404(pk)
         if instance.status != ServiceRequestModel.Status.ACCEPTED:
@@ -197,9 +191,19 @@ class ServiceRequestService(IServiceRequestService):
             instance, {"status": ServiceRequestModel.Status.COMPLETED}
         )
 
-    # ------------------------------------------------------------------ #
-    # internals                                                          #
-    # ------------------------------------------------------------------ #
+    def _notify_requester(self, instance, action: str, operator) -> None:
+        requester = instance.requester
+        if not requester or not getattr(requester, "email", ""):
+            return
+        self._email.send_service_request_responded(
+            to_email=requester.email,
+            requester_name=getattr(requester, "full_name", "") or requester.username,
+            title=instance.title,
+            action=action,
+            response=instance.admin_response,
+            responder_name=getattr(operator, "full_name", "") or operator.username,
+        )
+
     def _fetch_or_404(self, pk: int) -> ServiceRequestModel:
         instance = self._repo.get_by_id(pk)
         if not instance:

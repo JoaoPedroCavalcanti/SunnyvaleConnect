@@ -2,7 +2,7 @@
 
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -11,11 +11,12 @@ from delivery_notification.serializers import (
     DeliveryNotificationOutputSerializer,
 )
 from shared.container import container
+from shared.permissions import IsAdminOrDoorman
 
 
 @extend_schema(tags=["delivery_notification"])
 class SendDeliveryNotificationView(APIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminOrDoorman]
 
     @extend_schema(
         request=DeliveryNotificationInputSerializer,
@@ -35,7 +36,7 @@ class SendDeliveryNotificationView(APIView):
 
 @extend_schema(tags=["delivery_notification"])
 class ListDeliveryNotificationsView(APIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminOrDoorman]
 
     @extend_schema(responses={200: DeliveryNotificationOutputSerializer(many=True)})
     def get(self, request):
@@ -48,7 +49,7 @@ class ListDeliveryNotificationsView(APIView):
 
 @extend_schema(tags=["delivery_notification"])
 class DetailDeliveryNotificationView(APIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminOrDoorman]
 
     @extend_schema(responses={200: DeliveryNotificationOutputSerializer})
     def get(self, request, pk: int):

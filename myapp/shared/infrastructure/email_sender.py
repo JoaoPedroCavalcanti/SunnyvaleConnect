@@ -104,6 +104,25 @@ class IEmailSender(ABC):
         reason: str = "",
     ) -> None: ...
 
+    @abstractmethod
+    def send_service_request_responded(
+        self,
+        to_email: str,
+        requester_name: str,
+        title: str,
+        action: str,
+        response: str,
+        responder_name: str,
+    ) -> None: ...
+
+    @abstractmethod
+    def send_visitor_arrival_notification(
+        self,
+        to_email: str,
+        user_name: str,
+        visitor_name: str,
+    ) -> None: ...
+
 
 class DjangoEmailSender(IEmailSender):
     """SMTP-backed sender. Failures are logged and swallowed so a flaky mail
@@ -380,5 +399,66 @@ class DjangoEmailSender(IEmailSender):
             subject,
             "reservation_rejected",
             context,
+            to_email,
+        )
+
+    def send_service_request_responded(
+        self,
+        to_email: str,
+        requester_name: str,
+        title: str,
+        action: str,
+        response: str,
+        responder_name: str,
+    ) -> None:
+        accepted = action == "accept"
+        subject = (
+            "Your service request was accepted"
+            if accepted
+            else "Your service request was declined"
+        )
+        self._render_and_send(
+            subject,
+            "service_request_responded",
+            {
+                "heading": "Service request update",
+                "requester_name": requester_name,
+                "title": title,
+                "accepted": accepted,
+                "status_label": "Accepted" if accepted else "Declined",
+                "responder_name": responder_name,
+                "response": response,
+                "details": [
+                    {"label": "Request", "value": title},
+                    {"label": "Status", "value": "Accepted" if accepted else "Declined"},
+                    {"label": "Handled by", "value": responder_name},
+                    {"label": "Message", "value": response},
+                ],
+            },
+            to_email,
+        )
+
+    def send_visitor_arrival_notification(
+        self,
+        to_email: str,
+        user_name: str,
+        visitor_name: str,
+    ) -> None:
+        subject = "Visitor arrival notification"
+        arrived_at = timezone.localtime(timezone.now()).strftime(
+            "%B %d, %Y at %I:%M %p"
+        )
+        self._render_and_send(
+            subject,
+            "visitor_arrival_notification",
+            {
+                "heading": "Your visitor has arrived",
+                "user_name": user_name,
+                "visitor_name": visitor_name,
+                "details": [
+                    {"label": "Visitor", "value": visitor_name},
+                    {"label": "Notified at", "value": arrived_at},
+                ],
+            },
             to_email,
         )

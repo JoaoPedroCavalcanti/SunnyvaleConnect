@@ -130,6 +130,33 @@ class FakeEmailSender(IEmailSender):
             "reason": reason,
         })
 
+    def send_service_request_responded(
+        self,
+        to_email,
+        requester_name,
+        title,
+        action,
+        response,
+        responder_name,
+    ):
+        self.sent.append({
+            "kind": "service_request_responded",
+            "to": to_email,
+            "requester_name": requester_name,
+            "title": title,
+            "action": action,
+            "response": response,
+            "responder_name": responder_name,
+        })
+
+    def send_visitor_arrival_notification(self, to_email, user_name, visitor_name):
+        self.sent.append({
+            "kind": "visitor_arrival",
+            "to": to_email,
+            "user_name": user_name,
+            "visitor_name": visitor_name,
+        })
+
 
 class FakeCodeGenerator(ICodeGenerator):
     def __init__(self, value: str = "12345"):

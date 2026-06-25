@@ -17,6 +17,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from users.models import EmployeeType, UserRole
 from service_requests.models import ServiceRequestModel
 from service_requests.repositories.service_request_repository import (
     IServiceRequestRepository,
@@ -27,6 +28,7 @@ from shared.exceptions import (
     NotFoundError,
     PermissionDeniedError,
 )
+from shared.test_doubles.fakes import FakeEmailSender
 
 
 pytestmark = pytest.mark.unit
@@ -110,12 +112,48 @@ class FakeRepo(IServiceRequestRepository):
 
 
 @pytest.fixture
-def service():
-    return ServiceRequestService(repository=FakeRepo())
+def email():
+    return FakeEmailSender()
 
 
-def _user(pk=1, is_staff=False):
-    return SimpleNamespace(id=pk, is_staff=is_staff)
+@pytest.fixture
+def service(email):
+    return ServiceRequestService(repository=FakeRepo(), email_sender=email)
+
+
+def _user(
+    pk=1,
+    *,
+    role=UserRole.RESIDENT,
+    is_staff=False,
+    employee_types=None,
+    email="user@example.com",
+    full_name="User",
+    username="user",
+):
+    return SimpleNamespace(
+        id=pk,
+        is_staff=is_staff,
+        is_authenticated=True,
+        role=role,
+        employee_types=list(employee_types or []),
+        email=email,
+        full_name=full_name,
+        username=username,
+    )
+
+
+def _admin(pk=99):
+    return _user(pk, role=UserRole.ADMIN, is_staff=True, full_name="Admin")
+
+
+def _cleaning(pk=50):
+    return _user(
+        pk,
+        role=UserRole.EMPLOYEE,
+        employee_types=[EmployeeType.CLEANING],
+        full_name="Cleaner",
+    )
 
 
 # ---------------------------------------------------------------------- #
@@ -145,21 +183,21 @@ def test_create_ignores_admin_fields_in_payload(service):
 # ---------------------------------------------------------------------- #
 # list / get                                                             #
 # ---------------------------------------------------------------------- #
-def test_user_only_sees_own(service):
+def test_user_sees_all_in_list(service):
     service.create(_user(1), {"title": "a"})
     service.create(_user(2), {"title": "b"})
-    assert len(list(service.list(_user(1)))) == 1
+    assert len(list(service.list(_user(1)))) == 2
 
 
 def test_admin_sees_all(service):
     service.create(_user(1), {"title": "a"})
     service.create(_user(2), {"title": "b"})
-    assert len(list(service.list(_user(99, is_staff=True)))) == 2
+    assert len(list(service.list(_admin()))) == 2
 
 
 def test_list_filters_validated(service):
     with pytest.raises(BusinessRuleError):
-        service.list(_user(1, is_staff=True), status="WAT")
+        service.list(_user(1), status="WAT")
 
 
 def test_list_filters_by_priority_case_insensitive(service):
@@ -170,20 +208,14 @@ def test_list_filters_by_priority_case_insensitive(service):
     )
 
 
-def test_get_returns_for_owner(service):
+def test_get_returns_any_request(service):
     item = service.create(_user(1), {"title": "a"})
-    assert service.get(_user(1), item.id).id == item.id
-
-
-def test_get_404_for_non_owner(service):
-    item = service.create(_user(1), {"title": "a"})
-    with pytest.raises(NotFoundError):
-        service.get(_user(99), item.id)
+    assert service.get(_user(99), item.id).id == item.id
 
 
 def test_get_works_for_admin(service):
     item = service.create(_user(1), {"title": "a"})
-    assert service.get(_user(2, is_staff=True), item.id).id == item.id
+    assert service.get(_admin(), item.id).id == item.id
 
 
 # ---------------------------------------------------------------------- #
@@ -195,9 +227,9 @@ def test_owner_can_update_while_pending(service):
     assert updated.title == "b"
 
 
-def test_owner_cannot_update_after_admin_response(service):
+def test_owner_cannot_update_after_response(service):
     item = service.create(_user(1), {"title": "a"})
-    service.respond(_user(99, is_staff=True), item.id, "accept", "ok")
+    service.respond(_admin(), item.id, "accept", "ok")
     with pytest.raises(BusinessRuleError):
         service.update(_user(1), item.id, {"title": "b"})
 
@@ -212,23 +244,21 @@ def test_owner_cannot_set_status_via_update(service):
 
 def test_admin_can_update_anytime(service):
     item = service.create(_user(1), {"title": "a"})
-    service.respond(_user(99, is_staff=True), item.id, "accept", "ok")
-    service.update(
-        _user(99, is_staff=True), item.id, {"title": "edited by admin"}
-    )
-    assert service.get(_user(99, is_staff=True), item.id).title == "edited by admin"
+    service.respond(_admin(), item.id, "accept", "ok")
+    service.update(_admin(), item.id, {"title": "edited by admin"})
+    assert service.get(_admin(), item.id).title == "edited by admin"
 
 
 def test_owner_can_delete_while_pending(service):
     item = service.create(_user(1), {"title": "a"})
     service.delete(_user(1), item.id)
     with pytest.raises(NotFoundError):
-        service.get(_user(1, is_staff=True), item.id)
+        service.get(_user(1), item.id)
 
 
-def test_owner_cannot_delete_after_admin_response(service):
+def test_owner_cannot_delete_after_response(service):
     item = service.create(_user(1), {"title": "a"})
-    service.respond(_user(99, is_staff=True), item.id, "decline", "no thanks")
+    service.respond(_admin(), item.id, "decline", "no thanks")
     with pytest.raises(BusinessRuleError):
         service.delete(_user(1), item.id)
 
@@ -243,8 +273,8 @@ def test_update_empty_payload_rejected(service):
 # respond                                                                #
 # ---------------------------------------------------------------------- #
 def test_respond_accept_writes_status_and_metadata(service):
-    item = service.create(_user(1), {"title": "a"})
-    admin = _user(99, is_staff=True)
+    item = service.create(_user(1, email="a@x.com"), {"title": "a"})
+    admin = _admin()
     updated = service.respond(admin, item.id, "accept", "  we will fix it  ")
     assert updated.status == ServiceRequestModel.Status.ACCEPTED
     assert updated.admin_response == "we will fix it"
@@ -252,35 +282,54 @@ def test_respond_accept_writes_status_and_metadata(service):
     assert updated.responded_at is not None
 
 
-def test_respond_decline_writes_status(service):
-    item = service.create(_user(1), {"title": "a"})
-    updated = service.respond(
-        _user(99, is_staff=True), item.id, "decline", "out of scope"
-    )
+def test_respond_decline_writes_status(service, email):
+    item = service.create(_user(1, email="a@x.com"), {"title": "a"})
+    updated = service.respond(_admin(), item.id, "decline", "out of scope")
     assert updated.status == ServiceRequestModel.Status.DECLINED
+    assert email.sent[-1]["action"] == "decline"
 
 
-def test_respond_requires_admin(service):
+def test_respond_sends_email_on_accept(service, email):
+    item = service.create(_user(1, email="a@x.com"), {"title": "a"})
+    service.respond(_cleaning(), item.id, "accept", "ok")
+    assert email.sent[-1]["kind"] == "service_request_responded"
+    assert email.sent[-1]["to"] == "a@x.com"
+
+
+def test_respond_requires_cleaning_or_admin(service):
     item = service.create(_user(1), {"title": "a"})
     with pytest.raises(PermissionDeniedError):
         service.respond(_user(1), item.id, "accept", "hi")
+    with pytest.raises(PermissionDeniedError):
+        service.respond(
+            _user(2, role=UserRole.EMPLOYEE, employee_types=[EmployeeType.DOORMAN]),
+            item.id,
+            "accept",
+            "hi",
+        )
+
+
+def test_cleaning_employee_can_respond(service):
+    item = service.create(_user(1), {"title": "a"})
+    updated = service.respond(_cleaning(), item.id, "accept", "on it")
+    assert updated.status == ServiceRequestModel.Status.ACCEPTED
 
 
 def test_respond_rejects_invalid_action(service):
     item = service.create(_user(1), {"title": "a"})
     with pytest.raises(BusinessRuleError):
-        service.respond(_user(99, is_staff=True), item.id, "wat", "msg")
+        service.respond(_admin(), item.id, "wat", "msg")
 
 
 def test_respond_requires_non_empty_message(service):
     item = service.create(_user(1), {"title": "a"})
     with pytest.raises(BusinessRuleError):
-        service.respond(_user(99, is_staff=True), item.id, "accept", "   ")
+        service.respond(_admin(), item.id, "accept", "   ")
 
 
 def test_respond_blocks_double_answer(service):
     item = service.create(_user(1), {"title": "a"})
-    admin = _user(99, is_staff=True)
+    admin = _admin()
     service.respond(admin, item.id, "accept", "ok")
     with pytest.raises(BusinessRuleError):
         service.respond(admin, item.id, "decline", "changed mind")
@@ -288,7 +337,12 @@ def test_respond_blocks_double_answer(service):
 
 def test_respond_404_when_not_found(service):
     with pytest.raises(NotFoundError):
-        service.respond(_user(99, is_staff=True), 12345, "accept", "ok")
+        service.respond(_admin(), 12345, "accept", "ok")
+
+
+def test_employee_cannot_create(service):
+    with pytest.raises(PermissionDeniedError):
+        service.create(_cleaning(), {"title": "x"})
 
 
 # ---------------------------------------------------------------------- #
@@ -296,7 +350,7 @@ def test_respond_404_when_not_found(service):
 # ---------------------------------------------------------------------- #
 def test_complete_only_on_accepted(service):
     item = service.create(_user(1), {"title": "a"})
-    admin = _user(99, is_staff=True)
+    admin = _admin()
     with pytest.raises(BusinessRuleError):
         service.complete(admin, item.id)  # still PENDING
     service.respond(admin, item.id, "accept", "ok")
@@ -304,8 +358,8 @@ def test_complete_only_on_accepted(service):
     assert completed.status == ServiceRequestModel.Status.COMPLETED
 
 
-def test_complete_requires_admin(service):
+def test_complete_requires_cleaning_or_admin(service):
     item = service.create(_user(1), {"title": "a"})
-    service.respond(_user(99, is_staff=True), item.id, "accept", "ok")
+    service.respond(_admin(), item.id, "accept", "ok")
     with pytest.raises(PermissionDeniedError):
         service.complete(_user(1), item.id)

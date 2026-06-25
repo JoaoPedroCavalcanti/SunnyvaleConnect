@@ -127,8 +127,12 @@ class LoginView(APIView):
             user = result["user"]
             refresh = RefreshToken.for_user(user)
             refresh["role"] = user.role
+            refresh["employee_types"] = list(getattr(user, "employee_types", None) or [])
             access = refresh.access_token
             access["role"] = user.role
+            access["employee_types"] = list(
+                getattr(user, "employee_types", None) or []
+            )
             return Response({"access": str(access), "refresh": str(refresh)})
 
         if kind == KIND_PENDING:

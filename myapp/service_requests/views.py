@@ -3,7 +3,7 @@
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -15,6 +15,7 @@ from service_requests.serializers import (
     ServiceRequestRespondSerializer,
 )
 from shared.container import container
+from shared.permissions import IsAdminOrCleaning
 
 
 def _enum_values(enum_cls) -> list[str]:
@@ -33,8 +34,7 @@ class ServiceRequestListCreateView(APIView):
                 type=str,
                 enum=_enum_values(ServiceRequestModel.Status),
                 description=(
-                    "Filter by status. Residents only see their own "
-                    "requests; admins see every request."
+                    "Filter by status. Every authenticated user sees all requests."
                 ),
             ),
             OpenApiParameter(
@@ -115,7 +115,7 @@ class ServiceRequestRespondView(APIView):
     motivation that the resident will see.
     """
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAuthenticated, IsAdminOrCleaning]
 
     @extend_schema(
         request=ServiceRequestRespondSerializer,
@@ -137,7 +137,7 @@ class ServiceRequestRespondView(APIView):
 class ServiceRequestCompleteView(APIView):
     """Admin-only endpoint to mark an accepted request as completed."""
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAuthenticated, IsAdminOrCleaning]
 
     @extend_schema(
         request=None, responses={200: ServiceRequestOutputSerializer}
