@@ -293,7 +293,8 @@ class Container:
             "delivery_notification_service",
             lambda: DeliveryNotificationService(
                 repository=self.delivery_notification_repository,
-                user_repository=self.user_repository,
+                household_repository=self.household_repository,
+                membership_repository=self.membership_repository,
                 email_sender=self.email_sender,
             ),
         )

@@ -6,6 +6,7 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
+from households.models import Household
 from delivery_notification.models import DeliveryNotificationModel
 from service_requests.models import ServiceRequestModel
 from tests_base.base_tests_user import BaseTestsUsers, _gen_cpf
@@ -51,8 +52,13 @@ class EmployeeDashboardAPISmoke(BaseTestsUsers):
         self.assertEqual(self.client.get(DAY_SUMMARY_URL).status_code, 403)
 
     def test_doorman_day_summary(self):
+        household = Household.objects.create(
+            apartment=self.user_a.apartment,
+            block=self.user_a.block,
+            status=Household.Status.ACTIVE,
+        )
         DeliveryNotificationModel.objects.create(
-            user_to_delivery=self.user_a,
+            household=household,
             delivery_platform="other",
         )
         now = timezone.now()

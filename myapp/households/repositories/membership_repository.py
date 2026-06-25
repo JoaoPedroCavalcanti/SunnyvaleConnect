@@ -31,6 +31,16 @@ class IMembershipRepository(ABC):
     ) -> Iterable[HouseholdMembership]: ...
 
     @abstractmethod
+    def list_active_holders_for_households(
+        self, household_ids: list[int]
+    ) -> Iterable[HouseholdMembership]: ...
+
+    @abstractmethod
+    def get_active_holder(
+        self, household_id: int
+    ) -> HouseholdMembership | None: ...
+
+    @abstractmethod
     def list_active_for_user(self, user_id: int) -> Iterable[HouseholdMembership]: ...
 
     @abstractmethod
@@ -96,6 +106,26 @@ class DjangoMembershipRepository(IMembershipRepository):
             household_id=household_id,
             status=self._ACTIVE,
             role=HouseholdMembership.Role.HOLDER,
+        ).select_related("user")
+
+    def list_active_holders_for_households(self, household_ids):
+        if not household_ids:
+            return HouseholdMembership.objects.none()
+        return HouseholdMembership.objects.filter(
+            household_id__in=list(household_ids),
+            status=self._ACTIVE,
+            role=HouseholdMembership.Role.HOLDER,
+        ).select_related("user")
+
+    def get_active_holder(self, household_id):
+        return (
+            HouseholdMembership.objects.filter(
+                household_id=household_id,
+                status=self._ACTIVE,
+                role=HouseholdMembership.Role.HOLDER,
+            )
+            .select_related("user")
+            .first()
         )
 
     def list_active_for_user(self, user_id):

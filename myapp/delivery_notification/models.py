@@ -1,24 +1,28 @@
 from django.db import models
-from django.contrib.auth import get_user_model
+
+from households.models import Household
 
 
-# Create your models here.
 class DeliveryNotificationModel(models.Model):
     PLATFORMS = [
-        ("ifood", "Ifood"),
+        ("ifood", "iFood"),
         ("rappi", "Rappi"),
-        ("uber eats", "Uber Eats"),
-        ("doordash", "DoorDash"),
-        ("just eat", "Just Eat"),
-        ("other", "Other"),
+        ("amazon", "Amazon"),
+        ("mercado_livre", "Mercado Livre"),
+        ("magalu", "Magalu"),
+        ("shopee", "Shopee"),
+        ("correios", "Correios"),
+        ("other", "Outro"),
     ]
     PRIORITY = [("low", "Low"), ("medium", "Medium"), ("high", "High")]
 
-    user_to_delivery = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
+    household = models.ForeignKey(Household, on_delete=models.CASCADE)
+    notified_holder_name = models.CharField(max_length=150, blank=True, default="")
+    notified_holder_email = models.EmailField(blank=True, default="")
     title = models.CharField(max_length=100, blank=True, null=True, default="")
     description = models.CharField(max_length=300, blank=True, null=True, default="")
     delivery_platform = models.CharField(
-        choices=PLATFORMS, default="Other", max_length=20
+        choices=PLATFORMS, default="other", max_length=20
     )
     delivery_from = models.CharField(max_length=150, blank=True, null=True, default="")
     delivery_to = models.CharField(max_length=150, blank=True, null=True, default="")

@@ -1,17 +1,33 @@
 """Plain APIViews for delivery notifications."""
 
+from dataclasses import asdict
+
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from delivery_notification.serializers import (
+    DeliveryApartmentListItemSerializer,
     DeliveryNotificationInputSerializer,
     DeliveryNotificationOutputSerializer,
 )
 from shared.container import container
 from shared.permissions import IsAdminOrDoorman
+
+
+@extend_schema(tags=["delivery_notification"])
+class DeliveryApartmentListView(APIView):
+    permission_classes = [IsAdminOrDoorman]
+
+    @extend_schema(responses={200: DeliveryApartmentListItemSerializer(many=True)})
+    def get(self, request):
+        items = container.delivery_notification_service.list_apartments(request.user)
+        payload = [asdict(item) for item in items]
+        return Response(
+            DeliveryApartmentListItemSerializer(payload, many=True).data,
+            status=status.HTTP_200_OK,
+        )
 
 
 @extend_schema(tags=["delivery_notification"])

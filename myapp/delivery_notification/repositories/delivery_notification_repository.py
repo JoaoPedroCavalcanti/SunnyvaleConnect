@@ -22,10 +22,16 @@ class IDeliveryNotificationRepository(ABC):
 
 class DjangoDeliveryNotificationRepository(IDeliveryNotificationRepository):
     def list_all(self):
-        return DeliveryNotificationModel.objects.all().order_by("-created_at")
+        return DeliveryNotificationModel.objects.select_related("household").all().order_by(
+            "-created_at"
+        )
 
     def get_by_id(self, pk):
-        return DeliveryNotificationModel.objects.filter(pk=pk).first()
+        return (
+            DeliveryNotificationModel.objects.select_related("household")
+            .filter(pk=pk)
+            .first()
+        )
 
     def create(self, data):
         return DeliveryNotificationModel.objects.create(**data)

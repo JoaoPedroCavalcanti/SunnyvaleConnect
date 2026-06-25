@@ -35,13 +35,24 @@ class FakeEmailSender(IEmailSender):
             "visitor_name": visitor_name,
         })
 
-    def send_delivery_notification(self, to_email, user_name, delivery_platform, delivery_from):
+    def send_delivery_notification(
+        self,
+        to_email,
+        user_name,
+        delivery_platform,
+        delivery_from,
+        *,
+        apartment="",
+        block="",
+    ):
         self.sent.append({
             "kind": "delivery",
             "to": to_email,
             "user_name": user_name,
             "platform": delivery_platform,
             "from": delivery_from,
+            "apartment": apartment,
+            "block": block,
         })
 
     def send_household_join_request(

@@ -41,6 +41,9 @@ class IEmailSender(ABC):
         user_name: str,
         delivery_platform: str | None,
         delivery_from: str | None,
+        *,
+        apartment: str = "",
+        block: str = "",
     ) -> None: ...
 
     @abstractmethod
@@ -237,19 +240,29 @@ class DjangoEmailSender(IEmailSender):
         user_name: str,
         delivery_platform: str | None,
         delivery_from: str | None,
+        *,
+        apartment: str = "",
+        block: str = "",
     ) -> None:
         subject = "Delivery notification"
         received_at = timezone.localtime(timezone.now()).strftime(
             "%B %d, %Y at %I:%M %p"
         )
         details = [{"label": "Received at", "value": received_at}]
+        if apartment:
+            details.insert(0, {"label": "Unit", "value": self._format_unit(apartment, block)})
         if delivery_platform:
-            details.insert(0, {"label": "Delivery service", "value": delivery_platform})
-        if delivery_from:
             details.insert(
-                1 if delivery_platform else 0,
-                {"label": "Delivery from", "value": delivery_from},
+                1 if apartment else 0,
+                {"label": "Delivery service", "value": delivery_platform},
             )
+        if delivery_from:
+            insert_at = 0
+            if apartment:
+                insert_at += 1
+            if delivery_platform:
+                insert_at += 1
+            details.insert(insert_at, {"label": "Delivery from", "value": delivery_from})
         self._render_and_send(
             subject,
             "delivery_notification",
