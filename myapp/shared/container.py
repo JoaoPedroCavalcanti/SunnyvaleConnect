@@ -30,6 +30,7 @@ from shared.infrastructure.password_policy import (
     DefaultPasswordPolicy,
     IPasswordPolicy,
 )
+from shared.infrastructure.qr_encoder import IQRCodeEncoder, QRCodeEncoder
 from shared.infrastructure.string_mixer import IStringMixer, SecretStringMixer
 from shared.infrastructure.transactions import (
     DjangoTransactionRunner,
@@ -107,8 +108,8 @@ class Container:
         return self._resolve("phone_validator", BrazilianPhoneValidator)
 
     @property
-    def visitor_access_base_url(self) -> str:
-        return self._overrides.get("visitor_access_base_url", _VISITOR_ACCESS_BASE_URL)
+    def qr_encoder(self) -> IQRCodeEncoder:
+        return self._resolve("qr_encoder", QRCodeEncoder)
 
     @property
     def cache(self) -> ICache:
@@ -335,8 +336,7 @@ class Container:
                 group_repository=self.visitor_group_repository,
                 email_sender=self.email_sender,
                 code_generator=self.code_generator,
-                string_mixer=self.string_mixer,
-                visitor_access_base_url=self.visitor_access_base_url,
+                qr_encoder=self.qr_encoder,
             ),
         )
 

@@ -1,5 +1,6 @@
 import pytest
 from django.core import mail
+from django.utils import timezone
 
 from shared.infrastructure.email_renderer import render_email
 from shared.infrastructure.email_sender import DjangoEmailSender
@@ -16,10 +17,10 @@ pytestmark = pytest.mark.unit
                 "heading": "You're invited to Sunnyvale",
                 "visitor_name": "Alice",
                 "user_name": "Bob",
-                "link": "https://example.com/checkin/abc",
-                "access_note": "The check-in link will only be accessible after your scheduled time.",
+                "access_code": "A1B2C",
+                "access_note": "Show the QR code or tell the access code to the doorman.",
             },
-            ["Alice", "Bob", "https://example.com/checkin/abc", "Check in now"],
+            ["Alice", "Bob", "A1B2C", "Access code", "cid:visitor_qr"],
         ),
         (
             "household_request_rejected",
@@ -56,7 +57,32 @@ def test_render_email_includes_expected_content(
     html, plain = render_email(template_name, context)
     for fragment in expected_fragments:
         assert fragment in html
-        assert fragment in plain
+        if not fragment.startswith("cid:"):
+            assert fragment in plain
+
+
+def test_django_email_sender_sends_visitor_qr_access_with_code_and_image():
+    sender = DjangoEmailSender()
+    sender.send_visitor_qr_access(
+        to_email="visitor@example.com",
+        access_code="C0001",
+        qr_png=b"\x89PNG fake",
+        user_name="Host User",
+        datetime_checkin=timezone.now(),
+        datetime_checkout=timezone.now(),
+        visitor_name="Alice",
+    )
+
+    assert len(mail.outbox) == 1
+    message = mail.outbox[0]
+    assert message.subject == "Welcome to Sunnyvale"
+    assert message.to == ["visitor@example.com"]
+    assert "Access code: C0001" in message.body
+    html_body, mime_type = message.alternatives[0]
+    assert mime_type == "text/html"
+    assert "C0001" in html_body
+    assert "cid:visitor_qr" in html_body
+    assert "data:image/png;base64," not in html_body
 
 
 def test_django_email_sender_sends_html_and_plain():

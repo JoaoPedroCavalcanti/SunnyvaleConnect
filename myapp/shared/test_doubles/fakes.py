@@ -3,6 +3,7 @@
 from shared.infrastructure.cache import ICache
 from shared.infrastructure.code_generator import ICodeGenerator
 from shared.infrastructure.email_sender import IEmailSender
+from shared.infrastructure.qr_encoder import IQRCodeEncoder
 from shared.infrastructure.string_mixer import IStringMixer
 
 
@@ -10,11 +11,21 @@ class FakeEmailSender(IEmailSender):
     def __init__(self):
         self.sent: list[dict] = []
 
-    def send_visitor_invite(self, to_email, link, user_name, datetime_checkin, visitor_name):
+    def send_visitor_qr_access(
+        self,
+        to_email,
+        access_code,
+        qr_png,
+        user_name,
+        datetime_checkin,
+        datetime_checkout,
+        visitor_name,
+    ):
         self.sent.append({
-            "kind": "visitor_invite",
+            "kind": "visitor_qr_access",
             "to": to_email,
-            "link": link,
+            "access_code": access_code,
+            "qr_png": qr_png,
             "user_name": str(user_name),
             "visitor_name": visitor_name,
         })
@@ -172,9 +183,19 @@ class FakeEmailSender(IEmailSender):
 class FakeCodeGenerator(ICodeGenerator):
     def __init__(self, value: str = "12345"):
         self.value = value
+        self._counter = 0
 
     def five_digits(self) -> str:
         return self.value
+
+    def alphanumeric(self, length: int = 5) -> str:
+        self._counter += 1
+        return f"C{self._counter:04d}"[:length]
+
+
+class FakeQRCodeEncoder(IQRCodeEncoder):
+    def encode_png(self, payload: str) -> bytes:
+        return f"qr:{payload}".encode()
 
 
 class FakeStringMixer(IStringMixer):

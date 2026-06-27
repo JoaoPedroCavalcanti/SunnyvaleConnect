@@ -10,7 +10,7 @@ from shared.exceptions import BusinessRuleError, NotFoundError, PermissionDenied
 from shared.test_doubles.fakes import (
     FakeCodeGenerator,
     FakeEmailSender,
-    FakeStringMixer,
+    FakeQRCodeEncoder,
 )
 from visitor_access.models import VisitorAccessModel
 from visitor_access.repositories.visitor_access_repository import (
@@ -28,11 +28,15 @@ pytestmark = pytest.mark.unit
 Status = VisitorAccessModel.Status
 
 
+def _visit_window_end(item):
+    return getattr(item, "checkout_date_time", None) or item.scheduled_date
+
+
 def _display_status(item) -> str:
     """Replicates VisitorAccessModel.display_status for SimpleNamespace
     items (the fake repo doesn't materialize real models)."""
     now = timezone.now()
-    if item.status == Status.SCHEDULED and item.scheduled_date < now:
+    if item.status == Status.SCHEDULED and _visit_window_end(item) < now:
         return Status.NO_SHOW
     if (
         item.status == Status.CHECKED_IN
@@ -82,15 +86,36 @@ class FakeVisitorAccessRepo(IVisitorAccessRepository):
     def get_by_id(self, pk):
         return self._items.get(int(pk))
 
+    def get_by_access_token(self, token):
+        for item in self._items.values():
+            if getattr(item, "access_token", None) == token:
+                return item
+        return None
+
+    def get_by_access_code(self, code):
+        normalized = code.strip().upper()
+        for item in self._items.values():
+            value = getattr(item, "access_code", None)
+            if value and value.upper() == normalized:
+                return item
+        return None
+
+    def exists_with_access_token(self, token):
+        return self.get_by_access_token(token) is not None
+
+    def exists_with_access_code(self, code):
+        return self.get_by_access_code(code) is not None
+
     def create(self, data):
         defaults = {
             "checkout_date_time": None,
             "checkin_code": "",
             "checkout_code": "",
-            "link_checkin": "",
-            "link_checkout": "",
             "status": Status.SCHEDULED,
             "visitor_group": None,
+            "qr_access_enabled": False,
+            "access_token": None,
+            "access_code": None,
         }
         defaults.update(data)
         item = SimpleNamespace(id=self._next_id, **defaults)
@@ -119,9 +144,9 @@ class FakeVisitorAccessRepo(IVisitorAccessRepository):
             allowed = set(status_in)
             out = [r for r in out if r.status in allowed]
         if scheduled_after is not None:
-            out = [r for r in out if r.scheduled_date >= scheduled_after]
+            out = [r for r in out if _visit_window_end(r) >= scheduled_after]
         if scheduled_before is not None:
-            out = [r for r in out if r.scheduled_date < scheduled_before]
+            out = [r for r in out if _visit_window_end(r) < scheduled_before]
         if is_group is True:
             out = [r for r in out if getattr(r, "visitor_group_id", None) is not None]
         elif is_group is False:
@@ -138,6 +163,15 @@ class FakeVisitorAccessRepo(IVisitorAccessRepository):
             excluded = set(exclude_statuses)
             rows = [r for r in rows if r.status not in excluded]
         return len(rows)
+
+    def count_checked_in_between(self, start, end):
+        return len(
+            [
+                r
+                for r in self._items.values()
+                if r.status == Status.CHECKED_IN
+            ]
+        )
 
     def count_with_scheduled_after(
         self, after, *, status_in=None, exclude_statuses=None
@@ -217,9 +251,8 @@ def service(email_sender, group_repo):
         repository=FakeVisitorAccessRepo(),
         group_repository=group_repo,
         email_sender=email_sender,
-        code_generator=FakeCodeGenerator("99999"),
-        string_mixer=FakeStringMixer(),
-        visitor_access_base_url="http://test/visitor_access",
+        code_generator=FakeCodeGenerator("A1B2C"),
+        qr_encoder=FakeQRCodeEncoder(),
     )
 
 
@@ -249,8 +282,16 @@ class TestCreate:
         item = service.create(u, _payload())
         assert item.host_user is u
         assert item.status == Status.SCHEDULED
-        assert "/checkin/" in item.link_checkin
-        assert any(s["kind"] == "visitor_invite" for s in email_sender.sent)
+        assert item.qr_access_enabled is False
+        assert all(s["kind"] != "visitor_qr_access" for s in email_sender.sent)
+
+    def test_qr_access_generates_credentials_and_sends_email(self, service, email_sender):
+        u = _user()
+        item = service.create(u, _payload(qr_access_enabled=True))
+        assert item.qr_access_enabled is True
+        assert item.access_token
+        assert item.access_code == "C0001"
+        assert any(s["kind"] == "visitor_qr_access" for s in email_sender.sent)
 
     def test_regular_user_cannot_pass_host_user(self, service):
         with pytest.raises(BusinessRuleError):
@@ -290,13 +331,24 @@ class TestCreate:
 
     def test_solo_invite_skipped_when_no_email(self, service, email_sender):
         service.create(_user(), _payload(email=""))
-        assert all(s["kind"] != "visitor_invite" for s in email_sender.sent)
+        assert all(s["kind"] != "visitor_qr_access" for s in email_sender.sent)
+
+    def test_qr_access_requires_email(self, service):
+        with pytest.raises(BusinessRuleError) as exc:
+            service.create(_user(), _payload(email="", qr_access_enabled=True))
+        assert exc.value.field == "email"
+
+    def test_qr_access_rejects_blank_email(self, service):
+        with pytest.raises(BusinessRuleError):
+            service.create(_user(), _payload(email="   ", qr_access_enabled=True))
 
 
 class TestCreateGroupVisit:
-    """Group visits expand the invite into one email per member."""
+    """Group visits create one row (and QR) per member."""
 
-    def test_invites_each_member_with_own_name(self, service, email_sender, group_repo):
+    def test_invites_each_member_with_own_credentials(
+        self, service, email_sender, group_repo
+    ):
         group = SimpleNamespace(id=42, name="Família Pai")
         group_repo.members_by_group[42] = [
             SimpleNamespace(name="João", email="joao@example.com"),
@@ -304,140 +356,128 @@ class TestCreateGroupVisit:
         ]
         u = _user(1)
 
-        item = service.create(
+        visits = service.create_group_visits(
             u,
             _payload(
-                visitor_name=group.name,
-                email="",
                 visitor_group=group,
+                email="",
+                qr_access_enabled=True,
             ),
         )
-        assert item.visitor_group_id == 42
+        assert len(visits) == 2
+        assert visits[0].access_code != visits[1].access_code
+        assert visits[0].access_token != visits[1].access_token
 
-        invites = [s for s in email_sender.sent if s["kind"] == "visitor_invite"]
+        invites = [s for s in email_sender.sent if s["kind"] == "visitor_qr_access"]
         assert sorted(s["to"] for s in invites) == [
             "joao@example.com",
             "maria@example.com",
         ]
+        assert sorted(s["access_code"] for s in invites) == sorted(
+            v.access_code for v in visits
+        )
         assert sorted(s["visitor_name"] for s in invites) == ["João", "Maria"]
 
-    def test_members_without_email_are_skipped(
-        self, service, email_sender, group_repo
+    def test_group_qr_access_requires_email_for_every_member(
+        self, service, group_repo
     ):
         group = SimpleNamespace(id=7, name="G")
         group_repo.members_by_group[7] = [
             SimpleNamespace(name="A", email="a@x.com"),
             SimpleNamespace(name="B", email=""),
         ]
-        service.create(
-            _user(),
-            _payload(visitor_name="G", email="", visitor_group=group),
-        )
-        invites = [s for s in email_sender.sent if s["kind"] == "visitor_invite"]
-        assert [s["to"] for s in invites] == ["a@x.com"]
+        with pytest.raises(BusinessRuleError) as exc:
+            service.create_group_visits(
+                _user(),
+                _payload(visitor_group=group, email="", qr_access_enabled=True),
+            )
+        assert exc.value.field == "email"
 
 
-class TestCheckin:
-    def test_checkin_inside_window(self, service, email_sender):
+class TestValidateAccess:
+    def test_doorman_validates_by_code(self, service, email_sender):
         u = _user(1)
-        item = service.create(u, _payload())
+        doorman = _user(2, role="EMPLOYEE", employee_types=["DOORMAN"])
+        item = service.create(u, _payload(qr_access_enabled=True))
         item.checkin_date_time = timezone.now() - timedelta(minutes=5)
         item.checkout_date_time = timezone.now() + timedelta(hours=2)
 
-        result = service.checkin(str(item.id))
-        assert result == {"checkin_code": "99999"}
-        assert item.status == Status.CHECKED_IN
+        result = service.validate_access(doorman, item.access_code)
+        assert result.status == Status.CHECKED_IN
         assert any(s["kind"] == "checkin" for s in email_sender.sent)
 
-    def test_checkin_outside_window(self, service):
+    def test_doorman_validates_by_qr_payload(self, service):
         u = _user(1)
-        item = service.create(u, _payload(scheduled_date=timezone.now() + timedelta(days=2)))
-        result = service.checkin(str(item.id))
-        assert isinstance(result, str)
-        assert "scheduled time" in result
+        doorman = _user(2, role="EMPLOYEE", employee_types=["DOORMAN"])
+        item = service.create(u, _payload(qr_access_enabled=True))
+        item.checkin_date_time = timezone.now() - timedelta(minutes=5)
+        item.checkout_date_time = timezone.now() + timedelta(hours=2)
 
-    def test_checkin_after_checkout_blocked(self, service):
+        payload = f"svconnect:visitor:{item.access_token}"
+        result = service.validate_access(doorman, payload)
+        assert result.status == Status.CHECKED_IN
+
+    def test_validate_outside_window(self, service):
+        doorman = _user(2, role="EMPLOYEE", employee_types=["DOORMAN"])
         u = _user(1)
-        item = service.create(u, _payload())
+        item = service.create(
+            u, _payload(scheduled_date=timezone.now() + timedelta(days=2), qr_access_enabled=True)
+        )
+        with pytest.raises(BusinessRuleError):
+            service.validate_access(doorman, item.access_code)
+
+    def test_validate_after_checkout_blocked(self, service):
+        doorman = _user(2, role="EMPLOYEE", employee_types=["DOORMAN"])
+        u = _user(1)
+        item = service.create(u, _payload(qr_access_enabled=True))
         item.status = Status.CHECKED_OUT
         with pytest.raises(BusinessRuleError):
-            service.checkin(str(item.id))
+            service.validate_access(doorman, item.access_code)
 
-    def test_checkin_blocked_when_cancelled(self, service):
+    def test_validate_blocked_when_cancelled(self, service):
+        doorman = _user(2, role="EMPLOYEE", employee_types=["DOORMAN"])
         u = _user(1)
-        item = service.create(u, _payload())
+        item = service.create(u, _payload(qr_access_enabled=True))
         item.status = Status.CANCELLED
         with pytest.raises(BusinessRuleError):
-            service.checkin(str(item.id))
+            service.validate_access(doorman, item.access_code)
 
-    def test_group_checkin_notifies_all_members(
+    def test_validate_already_used(self, service):
+        doorman = _user(2, role="EMPLOYEE", employee_types=["DOORMAN"])
+        u = _user(1)
+        item = service.create(u, _payload(qr_access_enabled=True))
+        item.checkin_date_time = timezone.now() - timedelta(minutes=5)
+        item.checkout_date_time = timezone.now() + timedelta(hours=2)
+        item.status = Status.CHECKED_IN
+        with pytest.raises(BusinessRuleError):
+            service.validate_access(doorman, item.access_code)
+
+    def test_resident_cannot_validate(self, service):
+        u = _user(1)
+        item = service.create(u, _payload(qr_access_enabled=True))
+        with pytest.raises(PermissionDeniedError):
+            service.validate_access(u, item.access_code)
+
+    def test_group_validate_notifies_only_checked_in_member(
         self, service, email_sender, group_repo
     ):
+        doorman = _user(2, role="EMPLOYEE", employee_types=["DOORMAN"])
         group = SimpleNamespace(id=11, name="G")
         group_repo.members_by_group[11] = [
             SimpleNamespace(name="A", email="a@x.com"),
             SimpleNamespace(name="B", email="b@x.com"),
         ]
-        item = service.create(
+        visits = service.create_group_visits(
             _user(),
-            _payload(visitor_name="G", email="", visitor_group=group),
+            _payload(visitor_group=group, email="", qr_access_enabled=True),
         )
-        item.checkin_date_time = timezone.now() - timedelta(minutes=1)
-        item.checkout_date_time = timezone.now() + timedelta(hours=1)
+        visit_a = next(v for v in visits if v.visitor_name == "A")
+        visit_a.checkin_date_time = timezone.now() - timedelta(minutes=1)
+        visit_a.checkout_date_time = timezone.now() + timedelta(hours=1)
 
-        service.checkin(str(item.id))
+        service.validate_access(doorman, visit_a.access_code)
         checkin_emails = [s for s in email_sender.sent if s["kind"] == "checkin"]
-        assert sorted(s["to"] for s in checkin_emails) == ["a@x.com", "b@x.com"]
-
-
-class TestCheckout:
-    def test_checkout_blocked_if_still_scheduled(self, service):
-        u = _user(1)
-        item = service.create(u, _payload())
-        with pytest.raises(BusinessRuleError):
-            service.checkout(str(item.id))
-
-    def test_checkout_after_checkin(self, service, email_sender):
-        u = _user(1)
-        item = service.create(u, _payload(scheduled_date=timezone.now() + timedelta(hours=2)))
-        item.status = Status.CHECKED_IN
-        item.checkin_code = "11111"
-
-        result = service.checkout(str(item.id))
-        assert result == {"checkout_code": "99999"}
-        assert item.status == Status.CHECKED_OUT
-        assert any(s["kind"] == "checkout" for s in email_sender.sent)
-
-    def test_checkout_blocked_when_cancelled(self, service):
-        u = _user(1)
-        item = service.create(u, _payload())
-        item.status = Status.CANCELLED
-        with pytest.raises(BusinessRuleError):
-            service.checkout(str(item.id))
-
-    def test_group_checkout_notifies_all_members(
-        self, service, email_sender, group_repo
-    ):
-        group = SimpleNamespace(id=22, name="G")
-        group_repo.members_by_group[22] = [
-            SimpleNamespace(name="A", email="a@x.com"),
-            SimpleNamespace(name="B", email="b@x.com"),
-        ]
-        item = service.create(
-            _user(),
-            _payload(
-                visitor_name="G",
-                email="",
-                visitor_group=group,
-                scheduled_date=timezone.now() + timedelta(hours=2),
-            ),
-        )
-        item.status = Status.CHECKED_IN
-        item.checkin_code = "11111"
-
-        service.checkout(str(item.id))
-        checkout_emails = [s for s in email_sender.sent if s["kind"] == "checkout"]
-        assert sorted(s["to"] for s in checkout_emails) == ["a@x.com", "b@x.com"]
+        assert [s["to"] for s in checkin_emails] == ["a@x.com"]
 
 
 class TestDelete:
@@ -494,6 +534,20 @@ class TestAllDay:
         item = service.create(u, _payload(scheduled_date=earlier_today, all_day=True))
         assert item.all_day is True
 
+    def test_all_day_today_stays_scheduled_and_lists_as_future(self, service):
+        u = _user(1)
+        earlier_today = timezone.localtime().replace(
+            hour=1, minute=0, second=0, microsecond=0
+        )
+        item = service.create(u, _payload(scheduled_date=earlier_today, all_day=True))
+        assert _display_status(item) == Status.SCHEDULED
+        future_ids = {v.id for v in service.list_for(u, period="future")}
+        assert item.id in future_ids
+        past_ids = {v.id for v in service.list_for(u, period="past")}
+        assert item.id not in past_ids
+        scheduled_ids = {v.id for v in service.list_for(u, status="SCHEDULED")}
+        assert item.id in scheduled_ids
+
     def test_all_day_past_day_rejected(self, service):
         with pytest.raises(BusinessRuleError):
             service.create(
@@ -532,9 +586,11 @@ def _seed_visits(service, owner):
     # past + still SCHEDULED → NO_SHOW
     no_show = service.create(owner, _payload(scheduled_date=now + timedelta(days=2)))
     no_show.scheduled_date = now - timedelta(days=2)
+    no_show.checkout_date_time = now - timedelta(days=1)
     # past + already CHECKED_OUT
     concluded = service.create(owner, _payload(scheduled_date=now + timedelta(days=2)))
     concluded.scheduled_date = now - timedelta(days=1)
+    concluded.checkout_date_time = now - timedelta(hours=20)
     concluded.status = Status.CHECKED_OUT
     # cancelled (still future)
     cancelled = service.create(owner, _payload(scheduled_date=now + timedelta(days=3)))
@@ -629,14 +685,14 @@ class TestListFilters:
             SimpleNamespace(name="A", email="a@x.com")
         ]
         solo = service.create(u, _payload())
-        group_visit = service.create(
+        group_visit = service.create_group_visits(
             u,
             _payload(
-                visitor_name="G",
-                email="",
                 visitor_group=SimpleNamespace(id=1, name="G"),
+                email="",
+                qr_access_enabled=True,
             ),
-        )
+        )[0]
         ids = {v.id for v in service.list_for(u, is_group=False)}
         assert solo.id in ids
         assert group_visit.id not in ids
@@ -647,14 +703,14 @@ class TestListFilters:
             SimpleNamespace(name="A", email="a@x.com")
         ]
         solo = service.create(u, _payload())
-        group_visit = service.create(
+        group_visit = service.create_group_visits(
             u,
             _payload(
-                visitor_name="G",
-                email="",
                 visitor_group=SimpleNamespace(id=1, name="G"),
+                email="",
+                qr_access_enabled=True,
             ),
-        )
+        )[0]
         ids = {v.id for v in service.list_for(u, is_group=True)}
         assert solo.id not in ids
         assert group_visit.id in ids
@@ -672,6 +728,7 @@ class TestDisplayStatus:
         u = _user(1)
         item = service.create(u, _payload())
         item.scheduled_date = timezone.now() - timedelta(hours=1)
+        item.checkout_date_time = timezone.now() - timedelta(minutes=30)
         assert _display_status(item) == Status.NO_SHOW
 
     def test_checked_in_after_checkout_becomes_expired(self, service):

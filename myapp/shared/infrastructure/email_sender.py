@@ -3,24 +3,29 @@
 import logging
 from abc import ABC, abstractmethod
 from datetime import date, datetime, time
+from email.mime.image import MIMEImage
 
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives, send_mail
 from django.utils import timezone
 
 from shared.infrastructure.email_renderer import render_email
 
 logger = logging.getLogger(__name__)
 
+_VISITOR_QR_CONTENT_ID = "visitor_qr"
+
 
 class IEmailSender(ABC):
     @abstractmethod
-    def send_visitor_invite(
+    def send_visitor_qr_access(
         self,
         to_email: str,
-        link: str,
+        access_code: str,
+        qr_png: bytes,
         user_name: str,
         datetime_checkin: datetime,
+        datetime_checkout: datetime,
         visitor_name: str,
     ) -> None: ...
 
@@ -162,33 +167,63 @@ class DjangoEmailSender(IEmailSender):
         html_message, plain_message = render_email(template_name, context)
         self._send(subject, plain_message, to_email, html_message=html_message)
 
-    def send_visitor_invite(
+    def send_visitor_qr_access(
         self,
         to_email: str,
-        link: str,
+        access_code: str,
+        qr_png: bytes,
         user_name: str,
         datetime_checkin: datetime,
+        datetime_checkout: datetime,
         visitor_name: str,
     ) -> None:
         subject = "Welcome to Sunnyvale"
         checkin_label = timezone.localtime(datetime_checkin).strftime(
             "%B %d, %Y at %I:%M %p"
         )
-        self._render_and_send(
-            subject,
+        checkout_label = timezone.localtime(datetime_checkout).strftime(
+            "%B %d, %Y at %I:%M %p"
+        )
+        access_note = (
+            f"Show the QR code or tell the access code to the doorman "
+            f"between {checkin_label} and {checkout_label}."
+        )
+        html_message, _ = render_email(
             "visitor_invite",
             {
                 "heading": "You're invited to Sunnyvale",
                 "visitor_name": visitor_name,
                 "user_name": user_name,
-                "link": link,
-                "access_note": (
-                    f"The check-in link will only be accessible after your "
-                    f"scheduled time: {checkin_label}."
-                ),
+                "access_code": access_code,
+                "access_note": access_note,
             },
-            to_email,
         )
+        plain_message = (
+            f"Dear {visitor_name},\n\n"
+            f"You have been invited by {user_name} to visit Sunnyvale.\n\n"
+            f"Access code: {access_code}\n\n"
+            f"{access_note}\n\n"
+            f"Thank you and we look forward to your visit!"
+        )
+        message = EmailMultiAlternatives(
+            subject,
+            plain_message,
+            settings.DEFAULT_FROM_EMAIL,
+            [to_email],
+        )
+        message.mixed_subtype = "related"
+        message.attach_alternative(html_message, "text/html")
+        image = MIMEImage(qr_png, _subtype="png")
+        image.add_header("Content-ID", f"<{_VISITOR_QR_CONTENT_ID}>")
+        image.add_header("Content-Disposition", "inline")
+        message.attach(image)
+        try:
+            message.send(fail_silently=False)
+        except Exception:
+            logger.exception(
+                "Failed to send email '%s' to %s", subject, to_email
+            )
+            raise
 
     def send_checkin_notification(
         self, to_email: str, user_name: str, visitor_name: str

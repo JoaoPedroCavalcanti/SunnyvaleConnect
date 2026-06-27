@@ -80,8 +80,13 @@ class VisitorAccessModel(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     description = models.TextField(max_length=150, blank=True, null=True, default="")
-    link_checkin = models.CharField(max_length=255, blank=True, null=True)
-    link_checkout = models.CharField(max_length=255, blank=True, null=True)
+    qr_access_enabled = models.BooleanField(default=False)
+    access_token = models.CharField(
+        max_length=64, blank=True, null=True, default=None, unique=True
+    )
+    access_code = models.CharField(
+        max_length=10, blank=True, null=True, default=None, unique=True
+    )
 
     @property
     def display_status(self) -> str:
@@ -92,8 +97,10 @@ class VisitorAccessModel(models.Model):
         serializers without touching the DB.
         """
         now = timezone.now()
-        if self.status == self.Status.SCHEDULED and self.scheduled_date < now:
-            return self.Status.NO_SHOW
+        if self.status == self.Status.SCHEDULED:
+            window_end = self.checkout_date_time or self.scheduled_date
+            if window_end < now:
+                return self.Status.NO_SHOW
         if (
             self.status == self.Status.CHECKED_IN
             and self.checkout_date_time is not None

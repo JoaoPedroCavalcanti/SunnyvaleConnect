@@ -1,5 +1,6 @@
 """Business rules for visitor access."""
 
+import secrets
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 
@@ -8,7 +9,7 @@ from django.utils import timezone
 from shared.exceptions import BusinessRuleError, NotFoundError, PermissionDeniedError
 from shared.infrastructure.code_generator import ICodeGenerator
 from shared.infrastructure.email_sender import IEmailSender
-from shared.infrastructure.string_mixer import IStringMixer
+from shared.infrastructure.qr_encoder import IQRCodeEncoder
 from shared.roles import can_doorman_ops, can_see_all_visits, ensure_not_employee, is_admin
 from visitor_access.models import VisitorAccessModel
 from visitor_access.repositories.visitor_access_repository import (
@@ -24,6 +25,8 @@ from visitor_access.repositories.visitor_group_repository import (
 _PERIOD_FUTURE = "future"
 _PERIOD_PAST = "past"
 _VALID_PERIODS = (_PERIOD_FUTURE, _PERIOD_PAST)
+_ACCESS_CODE_LENGTH = 5
+_QR_PAYLOAD_PREFIX = "svconnect:visitor:"
 
 
 class IVisitorAccessService(ABC):
@@ -43,13 +46,13 @@ class IVisitorAccessService(ABC):
     def create(self, user, payload: dict) -> VisitorAccessModel: ...
 
     @abstractmethod
+    def create_group_visits(self, user, payload: dict) -> list[VisitorAccessModel]: ...
+
+    @abstractmethod
     def delete(self, user, pk: int) -> VisitorAccessModel: ...
 
     @abstractmethod
-    def checkin(self, mixed_link: str): ...
-
-    @abstractmethod
-    def checkout(self, mixed_link: str): ...
+    def validate_access(self, user, credential: str) -> VisitorAccessModel: ...
 
     @abstractmethod
     def notify_arrival(self, user, pk: int) -> VisitorAccessModel: ...
@@ -57,7 +60,6 @@ class IVisitorAccessService(ABC):
 
 class VisitorAccessService(IVisitorAccessService):
     DEFAULT_VISIT_DURATION = timedelta(hours=3)
-    CHECKOUT_WINDOW = timedelta(hours=10)
 
     Status = VisitorAccessModel.Status
 
@@ -67,15 +69,13 @@ class VisitorAccessService(IVisitorAccessService):
         group_repository: IVisitorGroupRepository,
         email_sender: IEmailSender,
         code_generator: ICodeGenerator,
-        string_mixer: IStringMixer,
-        visitor_access_base_url: str,
+        qr_encoder: IQRCodeEncoder,
     ):
         self._repo = repository
         self._group_repo = group_repository
         self._email = email_sender
         self._codes = code_generator
-        self._mixer = string_mixer
-        self._base_url = visitor_access_base_url
+        self._qr = qr_encoder
 
     # ------------------------------------------------------------------ #
     # listing                                                            #
@@ -124,10 +124,48 @@ class VisitorAccessService(IVisitorAccessService):
     def create(self, user, payload: dict):
         ensure_not_employee(user, action="register visitors")
         data = dict(payload)
+        qr_access_enabled = bool(data.pop("qr_access_enabled", False))
+        self._validate_create_payload(user, data, qr_access_enabled)
+        return self._persist_visit(user, data, qr_access_enabled)
+
+    def create_group_visits(self, user, payload: dict) -> list[VisitorAccessModel]:
+        ensure_not_employee(user, action="register visitors")
+        data = dict(payload)
+        qr_access_enabled = bool(data.pop("qr_access_enabled", False))
+        group = data.get("visitor_group")
+        if not group:
+            raise BusinessRuleError(
+                "visitor_group is required.", field="visitor_group"
+            )
+
+        members = self._group_repo.list_members(group.id)
+        if not members:
+            raise BusinessRuleError(
+                "This group has no members. Add members before scheduling a visit."
+            )
+
+        self._validate_create_payload(
+            user, data, qr_access_enabled, group_members=members
+        )
+
+        visits: list[VisitorAccessModel] = []
+        for member in members:
+            member_data = dict(data)
+            member_data["visitor_name"] = member.name
+            member_data["email"] = member.email or ""
+            visits.append(self._persist_visit(user, member_data, qr_access_enabled))
+        return visits
+
+    def _validate_create_payload(
+        self,
+        user,
+        data: dict,
+        qr_access_enabled: bool,
+        *,
+        group_members=None,
+    ) -> None:
         scheduled_date = data.get("scheduled_date")
         if scheduled_date and scheduled_date < timezone.now():
-            # all_day visits scheduled "today" are still allowed: the window is
-            # the entire day, so the past-date check uses date granularity.
             if data.get("all_day"):
                 if scheduled_date.date() < timezone.now().date():
                     raise BusinessRuleError(
@@ -155,10 +193,23 @@ class VisitorAccessService(IVisitorAccessService):
                 )
             data["host_user"] = user
 
+        if qr_access_enabled:
+            if group_members is not None:
+                if any(not (m.email or "").strip() for m in group_members):
+                    raise BusinessRuleError(
+                        "QR access requires an email for every group member.",
+                        field="email",
+                    )
+            elif not (data.get("email") or "").strip():
+                raise BusinessRuleError(
+                    "QR access requires a visitor email.",
+                    field="email",
+                )
+
+    def _persist_visit(self, user, data: dict, qr_access_enabled: bool):
+        scheduled_date = data.get("scheduled_date")
         all_day = bool(data.get("all_day"))
         if all_day:
-            # the day boundary is in the project's local timezone, so a visit
-            # scheduled for "today" covers 00:00 → 23:59:59 local time.
             local = timezone.localtime(scheduled_date)
             day_start = local.replace(hour=0, minute=0, second=0, microsecond=0)
             day_end = local.replace(hour=23, minute=59, second=59, microsecond=0)
@@ -171,9 +222,13 @@ class VisitorAccessService(IVisitorAccessService):
         data["status"] = self.Status.SCHEDULED
         data.setdefault("checkin_code", "")
         data.setdefault("checkout_code", "")
-        # placeholders, filled after insert (need id for the link)
-        data.setdefault("link_checkin", "")
-        data.setdefault("link_checkout", "")
+        data["qr_access_enabled"] = qr_access_enabled
+        data["access_token"] = None
+        data["access_code"] = None
+
+        if qr_access_enabled:
+            data["access_token"] = self._generate_unique_token()
+            data["access_code"] = self._generate_unique_code()
 
         instance = self._repo.create(data)
 
@@ -182,21 +237,26 @@ class VisitorAccessService(IVisitorAccessService):
                 instance.checkin_date_time + self.DEFAULT_VISIT_DURATION
             )
 
-        mixed = self._mixer.mix(str(instance.id))
-        instance.link_checkin = f"{self._base_url}/checkin/{mixed}"
-
-        # Persist before notifying: a failed save must not produce invite
-        # emails pointing to a record that was rolled back.
         saved = self._repo.save(instance)
 
-        for to_email, name in self._invite_recipients(saved):
-            self._email.send_visitor_invite(
-                to_email=to_email,
-                link=saved.link_checkin,
-                user_name=saved.host_user,
-                datetime_checkin=saved.checkin_date_time,
-                visitor_name=name,
-            )
+        if qr_access_enabled and saved.email:
+            try:
+                qr_png = self._qr.encode_png(self._qr_payload(saved.access_token))
+                self._email.send_visitor_qr_access(
+                    to_email=saved.email,
+                    access_code=saved.access_code,
+                    qr_png=qr_png,
+                    user_name=saved.host_user,
+                    datetime_checkin=saved.checkin_date_time,
+                    datetime_checkout=saved.checkout_date_time,
+                    visitor_name=saved.visitor_name,
+                )
+            except Exception as exc:
+                self._repo.delete(saved)
+                raise BusinessRuleError(
+                    "Could not send the visitor QR access email.",
+                    field="email",
+                ) from exc
 
         return saved
 
@@ -218,70 +278,50 @@ class VisitorAccessService(IVisitorAccessService):
         return self._repo.save(instance)
 
     # ------------------------------------------------------------------ #
-    # check-in / check-out                                               #
+    # doorman validation (QR or manual code)                             #
     # ------------------------------------------------------------------ #
-    def checkin(self, mixed_link: str):
-        obj_id = self._mixer.unmix(mixed_link)
-        instance = self._repo.get_by_id(obj_id)
-        if not instance:
-            raise NotFoundError("Visitor access not found.")
-
-        if instance.status == self.Status.CANCELLED:
-            raise BusinessRuleError("This visitor access has been cancelled.")
-        if instance.status == self.Status.CHECKED_OUT:
-            raise BusinessRuleError(f"You already {instance.status}")
-
-        now = timezone.now()
-        if instance.checkin_date_time < now < instance.checkout_date_time:
-            if instance.checkin_code:
-                return {"checkin_code": instance.checkin_code}
-
-            code = self._codes.five_digits()
-            instance.checkin_code = code
-            instance.status = self.Status.CHECKED_IN
-            self._repo.save(instance)
-
-            for to_email, name in self._notification_recipients(instance):
-                self._email.send_checkin_notification(
-                    to_email=to_email,
-                    user_name=instance.host_user,
-                    visitor_name=name,
-                )
-            return {"checkin_code": code}
-
-        return "Please checkin just in your scheduled time"
-
-    def checkout(self, mixed_link: str):
-        obj_id = self._mixer.unmix(mixed_link)
-        instance = self._repo.get_by_id(obj_id)
-        if not instance:
-            raise NotFoundError("Visitor access not found.")
-
-        if instance.status == self.Status.CANCELLED:
-            raise BusinessRuleError("This visitor access has been cancelled.")
-        if instance.status == self.Status.SCHEDULED:
-            raise BusinessRuleError(
-                "You can not check-out because you did not checked-in"
+    def validate_access(self, user, credential: str) -> VisitorAccessModel:
+        if not can_doorman_ops(user):
+            raise PermissionDeniedError(
+                "Only admins or doorman staff can validate visitor access."
             )
 
-        if (instance.scheduled_date - timezone.now()) < self.CHECKOUT_WINDOW:
-            if instance.checkout_code:
-                return {"checkout_code": instance.checkout_code}
+        credential = (credential or "").strip()
+        if not credential:
+            raise BusinessRuleError("Credential is required.", field="credential")
 
-            code = self._codes.five_digits()
-            instance.checkout_code = code
-            instance.status = self.Status.CHECKED_OUT
-            self._repo.save(instance)
+        instance = self._resolve_credential(credential)
+        if not instance:
+            raise NotFoundError("No visitor access matches the given credential.")
 
-            for to_email, name in self._notification_recipients(instance):
-                self._email.send_checkout_notification(
-                    to_email=to_email,
-                    user_name=instance.host_user,
-                    visitor_name=name,
-                )
-            return {"checkout_code": code}
+        if not instance.qr_access_enabled:
+            raise BusinessRuleError("This visit does not use QR access.")
 
-        return None
+        if instance.status == self.Status.CANCELLED:
+            raise BusinessRuleError("This visitor access has been cancelled.")
+        if instance.status == self.Status.CHECKED_IN:
+            raise BusinessRuleError("This access has already been used.")
+        if instance.status == self.Status.CHECKED_OUT:
+            raise BusinessRuleError("This visit is already concluded.")
+
+        now = timezone.now()
+        if now < instance.checkin_date_time or now > instance.checkout_date_time:
+            raise BusinessRuleError(
+                "Visit is outside the allowed check-in window.",
+                field="credential",
+            )
+
+        instance.status = self.Status.CHECKED_IN
+        instance.checkin_code = instance.access_code or ""
+        saved = self._repo.save(instance)
+
+        for to_email, name in self._notification_recipients(saved):
+            self._email.send_checkin_notification(
+                to_email=to_email,
+                user_name=saved.host_user,
+                visitor_name=name,
+            )
+        return saved
 
     def notify_arrival(self, user, pk: int) -> VisitorAccessModel:
         if not can_doorman_ops(user):
@@ -315,25 +355,37 @@ class VisitorAccessService(IVisitorAccessService):
             raise NotFoundError("No visitor access matches the given query.")
         return instance
 
-    # ------------------------------------------------------------------ #
-    # recipients helpers                                                 #
-    # ------------------------------------------------------------------ #
-    def _invite_recipients(self, instance) -> list[tuple[str, str]]:
-        """(email, visitor_name) tuples for the visitor invite email.
+    def _resolve_credential(self, credential: str) -> VisitorAccessModel | None:
+        if credential.startswith(_QR_PAYLOAD_PREFIX):
+            token = credential[len(_QR_PAYLOAD_PREFIX) :]
+            return self._repo.get_by_access_token(token)
+        instance = self._repo.get_by_access_token(credential)
+        if instance:
+            return instance
+        return self._repo.get_by_access_code(credential)
 
-        Group visits send one personalized invite per member; solo visits
-        send a single email to ``instance.email``.
-        """
-        if instance.visitor_group_id:
-            members = self._group_repo.list_members(instance.visitor_group_id)
-            return [(m.email, m.name) for m in members if m.email]
+    def _generate_unique_token(self) -> str:
+        for _ in range(10):
+            token = secrets.token_urlsafe(24)
+            if not self._repo.exists_with_access_token(token):
+                return token
+        raise BusinessRuleError("Could not generate a unique access token.")
+
+    def _generate_unique_code(self) -> str:
+        for _ in range(20):
+            code = self._codes.alphanumeric(_ACCESS_CODE_LENGTH)
+            if not self._repo.exists_with_access_code(code):
+                return code
+        raise BusinessRuleError("Could not generate a unique access code.")
+
+    @staticmethod
+    def _qr_payload(token: str) -> str:
+        return f"{_QR_PAYLOAD_PREFIX}{token}"
+
+    def _notification_recipients(self, instance) -> list[tuple[str, str]]:
         if instance.email:
             return [(instance.email, instance.visitor_name)]
         return []
-
-    def _notification_recipients(self, instance) -> list[tuple[str, str]]:
-        """Same expansion rule as invites, used by check-in/check-out."""
-        return self._invite_recipients(instance)
 
     # ------------------------------------------------------------------ #
     # filter helpers                                                     #
@@ -370,14 +422,6 @@ class VisitorAccessService(IVisitorAccessService):
         period: str | None,
         status: str | None,
     ) -> tuple[datetime | None, datetime | None, list[str] | None]:
-        """Translate the user-facing filters (period, status) into the
-        primitive arguments the repository understands.
-
-        Status is the tricky bit: NO_SHOW and EXPIRED are *derived* values
-        — they live as ``SCHEDULED`` / ``CHECKED_IN`` rows that crossed
-        their respective windows. So filtering by them adds an extra date
-        bound on top of the persisted state.
-        """
         scheduled_after: datetime | None = None
         scheduled_before: datetime | None = None
         status_in: list[str] | None = None
@@ -393,17 +437,11 @@ class VisitorAccessService(IVisitorAccessService):
         Status = cls.Status
         if status == Status.SCHEDULED:
             status_in = [Status.SCHEDULED]
-            # only rows whose scheduled date is still in the future
             scheduled_after = cls._tighten_after(scheduled_after, now)
         elif status == Status.NO_SHOW:
             status_in = [Status.SCHEDULED]
             scheduled_before = cls._tighten_before(scheduled_before, now)
         elif status == Status.CHECKED_IN:
-            # CHECKED_IN persists during the visit; it 'becomes' EXPIRED
-            # only after checkout_date_time. We approximate that on the
-            # listing using scheduled_date, which is good enough for the
-            # main happy path: CHECKED_IN visits whose scheduled_date is
-            # still ahead are definitely active.
             status_in = [Status.CHECKED_IN]
             scheduled_after = cls._tighten_after(scheduled_after, now)
         elif status == Status.EXPIRED:
@@ -420,12 +458,10 @@ class VisitorAccessService(IVisitorAccessService):
     def _tighten_after(
         current: datetime | None, candidate: datetime
     ) -> datetime:
-        """Keep the most restrictive ``scheduled_date >= X`` bound."""
         return candidate if current is None else max(current, candidate)
 
     @staticmethod
     def _tighten_before(
         current: datetime | None, candidate: datetime
     ) -> datetime:
-        """Keep the most restrictive ``scheduled_date < X`` bound."""
         return candidate if current is None else min(current, candidate)

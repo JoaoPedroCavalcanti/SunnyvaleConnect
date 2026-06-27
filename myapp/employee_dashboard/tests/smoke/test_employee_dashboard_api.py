@@ -73,6 +73,17 @@ class EmployeeDashboardAPISmoke(BaseTestsUsers):
             checkout_code="",
             status=VisitorAccessModel.Status.SCHEDULED,
         )
+        VisitorAccessModel.objects.create(
+            visitor_name="Checked",
+            host_user=self.user_a,
+            email="c@x.com",
+            scheduled_date=now + timedelta(hours=1),
+            checkin_date_time=now + timedelta(hours=1),
+            checkout_date_time=now + timedelta(hours=4),
+            checkin_code="A1",
+            checkout_code="",
+            status=VisitorAccessModel.Status.CHECKED_IN,
+        )
         ServiceRequestModel.objects.create(
             requester=self.user_a,
             title="Leak",
@@ -81,8 +92,9 @@ class EmployeeDashboardAPISmoke(BaseTestsUsers):
         response = self.client.get(DAY_SUMMARY_URL)
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["deliveries_today"], 1)
-        self.assertEqual(response.data["visits_today"], 1)
+        self.assertEqual(response.data["visits_today"], 2)
         self.assertEqual(response.data["scheduled_visits"], 1)
+        self.assertEqual(response.data["cleared_visits_today"], 1)
         self.assertIsNone(response.data["pending_service_requests"])
 
     def test_cleaner_day_summary(self):

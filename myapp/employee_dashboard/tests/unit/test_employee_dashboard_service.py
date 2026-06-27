@@ -27,13 +27,17 @@ class FakeDeliveryRepo:
 
 
 class FakeVisitorRepo:
-    def __init__(self, *, today=0, scheduled=0, upcoming=None):
+    def __init__(self, *, today=0, scheduled=0, cleared=0, upcoming=None):
         self.today = today
         self.scheduled = scheduled
+        self.cleared = cleared
         self.upcoming = upcoming or []
 
     def count_scheduled_between(self, start, end, *, exclude_statuses=None):
         return self.today
+
+    def count_checked_in_between(self, start, end):
+        return self.cleared
 
     def count_with_scheduled_after(
         self, after, *, status_in=None, exclude_statuses=None
@@ -70,7 +74,7 @@ def _user(*, role=UserRole.EMPLOYEE, employee_types=None, is_staff=False):
 def service():
     return EmployeeDashboardService(
         delivery_repository=FakeDeliveryRepo(count=8),
-        visitor_repository=FakeVisitorRepo(today=12, scheduled=3, upcoming=[1, 2]),
+        visitor_repository=FakeVisitorRepo(today=12, scheduled=3, cleared=4, upcoming=[1, 2]),
         service_request_repository=FakeRequestRepo(pending=5),
     )
 
@@ -87,6 +91,7 @@ def test_doorman_summary_only_portaria_fields(service):
     assert summary.deliveries_today == 8
     assert summary.visits_today == 12
     assert summary.scheduled_visits == 3
+    assert summary.cleared_visits_today == 4
     assert summary.pending_service_requests is None
 
 
@@ -97,6 +102,7 @@ def test_cleaning_summary_only_requests(service):
     assert summary.deliveries_today is None
     assert summary.visits_today is None
     assert summary.scheduled_visits is None
+    assert summary.cleared_visits_today is None
     assert summary.pending_service_requests == 5
 
 

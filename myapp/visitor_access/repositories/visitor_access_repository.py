@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Iterable
 
+from django.db.models import Q
+
 from visitor_access.models import VisitorAccessModel
 
 
@@ -31,6 +33,18 @@ class IVisitorAccessRepository(ABC):
     def get_by_id(self, pk: int) -> VisitorAccessModel | None: ...
 
     @abstractmethod
+    def get_by_access_token(self, token: str) -> VisitorAccessModel | None: ...
+
+    @abstractmethod
+    def get_by_access_code(self, code: str) -> VisitorAccessModel | None: ...
+
+    @abstractmethod
+    def exists_with_access_token(self, token: str) -> bool: ...
+
+    @abstractmethod
+    def exists_with_access_code(self, code: str) -> bool: ...
+
+    @abstractmethod
     def create(self, data: dict) -> VisitorAccessModel: ...
 
     @abstractmethod
@@ -50,6 +64,9 @@ class IVisitorAccessRepository(ABC):
         *,
         exclude_statuses: Iterable[str] | None = None,
     ) -> int: ...
+
+    @abstractmethod
+    def count_checked_in_between(self, start: datetime, end: datetime) -> int: ...
 
     @abstractmethod
     def count_with_scheduled_after(
@@ -72,6 +89,12 @@ class IVisitorAccessRepository(ABC):
 
 
 class DjangoVisitorAccessRepository(IVisitorAccessRepository):
+    @staticmethod
+    def _list_queryset(qs):
+        return qs.select_related("host_user", "visitor_group").prefetch_related(
+            "visitor_group__members"
+        )
+
     def list_all(
         self,
         status_in=None,
@@ -79,7 +102,9 @@ class DjangoVisitorAccessRepository(IVisitorAccessRepository):
         scheduled_before=None,
         is_group=None,
     ):
-        qs = VisitorAccessModel.objects.all().order_by("-scheduled_date")
+        qs = self._list_queryset(
+            VisitorAccessModel.objects.all().order_by("-scheduled_date")
+        )
         return self._apply_filters(
             qs, status_in, scheduled_after, scheduled_before, is_group
         )
@@ -92,8 +117,10 @@ class DjangoVisitorAccessRepository(IVisitorAccessRepository):
         scheduled_before=None,
         is_group=None,
     ):
-        qs = VisitorAccessModel.objects.filter(host_user_id=user_id).order_by(
-            "-scheduled_date"
+        qs = self._list_queryset(
+            VisitorAccessModel.objects.filter(host_user_id=user_id).order_by(
+                "-scheduled_date"
+            )
         )
         return self._apply_filters(
             qs, status_in, scheduled_after, scheduled_before, is_group
@@ -101,6 +128,18 @@ class DjangoVisitorAccessRepository(IVisitorAccessRepository):
 
     def get_by_id(self, pk):
         return VisitorAccessModel.objects.filter(pk=pk).first()
+
+    def get_by_access_token(self, token):
+        return VisitorAccessModel.objects.filter(access_token=token).first()
+
+    def get_by_access_code(self, code):
+        return VisitorAccessModel.objects.filter(access_code__iexact=code.strip()).first()
+
+    def exists_with_access_token(self, token):
+        return VisitorAccessModel.objects.filter(access_token=token).exists()
+
+    def exists_with_access_code(self, code):
+        return VisitorAccessModel.objects.filter(access_code__iexact=code.strip()).exists()
 
     def create(self, data):
         return VisitorAccessModel.objects.create(**data)
@@ -119,13 +158,25 @@ class DjangoVisitorAccessRepository(IVisitorAccessRepository):
         instance.delete()
 
     @staticmethod
-    def _apply_filters(qs, status_in, scheduled_after, scheduled_before, is_group):
+    def _visit_window_after(after: datetime):
+        return Q(checkout_date_time__gte=after) | Q(
+            checkout_date_time__isnull=True, scheduled_date__gte=after
+        )
+
+    @staticmethod
+    def _visit_window_before(before: datetime):
+        return Q(checkout_date_time__lt=before) | Q(
+            checkout_date_time__isnull=True, scheduled_date__lt=before
+        )
+
+    @classmethod
+    def _apply_filters(cls, qs, status_in, scheduled_after, scheduled_before, is_group):
         if status_in:
             qs = qs.filter(status__in=list(status_in))
         if scheduled_after is not None:
-            qs = qs.filter(scheduled_date__gte=scheduled_after)
+            qs = qs.filter(cls._visit_window_after(scheduled_after))
         if scheduled_before is not None:
-            qs = qs.filter(scheduled_date__lt=scheduled_before)
+            qs = qs.filter(cls._visit_window_before(scheduled_before))
         if is_group is True:
             qs = qs.filter(visitor_group__isnull=False)
         elif is_group is False:
@@ -147,6 +198,13 @@ class DjangoVisitorAccessRepository(IVisitorAccessRepository):
             qs = qs.exclude(status__in=list(exclude_statuses))
         return qs.count()
 
+    def count_checked_in_between(self, start: datetime, end: datetime) -> int:
+        return VisitorAccessModel.objects.filter(
+            status=VisitorAccessModel.Status.CHECKED_IN,
+            updated_at__gte=start,
+            updated_at__lt=end,
+        ).count()
+
     def count_with_scheduled_after(
         self,
         after: datetime,
@@ -154,7 +212,7 @@ class DjangoVisitorAccessRepository(IVisitorAccessRepository):
         status_in: Iterable[str] | None = None,
         exclude_statuses: Iterable[str] | None = None,
     ) -> int:
-        qs = VisitorAccessModel.objects.filter(scheduled_date__gte=after)
+        qs = VisitorAccessModel.objects.filter(self._visit_window_after(after))
         if status_in:
             qs = qs.filter(status__in=list(status_in))
         if exclude_statuses:
@@ -171,7 +229,7 @@ class DjangoVisitorAccessRepository(IVisitorAccessRepository):
     ):
         qs = (
             VisitorAccessModel.objects.select_related("host_user", "visitor_group")
-            .filter(scheduled_date__gte=after)
+            .filter(self._visit_window_after(after))
             .order_by("scheduled_date")
         )
         if status_in:

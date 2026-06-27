@@ -132,7 +132,7 @@ class FakeAccessService(IVisitorAccessService):
         item = SimpleNamespace(
             id=self._next,
             host_user=user,
-            visitor_name=payload["visitor_name"],
+            visitor_name=payload.get("visitor_name", ""),
             email=payload.get("email", ""),
             scheduled_date=payload.get("scheduled_date"),
             all_day=payload.get("all_day", False),
@@ -142,13 +142,31 @@ class FakeAccessService(IVisitorAccessService):
         self._next += 1
         return item
 
+    def create_group_visits(self, user, payload: dict):
+        self.created.append({"user": user, "payload": payload})
+        group = payload.get("visitor_group")
+        members = list(group.members.all()) if group is not None else []
+        visits = []
+        for member in members:
+            visits.append(
+                SimpleNamespace(
+                    id=self._next,
+                    host_user=user,
+                    visitor_name=member.name,
+                    email=member.email or "",
+                    scheduled_date=payload.get("scheduled_date"),
+                    all_day=payload.get("all_day", False),
+                    visitor_group=group,
+                    visitor_group_id=getattr(group, "id", None),
+                )
+            )
+            self._next += 1
+        return visits
+
     def delete(self, user, pk):  # pragma: no cover
         return None
 
-    def checkin(self, mixed_link):  # pragma: no cover
-        return None
-
-    def checkout(self, mixed_link):  # pragma: no cover
+    def validate_access(self, user, credential):  # pragma: no cover
         return None
 
     def notify_arrival(self, user, pk):  # pragma: no cover
@@ -265,8 +283,7 @@ class TestVisibility:
 
 
 class TestSchedule:
-    def test_schedules_single_visit_for_whole_group(self, service, access):
-        """schedule_visit produces one VisitorAccess row, not N."""
+    def test_schedules_one_visit_per_group_member(self, service, access):
         u = _user(1)
         group = service.create(
             u,
@@ -286,14 +303,10 @@ class TestSchedule:
         )
 
         assert len(access.created) == 1
-        call = access.created[0]
-        assert call["payload"]["visitor_group"] is group
-        assert call["payload"]["visitor_name"] == "Família Pai"
-        assert call["payload"]["email"] == ""
-        assert call["payload"]["scheduled_date"] == when
-        # returns the single visit, not a list
-        assert result.visitor_group is group
-        assert result.visitor_name == "Família Pai"
+        assert len(result) == 2
+        assert result[0].visitor_name == "A"
+        assert result[1].visitor_name == "B"
+        assert all(v.visitor_group is group for v in result)
 
     def test_schedule_all_day_propagates(self, service, access):
         u = _user(1)
@@ -305,7 +318,6 @@ class TestSchedule:
             u, group.id, {"scheduled_date": when, "all_day": True}
         )
         assert access.created[0]["payload"]["all_day"] is True
-        # all_day must drop checkout_date_time so the access service decides it
         assert "checkout_date_time" not in access.created[0]["payload"]
 
     def test_empty_group_blocked(self, service):

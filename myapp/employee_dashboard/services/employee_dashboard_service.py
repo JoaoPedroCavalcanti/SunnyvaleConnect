@@ -31,6 +31,7 @@ class EmployeeDaySummary:
     deliveries_today: int | None
     visits_today: int | None
     scheduled_visits: int | None
+    cleared_visits_today: int | None
     pending_service_requests: int | None
 
 
@@ -64,6 +65,7 @@ class EmployeeDashboardService(IEmployeeDashboardService):
         deliveries_today = None
         visits_today = None
         scheduled_visits = None
+        cleared_visits_today = None
         pending_service_requests = None
 
         if can_doorman_ops(user):
@@ -81,6 +83,9 @@ class EmployeeDashboardService(IEmployeeDashboardService):
                 now,
                 status_in=[VisitorAccessModel.Status.SCHEDULED],
             )
+            cleared_visits_today = self._visitors.count_checked_in_between(
+                day_start, day_end
+            )
 
         if can_manage_service_requests(user):
             pending_service_requests = self._requests.count_by_status(
@@ -91,6 +96,7 @@ class EmployeeDashboardService(IEmployeeDashboardService):
             deliveries_today=deliveries_today,
             visits_today=visits_today,
             scheduled_visits=scheduled_visits,
+            cleared_visits_today=cleared_visits_today,
             pending_service_requests=pending_service_requests,
         )
 

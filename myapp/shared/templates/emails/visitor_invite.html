@@ -6,13 +6,27 @@
 <p style="margin:0 0 16px;">Dear {{ visitor_name }},</p>
 <p style="margin:0 0 16px;">
   You have been invited by <strong>{{ user_name }}</strong> to visit Sunnyvale.
-  Please use the button below to check in at your scheduled time.
+  Present the QR code below or tell the doorman your access code at the gate.
 </p>
-{% include "emails/partials/cta_button.html" with cta_url=link cta_label="Check in now" %}
+<p style="margin:0 0 4px;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:1px;text-align:center;color:#6b7280;">
+  Access code
+</p>
+<p style="margin:0 0 16px;font-size:28px;font-weight:700;letter-spacing:6px;text-align:center;color:#111827;">
+  {{ access_code }}
+</p>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto 16px;">
+  <tr>
+    <td align="center">
+      <img
+        src="cid:visitor_qr"
+        width="200"
+        height="200"
+        alt=""
+        style="display:block;width:200px;height:200px;max-width:200px;border:0;line-height:100%;outline:none;text-decoration:none;"
+      />
+    </td>
+  </tr>
+</table>
 {% include "emails/partials/notice_box.html" with text=access_note %}
-<p style="margin:16px 0 0;color:#6b7280;font-size:13px;">
-  If the button does not work, copy and paste this link into your browser:<br>
-  <a href="{{ link }}" style="color:#d97706;word-break:break-all;">{{ link }}</a>
-</p>
 <p style="margin:16px 0 0;">Thank you and we look forward to your visit!</p>
 {% endblock %}

@@ -6,8 +6,6 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
-from shared.container import container
-from shared.test_doubles.fakes import FakeStringMixer
 from tests_base.base_tests_user import BaseTestsUsers
 from visitor_access.models import VisitorAccessModel, VisitorGroupModel
 
@@ -31,13 +29,6 @@ SOLO_VISITS_LIST_URL = reverse("visitor_access:list-create")
 
 
 class VisitorGroupAPISmoke(BaseTestsUsers):
-    def setUp(self):
-        super().setUp()
-        container.override("string_mixer", FakeStringMixer())
-
-    def tearDown(self):
-        container.reset()
-
     def _future(self, days=2):
         return (timezone.now() + timedelta(days=days)).isoformat()
 
@@ -116,9 +107,9 @@ class VisitorGroupAPISmoke(BaseTestsUsers):
         self.assertEqual(self.client.get(detail_url(group.id)).status_code, 404)
 
     # ------------------------------------------------------------------ #
-    # schedule (one visit per group, not per member)                     #
+    # schedule (one visit per group member)                              #
     # ------------------------------------------------------------------ #
-    def test_schedule_creates_single_visit_for_whole_group(self):
+    def test_schedule_creates_one_visit_per_member(self):
         group = VisitorGroupModel.objects.create(host_user=self.user_a, name="G")
         group.members.create(name="A", email="a@x.com")
         group.members.create(name="B", email="b@x.com")
@@ -129,15 +120,17 @@ class VisitorGroupAPISmoke(BaseTestsUsers):
             format="json",
         )
         self.assertEqual(response.status_code, 201, response.data)
-        # response is now a single object, not a list
-        self.assertIsInstance(response.data, dict)
-        self.assertEqual(response.data["visitor_group"], group.id)
-        self.assertEqual(response.data["visitor_name"], "G")
-        self.assertTrue(response.data["is_group"])
-        self.assertEqual(len(response.data["group_members"]), 2)
+        self.assertIsInstance(response.data, list)
+        self.assertEqual(len(response.data), 2)
+        names = sorted(row["visitor_name"] for row in response.data)
+        self.assertEqual(names, ["A", "B"])
+        self.assertTrue(all(row["is_group"] for row in response.data))
 
         visits = VisitorAccessModel.objects.filter(visitor_group=group)
-        self.assertEqual(visits.count(), 1)
+        self.assertEqual(visits.count(), 2)
+        self.assertEqual(
+            sorted(visits.values_list("visitor_name", flat=True)), ["A", "B"]
+        )
         self.assertEqual(visits.first().host_user_id, self.user_a.id)
 
     def test_schedule_all_day_visit(self):
@@ -150,7 +143,7 @@ class VisitorGroupAPISmoke(BaseTestsUsers):
             format="json",
         )
         self.assertEqual(response.status_code, 201, response.data)
-        visit = VisitorAccessModel.objects.get(visitor_group=group)
+        visit = VisitorAccessModel.objects.filter(visitor_group=group).first()
         self.assertTrue(visit.all_day)
         local_in = timezone.localtime(visit.checkin_date_time)
         local_out = timezone.localtime(visit.checkout_date_time)
@@ -184,7 +177,8 @@ class VisitorGroupAPISmoke(BaseTestsUsers):
         VisitorAccessModel.objects.create(
             host_user=self.user_a,
             visitor_group=group,
-            visitor_name="G",
+            visitor_name="A",
+            email="a@x.com",
             scheduled_date=timezone.now() + timedelta(days=1),
             checkin_date_time=timezone.now() + timedelta(days=1),
             checkout_date_time=timezone.now() + timedelta(days=1, hours=3),
@@ -200,9 +194,8 @@ class VisitorGroupAPISmoke(BaseTestsUsers):
         groups = self.client.get(GROUP_VISITS_LIST_URL)
         self.assertEqual(groups.status_code, 200)
         names = [r["visitor_name"] for r in groups.data["results"]]
-        self.assertEqual(names, ["G"])
+        self.assertEqual(names, ["A"])
         self.assertTrue(groups.data["results"][0]["is_group"])
-        self.assertEqual(len(groups.data["results"][0]["group_members"]), 1)
 
     def test_group_visits_list_other_user_isolated(self):
         group_a = VisitorGroupModel.objects.create(host_user=self.user_a, name="GA")
@@ -227,7 +220,8 @@ class VisitorGroupAPISmoke(BaseTestsUsers):
         visit = VisitorAccessModel.objects.create(
             host_user=self.user_a,
             visitor_group=group,
-            visitor_name="G",
+            visitor_name="A",
+            email="a@x.com",
             scheduled_date=timezone.now() + timedelta(days=2),
             checkin_date_time=timezone.now() + timedelta(days=2),
             checkout_date_time=timezone.now() + timedelta(days=2, hours=3),

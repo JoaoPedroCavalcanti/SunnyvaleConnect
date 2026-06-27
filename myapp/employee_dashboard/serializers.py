@@ -7,6 +7,7 @@ class EmployeeDaySummarySerializer(serializers.Serializer):
     deliveries_today = serializers.IntegerField(read_only=True, allow_null=True)
     visits_today = serializers.IntegerField(read_only=True, allow_null=True)
     scheduled_visits = serializers.IntegerField(read_only=True, allow_null=True)
+    cleared_visits_today = serializers.IntegerField(read_only=True, allow_null=True)
     pending_service_requests = serializers.IntegerField(
         read_only=True, allow_null=True
     )

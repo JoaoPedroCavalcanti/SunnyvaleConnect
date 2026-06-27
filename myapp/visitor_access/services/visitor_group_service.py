@@ -114,12 +114,7 @@ class VisitorGroupService(IVisitorGroupService):
     # ------------------------------------------------------------------ #
     def schedule_visit(self, user, pk: int, payload: dict):
         ensure_not_employee(user, action="schedule visits")
-        """Create a single visit row representing the whole group.
-
-        The visit reuses VisitorAccessModel (so it inherits status,
-        check-in/out, links). The downstream access service expands the
-        members list when sending invites and notifications.
-        """
+        """Create one visit row per group member (each with own QR/code)."""
         group = self.get_for(user, pk)
         if group.members.count() == 0:
             raise BusinessRuleError(
@@ -132,22 +127,20 @@ class VisitorGroupService(IVisitorGroupService):
                 "scheduled_date is required.", field="scheduled_date"
             )
 
-        # admin schedules in name of the group's owner
         host_user = group.host_user
         acting_user = host_user if is_admin(user) else user
 
         visit_payload = {
             "scheduled_date": scheduled_date,
             "all_day": payload.get("all_day", False),
+            "qr_access_enabled": payload.get("qr_access_enabled", False),
             "description": payload.get("description", "") or "",
-            "visitor_name": group.name,
-            "email": "",
             "visitor_group": group,
         }
         if not visit_payload["all_day"] and payload.get("checkout_date_time"):
             visit_payload["checkout_date_time"] = payload["checkout_date_time"]
 
-        return self._access.create(acting_user, visit_payload)
+        return self._access.create_group_visits(acting_user, visit_payload)
 
     # ------------------------------------------------------------------ #
     # helpers                                                            #

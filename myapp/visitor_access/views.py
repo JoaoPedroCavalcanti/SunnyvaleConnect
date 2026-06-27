@@ -2,13 +2,11 @@
 
 from drf_spectacular.utils import (
     OpenApiParameter,
-    OpenApiResponse,
     extend_schema,
-    inline_serializer,
 )
-from rest_framework import serializers, status
+from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -18,20 +16,11 @@ from visitor_access.models import VisitorAccessModel
 from visitor_access.serializers import (
     VisitorAccessInputSerializer,
     VisitorAccessOutputSerializer,
+    VisitorAccessValidateInputSerializer,
     VisitorGroupInputSerializer,
     VisitorGroupOutputSerializer,
     VisitorGroupPatchSerializer,
     VisitorGroupScheduleInputSerializer,
-)
-
-
-_CheckinResponse = inline_serializer(
-    name="CheckinResponse",
-    fields={"checkin_code": serializers.CharField()},
-)
-_CheckoutResponse = inline_serializer(
-    name="CheckoutResponse",
-    fields={"checkout_code": serializers.CharField()},
 )
 
 
@@ -130,40 +119,22 @@ class VisitorAccessNotifyArrivalView(APIView):
 
 
 @extend_schema(tags=["visitor_access"])
-class VisitorAccessCheckinView(APIView):
-    permission_classes = [AllowAny]
+class VisitorAccessValidateView(APIView):
+    """Doorman validates a visitor QR code or manual access code."""
+
+    permission_classes = [IsAuthenticated, IsAdminOrDoorman]
 
     @extend_schema(
-        responses={
-            200: OpenApiResponse(
-                response=_CheckinResponse,
-                description="Returns the check-in code, or a plain text message "
-                "when the request is outside the allowed window.",
-            )
-        }
+        request=VisitorAccessValidateInputSerializer,
+        responses={200: VisitorAccessOutputSerializer},
     )
-    def get(self, request, visitor_access_link_checkin: str):
-        result = container.visitor_access_service.checkin(visitor_access_link_checkin)
-        return Response(result)
-
-
-@extend_schema(tags=["visitor_access"])
-class VisitorAccessCheckoutView(APIView):
-    permission_classes = [AllowAny]
-
-    @extend_schema(
-        responses={
-            200: OpenApiResponse(
-                response=_CheckoutResponse,
-                description="Returns the check-out code if inside the allowed window.",
-            )
-        }
-    )
-    def get(self, request, visitor_access_link_checkout: str):
-        result = container.visitor_access_service.checkout(
-            visitor_access_link_checkout
+    def post(self, request):
+        serializer = VisitorAccessValidateInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instance = container.visitor_access_service.validate_access(
+            request.user, serializer.validated_data["credential"]
         )
-        return Response(result)
+        return Response(VisitorAccessOutputSerializer(instance).data)
 
 
 # ---------------------------------------------------------------------- #
@@ -232,7 +203,7 @@ class VisitorGroupScheduleView(APIView):
 
     @extend_schema(
         request=VisitorGroupScheduleInputSerializer,
-        responses={201: VisitorAccessOutputSerializer},
+        responses={201: VisitorAccessOutputSerializer(many=True)},
     )
     def post(self, request, pk: int):
         serializer = VisitorGroupScheduleInputSerializer(data=request.data)
@@ -241,7 +212,7 @@ class VisitorGroupScheduleView(APIView):
             request.user, pk, serializer.validated_data
         )
         return Response(
-            VisitorAccessOutputSerializer(visit).data,
+            VisitorAccessOutputSerializer(visit, many=True).data,
             status=status.HTTP_201_CREATED,
         )
 
