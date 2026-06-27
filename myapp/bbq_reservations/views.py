@@ -112,6 +112,6 @@ class BBQReservationRejectView(APIView):
         instance = container.bbq_service.reject(
             request.user,
             pk,
-            reason=serializer.validated_data.get("reason", ""),
+            reason=serializer.validated_data["reason"],
         )
         return Response(BBQReservationOutputSerializer(instance).data)

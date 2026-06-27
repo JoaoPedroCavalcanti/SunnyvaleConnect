@@ -210,6 +210,26 @@ class BBQAPISmoke(BaseTestsUsers):
         self.assertIn("barbecue area", mail.outbox[0].subject)
         self.assertIn("slot unavailable", mail.outbox[0].body)
 
+    def test_admin_reject_without_reason_returns_400(self):
+        self._seed_household_with(self.user_a)
+        self.authenticate(self.user_a)
+        r = self.client.post(
+            LIST_URL, data={"reservation_date": self._future()}
+        )
+        pk = r.data["id"]
+
+        self.authenticate(self.admin)
+        reject_url = reverse("bbq_reservations:reject", kwargs={"pk": pk})
+        self.assertEqual(self.client.post(reject_url).status_code, 400)
+        self.assertEqual(
+            self.client.post(reject_url, data={"reason": ""}, format="json").status_code,
+            400,
+        )
+        self.assertEqual(
+            self.client.post(reject_url, data={"reason": "   "}, format="json").status_code,
+            400,
+        )
+
     def test_regular_user_cannot_approve(self):
         self._seed_household_with(self.user_a)
         self.authenticate(self.user_a)

@@ -153,6 +153,10 @@ class BBQReservationService(IBBQReservationService):
             raise PermissionDeniedError(
                 "Only admins can reject a barbecue booking."
             )
+        if not reason or not reason.strip():
+            raise BusinessRuleError(
+                "A rejection reason is required.", field="reason"
+            )
         instance = self.get(pk)
         if instance.status == BBQReservationModel.Status.REJECTED:
             return instance

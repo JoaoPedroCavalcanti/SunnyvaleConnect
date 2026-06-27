@@ -112,6 +112,6 @@ class HallReservationRejectView(APIView):
         instance = container.hall_service.reject(
             request.user,
             pk,
-            reason=serializer.validated_data.get("reason", ""),
+            reason=serializer.validated_data["reason"],
         )
         return Response(HallReservationOutputSerializer(instance).data)

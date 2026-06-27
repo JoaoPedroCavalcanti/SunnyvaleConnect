@@ -150,6 +150,10 @@ class HallReservationService(IHallReservationService):
             raise PermissionDeniedError(
                 "Only admins can reject a hall booking."
             )
+        if not reason or not reason.strip():
+            raise BusinessRuleError(
+                "A rejection reason is required.", field="reason"
+            )
         instance = self.get(pk)
         if instance.status == HallReservationModel.Status.REJECTED:
             return instance

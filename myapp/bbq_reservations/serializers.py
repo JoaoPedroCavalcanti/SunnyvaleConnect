@@ -42,7 +42,7 @@ class BBQReservationPatchSerializer(serializers.Serializer):
 
 
 class BBQReservationRejectSerializer(serializers.Serializer):
-    reason = serializers.CharField(required=False, allow_blank=True, default="")
+    reason = serializers.CharField(required=True, allow_blank=False)
 
 
 class BBQReservationOutputSerializer(serializers.ModelSerializer):

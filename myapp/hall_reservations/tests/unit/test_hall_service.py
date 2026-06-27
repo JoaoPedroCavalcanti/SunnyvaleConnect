@@ -382,6 +382,18 @@ class TestApproveReject:
         with pytest.raises(PermissionDeniedError):
             f["service"].reject(f["holder"], item.id)
 
+    def test_reject_requires_reason(self, fixtures):
+        f = fixtures
+        item = f["service"].create(
+            f["holder"], {"reservation_date": _future()}
+        )
+        with pytest.raises(BusinessRuleError):
+            f["service"].reject(f["admin"], item.id)
+        with pytest.raises(BusinessRuleError):
+            f["service"].reject(f["admin"], item.id, reason="")
+        with pytest.raises(BusinessRuleError):
+            f["service"].reject(f["admin"], item.id, reason="   ")
+
     def test_approve_flips_status(self, fixtures):
         f = fixtures
         item = f["service"].create(
@@ -463,7 +475,7 @@ class TestApproveReject:
         f = fixtures
         d = _future()
         a = f["book_approved"](f["holder"], reservation_date=d)
-        f["service"].reject(f["admin"], a.id)
+        f["service"].reject(f["admin"], a.id, reason="unavailable")
         other = _user(2)
         f["memberships"].add(other.id, _household(2, "1102", "A"))
         item = f["book_approved"](other, reservation_date=d)
