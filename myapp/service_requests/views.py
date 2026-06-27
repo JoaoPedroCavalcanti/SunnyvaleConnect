@@ -2,6 +2,7 @@
 
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -20,6 +21,17 @@ from shared.permissions import IsAdminOrCleaning
 
 def _enum_values(enum_cls) -> list[str]:
     return [c.value for c in enum_cls]
+
+
+def _parse_optional_bool(raw: str | None) -> bool:
+    if raw is None or raw == "":
+        return False
+    normalized = raw.strip().lower()
+    if normalized in {"true", "1"}:
+        return True
+    if normalized in {"false", "0"}:
+        return False
+    raise ValueError(f"Invalid boolean query value: {raw!r}.")
 
 
 @extend_schema(tags=["service_requests"])
@@ -49,15 +61,29 @@ class ServiceRequestListCreateView(APIView):
                 type=str,
                 enum=_enum_values(ServiceRequestModel.ServiceType),
             ),
+            OpenApiParameter(
+                name="mine",
+                required=False,
+                type=bool,
+                description=(
+                    "When true, only requests this cleaning employee (or admin) "
+                    "accepted/declined/completed (responded_by = caller)."
+                ),
+            ),
         ],
         responses={200: ServiceRequestOutputSerializer(many=True)},
     )
     def get(self, request):
+        try:
+            mine = _parse_optional_bool(request.query_params.get("mine"))
+        except ValueError as exc:
+            raise ValidationError({"mine": str(exc)}) from exc
         queryset = container.service_request_service.list(
             request.user,
             status=request.query_params.get("status"),
             priority=request.query_params.get("priority"),
             service_type=request.query_params.get("service_type"),
+            mine=mine,
         )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request, view=self)
@@ -109,11 +135,7 @@ class ServiceRequestDetailView(APIView):
 
 @extend_schema(tags=["service_requests"])
 class ServiceRequestRespondView(APIView):
-    """Admin-only endpoint to accept or decline a pending request.
-
-    The request body always carries a non-empty ``response`` field — the
-    motivation that the resident will see.
-    """
+    """Admin or cleaning staff accept (optional note) or decline a request."""
 
     permission_classes = [IsAuthenticated, IsAdminOrCleaning]
 

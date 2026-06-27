@@ -430,6 +430,13 @@ class DjangoEmailSender(IEmailSender):
             if accepted
             else "Your service request was declined"
         )
+        details = [
+            {"label": "Request", "value": title},
+            {"label": "Status", "value": "Accepted" if accepted else "Declined"},
+            {"label": "Handled by", "value": responder_name},
+        ]
+        if response:
+            details.append({"label": "Message", "value": response})
         self._render_and_send(
             subject,
             "service_request_responded",
@@ -441,12 +448,7 @@ class DjangoEmailSender(IEmailSender):
                 "status_label": "Accepted" if accepted else "Declined",
                 "responder_name": responder_name,
                 "response": response,
-                "details": [
-                    {"label": "Request", "value": title},
-                    {"label": "Status", "value": "Accepted" if accepted else "Declined"},
-                    {"label": "Handled by", "value": responder_name},
-                    {"label": "Message", "value": response},
-                ],
+                "details": details,
             },
             to_email,
         )

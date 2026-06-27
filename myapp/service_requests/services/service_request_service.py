@@ -6,6 +6,8 @@ Workflow:
   • The owner can edit / delete only while PENDING.
   • Admins and cleaning employees respond (accept/decline) with a message.
   • Admins and cleaning employees may mark ACCEPTED requests COMPLETED.
+  • Cleaning staff can filter list with ``mine=true`` (responded_by = caller).
+  • Only the employee who accepted (or an admin) may complete a request.
 """
 
 from abc import ABC, abstractmethod
@@ -33,6 +35,7 @@ class IServiceRequestService(ABC):
         status: str | None = None,
         priority: str | None = None,
         service_type: str | None = None,
+        mine: bool = False,
     ): ...
 
     @abstractmethod
@@ -67,7 +70,14 @@ class ServiceRequestService(IServiceRequestService):
         self._repo = repository
         self._email = email_sender
 
-    def list(self, user, status=None, priority=None, service_type=None):
+    def list(
+        self,
+        user,
+        status: str | None = None,
+        priority: str | None = None,
+        service_type: str | None = None,
+        mine: bool = False,
+    ):
         status = self._normalize_choice(
             status, ServiceRequestModel.Status, "status"
         )
@@ -77,10 +87,18 @@ class ServiceRequestService(IServiceRequestService):
         service_type = self._normalize_choice(
             service_type, ServiceRequestModel.ServiceType, "service_type"
         )
+        responded_by_id = None
+        if mine:
+            if not can_manage_service_requests(user):
+                raise PermissionDeniedError(
+                    "Only admins or cleaning staff can filter by mine."
+                )
+            responded_by_id = user.id
         return self._repo.list_all(
             status=status,
             priority=priority,
             service_type=service_type,
+            responded_by_id=responded_by_id,
         )
 
     def get(self, user, pk):
@@ -148,9 +166,10 @@ class ServiceRequestService(IServiceRequestService):
                 field="action",
             )
         message = (response or "").strip()
-        if not message:
+        if action == "decline" and not message:
             raise BusinessRuleError(
-                "A response message is required.", field="response"
+                "A justification is required when declining.",
+                field="response",
             )
 
         instance = self._fetch_or_404(pk)
@@ -186,6 +205,10 @@ class ServiceRequestService(IServiceRequestService):
             raise BusinessRuleError(
                 "Only accepted requests can be marked completed.",
                 field="status",
+            )
+        if not is_admin(operator) and instance.responded_by_id != operator.id:
+            raise PermissionDeniedError(
+                "You can only complete service requests you accepted."
             )
         return self._repo.update(
             instance, {"status": ServiceRequestModel.Status.COMPLETED}

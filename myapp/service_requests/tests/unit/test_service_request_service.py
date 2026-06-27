@@ -41,21 +41,25 @@ class FakeRepo(IServiceRequestRepository):
 
     # --- helpers ----------------------------------------------------- #
     @staticmethod
-    def _matches(item, status, priority, service_type) -> bool:
+    def _matches(item, status, priority, service_type, responded_by_id=None) -> bool:
         if status and item.status != status:
             return False
         if priority and item.priority != priority:
             return False
         if service_type and item.service_type != service_type:
             return False
+        if responded_by_id and item.responded_by_id != responded_by_id:
+            return False
         return True
 
     # --- interface --------------------------------------------------- #
-    def list_all(self, status=None, priority=None, service_type=None):
+    def list_all(
+        self, status=None, priority=None, service_type=None, responded_by_id=None
+    ):
         return [
             i
             for i in self._items.values()
-            if self._matches(i, status, priority, service_type)
+            if self._matches(i, status, priority, service_type, responded_by_id)
         ]
 
     def list_for_user(
@@ -208,6 +212,34 @@ def test_list_filters_by_priority_case_insensitive(service):
     )
 
 
+def test_list_mine_returns_only_responded_by_caller(service):
+    item_a = service.create(_user(1), {"title": "a"})
+    item_b = service.create(_user(2), {"title": "b"})
+    cleaner = _cleaning()
+    service.respond(cleaner, item_a.id, "accept", "on it")
+    service.respond(_admin(), item_b.id, "decline", "no")
+    assert len(list(service.list(cleaner, mine=True))) == 1
+    assert list(service.list(cleaner, mine=True))[0].id == item_a.id
+
+
+def test_list_mine_forbidden_for_resident(service):
+    with pytest.raises(PermissionDeniedError):
+        service.list(_user(1), mine=True)
+
+
+def test_list_mine_with_status_filters(service):
+    accepted = service.create(_user(1), {"title": "accepted"})
+    declined = service.create(_user(1), {"title": "declined"})
+    cleaner = _cleaning()
+    service.respond(cleaner, accepted.id, "accept", "ok")
+    service.respond(cleaner, declined.id, "decline", "no")
+    in_progress = list(
+        service.list(cleaner, mine=True, status=ServiceRequestModel.Status.ACCEPTED)
+    )
+    assert len(in_progress) == 1
+    assert in_progress[0].id == accepted.id
+
+
 def test_get_returns_any_request(service):
     item = service.create(_user(1), {"title": "a"})
     assert service.get(_user(99), item.id).id == item.id
@@ -321,10 +353,18 @@ def test_respond_rejects_invalid_action(service):
         service.respond(_admin(), item.id, "wat", "msg")
 
 
-def test_respond_requires_non_empty_message(service):
+def test_respond_accept_without_message(service, email):
+    item = service.create(_user(1, email="a@x.com"), {"title": "a"})
+    updated = service.respond(_admin(), item.id, "accept", "")
+    assert updated.status == ServiceRequestModel.Status.ACCEPTED
+    assert updated.admin_response == ""
+    assert email.sent[-1]["kind"] == "service_request_responded"
+
+
+def test_respond_decline_requires_non_empty_message(service):
     item = service.create(_user(1), {"title": "a"})
     with pytest.raises(BusinessRuleError):
-        service.respond(_admin(), item.id, "accept", "   ")
+        service.respond(_admin(), item.id, "decline", "   ")
 
 
 def test_respond_blocks_double_answer(service):
@@ -363,3 +403,14 @@ def test_complete_requires_cleaning_or_admin(service):
     service.respond(_admin(), item.id, "accept", "ok")
     with pytest.raises(PermissionDeniedError):
         service.complete(_user(1), item.id)
+
+
+def test_complete_only_by_responder_unless_admin(service):
+    item = service.create(_user(1), {"title": "a"})
+    cleaner = _cleaning()
+    other_cleaner = _cleaning(51)
+    service.respond(cleaner, item.id, "accept", "ok")
+    with pytest.raises(PermissionDeniedError):
+        service.complete(other_cleaner, item.id)
+    completed = service.complete(cleaner, item.id)
+    assert completed.status == ServiceRequestModel.Status.COMPLETED

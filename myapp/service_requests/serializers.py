@@ -56,16 +56,22 @@ class ServiceRequestPatchSerializer(serializers.Serializer):
 
 
 class ServiceRequestRespondSerializer(serializers.Serializer):
-    """Payload an admin sends when accepting / declining a request.
-
-    ``response`` is mandatory: residents always learn *why* their
-    request was accepted or rejected.
-    """
+    """Accept may carry an optional note; decline requires a justification."""
 
     action = serializers.ChoiceField(choices=["accept", "decline"])
     response = serializers.CharField(
-        max_length=2000, required=True, allow_blank=False, trim_whitespace=True
+        max_length=2000, required=False, allow_blank=True, default=""
     )
+
+    def validate(self, attrs):
+        action = attrs.get("action")
+        response = (attrs.get("response") or "").strip()
+        if action == "decline" and not response:
+            raise serializers.ValidationError(
+                {"response": "A justification is required when declining."}
+            )
+        attrs["response"] = response
+        return attrs
 
 
 class ServiceRequestOutputSerializer(serializers.ModelSerializer):
@@ -99,6 +105,8 @@ class ServiceRequestOutputSerializer(serializers.ModelSerializer):
             "id": u.id,
             "username": u.username,
             "full_name": getattr(u, "full_name", ""),
+            "apartment": getattr(u, "apartment", ""),
+            "block": getattr(u, "block", ""),
         }
 
     def get_responded_by(self, obj) -> dict | None:

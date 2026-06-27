@@ -147,7 +147,17 @@ class ServiceRequestsAPISmoke(BaseTestsUsers):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["status"], "DECLINED")
 
-    def test_respond_requires_response_field(self):
+    def test_respond_decline_requires_response(self):
+        item = _make_request(self.user_a)
+        self.authenticate(self.admin)
+        response = self.client.post(
+            respond_url(item.id),
+            data={"action": "decline"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+
+    def test_respond_accept_without_response(self):
         item = _make_request(self.user_a)
         self.authenticate(self.admin)
         response = self.client.post(
@@ -155,7 +165,9 @@ class ServiceRequestsAPISmoke(BaseTestsUsers):
             data={"action": "accept"},
             format="json",
         )
-        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["status"], "ACCEPTED")
+        self.assertEqual(response.data["admin_response"], "")
 
     def test_respond_forbidden_for_non_admin(self):
         item = _make_request(self.user_a)
@@ -185,3 +197,39 @@ class ServiceRequestsAPISmoke(BaseTestsUsers):
         self.authenticate(self.admin)
         response = self.client.post(complete_url(item.id))
         self.assertEqual(response.status_code, 400)
+
+    def test_cleaning_mine_filter(self):
+        from datetime import date
+
+        from tests_base.base_tests_user import _gen_cpf
+
+        cleaner = self.User.objects.create_user(
+            username="zelador",
+            email="zelador@example.com",
+            password="Abcd123!",
+            full_name="Zelador",
+            birth_date=date(1985, 1, 1),
+            cpf=_gen_cpf(),
+            phone="11988887777",
+            role="EMPLOYEE",
+            employee_types=["CLEANING"],
+        )
+        mine = _make_request(self.user_a, title="mine")
+        other = _make_request(self.user_b, title="other")
+        self.authenticate(cleaner)
+        self.client.post(
+            respond_url(mine.id),
+            data={"action": "accept", "response": "ok"},
+            format="json",
+        )
+        self.authenticate(self.admin)
+        self.client.post(
+            respond_url(other.id),
+            data={"action": "decline", "response": "no"},
+            format="json",
+        )
+        self.authenticate(cleaner)
+        response = self.client.get(LIST_URL, {"mine": "true"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["title"], "mine")

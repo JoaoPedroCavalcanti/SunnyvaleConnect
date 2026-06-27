@@ -6,10 +6,10 @@ class ServiceRequestModel(models.Model):
     """A ticket opened by a resident asking the building staff to do
     something (fix a leak, schedule extra cleaning, prune a tree, etc.).
 
-    A request is always created as PENDING by the resident. An admin
-    then accepts or declines it — and is forced to write a justification
-    (``admin_response``) so the resident always knows why. Once the work
-    is done the admin may mark it COMPLETED.
+    A request is always created as PENDING by the resident. Cleaning staff
+    or an admin accepts (optional note) or declines (justification required).
+    The note/justification is stored in ``admin_response`` for others to read.
+    Once accepted, the handler may mark it COMPLETED.
     """
 
     class Status(models.TextChoices):

@@ -12,6 +12,7 @@ class IServiceRequestRepository(ABC):
         status: str | None = None,
         priority: str | None = None,
         service_type: str | None = None,
+        responded_by_id: int | None = None,
     ): ...
 
     @abstractmethod
@@ -42,11 +43,15 @@ class IServiceRequestRepository(ABC):
 
 
 class DjangoServiceRequestRepository(IServiceRequestRepository):
-    def list_all(self, status=None, priority=None, service_type=None):
+    def list_all(
+        self, status=None, priority=None, service_type=None, responded_by_id=None
+    ):
         qs = ServiceRequestModel.objects.select_related(
             "requester", "responded_by"
         ).all()
-        return self._apply_filters(qs, status, priority, service_type)
+        return self._apply_filters(
+            qs, status, priority, service_type, responded_by_id
+        )
 
     def list_for_user(
         self, user_id, status=None, priority=None, service_type=None
@@ -82,11 +87,13 @@ class DjangoServiceRequestRepository(IServiceRequestRepository):
         return qs.count()
 
     @staticmethod
-    def _apply_filters(qs, status, priority, service_type):
+    def _apply_filters(qs, status, priority, service_type, responded_by_id=None):
         if status:
             qs = qs.filter(status=status)
         if priority:
             qs = qs.filter(priority=priority)
         if service_type:
             qs = qs.filter(service_type=service_type)
+        if responded_by_id:
+            qs = qs.filter(responded_by_id=responded_by_id)
         return qs
