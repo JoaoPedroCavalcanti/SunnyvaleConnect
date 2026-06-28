@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 
 from shared.exceptions import BusinessRuleError, NotFoundError
 from shared.roles import ensure_not_employee, is_admin
+from shared.tenant import assert_same_condominium, require_condominium_id
 from visitor_access.models import VisitorGroupModel
 from visitor_access.repositories.visitor_group_repository import (
     IVisitorGroupRepository,
@@ -45,13 +46,16 @@ class VisitorGroupService(IVisitorGroupService):
     # ------------------------------------------------------------------ #
     def list_for(self, user):
         if user.is_staff:
-            return self._repo.list_all()
+            return self._repo.list_all(
+                condominium_id=require_condominium_id(user)
+            )
         return self._repo.list_for_user(user.id)
 
     def get_for(self, user, pk):
         instance = self._repo.get_by_id(pk)
         if not instance:
             raise NotFoundError("No visitor group matches the given query.")
+        assert_same_condominium(user, instance.host_user.condominium_id)
         if not user.is_staff and instance.host_user_id != user.id:
             raise NotFoundError("No visitor group matches the given query.")
         return instance

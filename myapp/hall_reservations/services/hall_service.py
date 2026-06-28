@@ -18,15 +18,16 @@ from shared.exceptions import (
 )
 from shared.infrastructure.email_sender import IEmailSender
 from shared.roles import ensure_not_employee
+from shared.tenant import assert_same_condominium, require_condominium_id
 from shared.time_slots import slots_overlap
 
 
 class IHallReservationService(ABC):
     @abstractmethod
-    def list(self, status: str | None = None): ...
+    def list(self, user, status: str | None = None): ...
 
     @abstractmethod
-    def get(self, pk: int) -> HallReservationModel: ...
+    def get(self, user, pk: int) -> HallReservationModel: ...
 
     @abstractmethod
     def create(self, user, payload: dict) -> HallReservationModel: ...
@@ -57,9 +58,12 @@ class HallReservationService(IHallReservationService):
         self._memberships = membership_repository
         self._email = email_sender
 
-    def list(self, status=None):
+    def list(self, user, status=None):
         normalized = self._normalize_status_filter(status)
-        return self._repo.list_all(status=normalized)
+        return self._repo.list_all(
+            status=normalized,
+            condominium_id=require_condominium_id(user),
+        )
 
     @staticmethod
     def _normalize_status_filter(status: str | None) -> str | None:
@@ -75,10 +79,11 @@ class HallReservationService(IHallReservationService):
             )
         return upper
 
-    def get(self, pk):
+    def get(self, user, pk):
         instance = self._repo.get_by_id(pk)
         if not instance:
             raise NotFoundError("No Hall reservation matches the given query.")
+        assert_same_condominium(user, instance.household.condominium_id)
         return instance
 
     def create(self, user, payload: dict):
@@ -95,7 +100,7 @@ class HallReservationService(IHallReservationService):
         start_time = data.get("start_time")
         end_time = data.get("end_time")
         self._validate_date(reservation_date)
-        self._validate_slot(reservation_date, start_time, end_time)
+        self._validate_slot(user, reservation_date, start_time, end_time)
 
         if not user.is_staff:
             self._validate_30_day_window(household.id, reservation_date)
@@ -112,12 +117,12 @@ class HallReservationService(IHallReservationService):
 
     def update(self, user, pk, payload):
         ensure_not_employee(user, action="book reservations")
-        instance = self.get(pk)
+        instance = self.get(user, pk)
         return self._repo.update(instance, payload)
 
     def delete(self, user, pk):
         ensure_not_employee(user, action="book reservations")
-        instance = self.get(pk)
+        instance = self.get(user, pk)
         self._repo.delete(instance)
 
     def approve(self, user, pk):
@@ -125,12 +130,13 @@ class HallReservationService(IHallReservationService):
             raise PermissionDeniedError(
                 "Only admins can approve a hall booking."
             )
-        instance = self.get(pk)
+        instance = self.get(user, pk)
         if instance.status == HallReservationModel.Status.APPROVED:
             return instance
         # Re-validate against the current state of APPROVED bookings.
         self._validate_date(instance.reservation_date)
         self._validate_slot(
+            user,
             instance.reservation_date,
             instance.start_time,
             instance.end_time,
@@ -154,7 +160,7 @@ class HallReservationService(IHallReservationService):
             raise BusinessRuleError(
                 "A rejection reason is required.", field="reason"
             )
-        instance = self.get(pk)
+        instance = self.get(user, pk)
         if instance.status == HallReservationModel.Status.REJECTED:
             return instance
         updated = self._repo.update(
@@ -226,6 +232,7 @@ class HallReservationService(IHallReservationService):
 
     def _validate_slot(
         self,
+        user,
         reservation_date: date,
         start_time: time | None,
         end_time: time | None,
@@ -245,7 +252,10 @@ class HallReservationService(IHallReservationService):
                 "start_time must be earlier than end_time.",
                 field="start_time",
             )
-        for existing in self._repo.list_for_date(reservation_date):
+        for existing in self._repo.list_for_date(
+            reservation_date,
+            condominium_id=require_condominium_id(user),
+        ):
             if slots_overlap(
                 start_time, end_time,
                 existing.start_time, existing.end_time,

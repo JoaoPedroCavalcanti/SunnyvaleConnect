@@ -6,15 +6,18 @@ so the transaction boundary is also covered.
 
 import pytest
 
+from condominiums.services.condominium_service import CondominiumService
 from households.models import Household, HouseholdMembership
 from households.services.household_service import HouseholdService
 from households.services.membership_service import MembershipService
 from households.services.signup_service import SignupService
 from households.tests.unit._fakes import (
+    FakeCondominiumRepository,
     FakeHouseholdRepository,
     FakeMembershipDecisionRepository,
     FakeMembershipRepository,
     FakeUserRepository,
+    TEST_CONDOMINIUM_CODE,
     anon,
 )
 from shared.exceptions import BusinessRuleError
@@ -24,7 +27,7 @@ from shared.infrastructure.document_validators import (
 )
 from shared.infrastructure.password_policy import DefaultPasswordPolicy
 from shared.infrastructure.transactions import NullTransactionRunner
-from shared.test_doubles.fakes import FakeEmailSender
+from shared.test_doubles.fakes import FakeCodeGenerator, FakeEmailSender
 from users.services.user_service import UserService
 
 
@@ -49,6 +52,7 @@ def env():
         cpf_validator=BrazilianCPFValidator(),
         phone_validator=BrazilianPhoneValidator(),
     )
+    condominiums = FakeCondominiumRepository()
     tx = NullTransactionRunner()
     household_service = HouseholdService(
         household_repository=households,
@@ -56,6 +60,7 @@ def env():
         user_repository=users,
         email_sender=email,
         transaction_runner=tx,
+        condominium_repository=condominiums,
     )
     membership_service = MembershipService(
         membership_repository=memberships,
@@ -65,10 +70,15 @@ def env():
         decision_repository=FakeMembershipDecisionRepository(),
         transaction_runner=tx,
     )
+    condominium_service = CondominiumService(
+        repository=condominiums,
+        code_generator=FakeCodeGenerator(),
+    )
     signup = SignupService(
         user_service=user_service,
         household_service=household_service,
         membership_service=membership_service,
+        condominium_service=condominium_service,
     )
     return {
         "signup": signup,
@@ -90,6 +100,7 @@ def _user_payload(**overrides):
         "email": "joao@example.com",
         "apartment": "302",
         "block": "A",
+        "condominium_code": TEST_CONDOMINIUM_CODE,
     }
     base.update(overrides)
     return base
@@ -137,7 +148,7 @@ class TestSignup:
         ms = env["memberships"].list_for_household(household.id)
         assert len(ms) == 2
         new_membership = next(
-            m for m in ms if m.user.username == "maria"
+            m for m in ms if m.user.username.endswith(":maria")
         )
         assert new_membership.status == HouseholdMembership.Status.PENDING_HOLDER
         assert new_membership.role == HouseholdMembership.Role.RESIDENT

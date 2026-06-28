@@ -13,12 +13,18 @@ class Household(models.Model):
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.PENDING_ADMIN
     )
+    condominium = models.ForeignKey(
+        "condominiums.Condominium",
+        on_delete=models.PROTECT,
+        related_name="households",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["apartment", "block"], name="uniq_household_apartment_block"
+                fields=["condominium", "apartment", "block"],
+                name="uniq_household_condominium_apartment_block",
             )
         ]
         ordering = ["block", "apartment"]

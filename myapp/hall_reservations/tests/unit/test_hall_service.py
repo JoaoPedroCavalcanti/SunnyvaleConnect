@@ -19,26 +19,40 @@ from shared.test_doubles.fakes import FakeEmailSender
 
 pytestmark = pytest.mark.unit
 
+TEST_CONDOMINIUM_ID = 1
+
 
 class FakeHallRepository(IHallRepository):
     def __init__(self):
         self._items = []
         self._next_id = 1
 
-    def list_all(self, status=None):
+    def list_all(self, status=None, *, condominium_id):
+        items = [
+            i
+            for i in self._items
+            if getattr(getattr(i, "household", None), "condominium_id", None)
+            == condominium_id
+            or getattr(i, "household", None) is None
+        ]
         if status:
-            return [i for i in self._items if i.status == status]
-        return list(self._items)
+            return [i for i in items if i.status == status]
+        return items
 
     def get_by_id(self, pk):
         return next((i for i in self._items if i.id == pk), None)
 
-    def list_for_date(self, reservation_date):
+    def list_for_date(self, reservation_date, *, condominium_id):
         return [
             i
             for i in self._items
             if i.reservation_date == reservation_date
             and i.status == HallReservationModel.Status.APPROVED
+            and (
+                getattr(getattr(i, "household", None), "condominium_id", None)
+                == condominium_id
+                or getattr(i, "household", None) is None
+            )
         ]
 
     def latest_date_for_household(self, household_id):
@@ -74,10 +88,9 @@ class FakeHallRepository(IHallRepository):
     def delete(self, instance):
         self._items.remove(instance)
 
-    def count_by_status(self, status=None):
-        if status:
-            return sum(1 for i in self._items if i.status == status)
-        return len(self._items)
+    def count_by_status(self, status=None, *, condominium_id):
+        items = self.list_all(status=status, condominium_id=condominium_id)
+        return len(items)
 
 
 class FakeMembershipRepo:
@@ -104,7 +117,9 @@ class FakeMembershipRepo:
 
 
 def _household(pk=1, apt="1101", block="A"):
-    return SimpleNamespace(id=pk, apartment=apt, block=block)
+    return SimpleNamespace(
+        id=pk, apartment=apt, block=block, condominium_id=TEST_CONDOMINIUM_ID
+    )
 
 
 def _user(pk=1, is_staff=False, email="user@example.com", username="user1"):
@@ -114,6 +129,7 @@ def _user(pk=1, is_staff=False, email="user@example.com", username="user1"):
         email=email,
         username=username,
         full_name="",
+        condominium_id=TEST_CONDOMINIUM_ID,
     )
 
 
@@ -362,7 +378,7 @@ def test_pending_does_not_count_toward_cooldown(fixtures):
 
 def test_not_found_on_get(fixtures):
     with pytest.raises(NotFoundError):
-        fixtures["service"].get(999)
+        fixtures["service"].get(fixtures["holder"], 999)
 
 
 class TestApproveReject:

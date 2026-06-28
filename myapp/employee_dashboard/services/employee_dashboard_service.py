@@ -20,6 +20,7 @@ from shared.roles import (
     is_admin,
     is_employee,
 )
+from shared.tenant import require_condominium_id
 from visitor_access.models import VisitorAccessModel
 from visitor_access.repositories.visitor_access_repository import (
     IVisitorAccessRepository,
@@ -61,6 +62,7 @@ class EmployeeDashboardService(IEmployeeDashboardService):
 
     def day_summary(self, user) -> EmployeeDaySummary:
         self._require_staff_user(user)
+        condominium_id = require_condominium_id(user)
 
         deliveries_today = None
         visits_today = None
@@ -72,24 +74,27 @@ class EmployeeDashboardService(IEmployeeDashboardService):
             day_start, day_end = self._local_day_bounds()
             now = timezone.now()
             deliveries_today = self._deliveries.count_created_between(
-                day_start, day_end
+                day_start, day_end, condominium_id=condominium_id
             )
             visits_today = self._visitors.count_scheduled_between(
                 day_start,
                 day_end,
+                condominium_id=condominium_id,
                 exclude_statuses=[VisitorAccessModel.Status.CANCELLED],
             )
             scheduled_visits = self._visitors.count_with_scheduled_after(
                 now,
+                condominium_id=condominium_id,
                 status_in=[VisitorAccessModel.Status.SCHEDULED],
             )
             cleared_visits_today = self._visitors.count_checked_in_between(
-                day_start, day_end
+                day_start, day_end, condominium_id=condominium_id
             )
 
         if can_manage_service_requests(user):
             pending_service_requests = self._requests.count_by_status(
-                ServiceRequestModel.Status.PENDING
+                ServiceRequestModel.Status.PENDING,
+                condominium_id=condominium_id,
             )
 
         return EmployeeDaySummary(
@@ -113,6 +118,7 @@ class EmployeeDashboardService(IEmployeeDashboardService):
 
         return self._visitors.list_upcoming(
             timezone.now(),
+            condominium_id=require_condominium_id(user),
             limit=limit,
             status_in=self._UPCOMING_STATUSES,
             exclude_statuses=[VisitorAccessModel.Status.CANCELLED],

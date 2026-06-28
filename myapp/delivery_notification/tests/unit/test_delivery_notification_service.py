@@ -17,14 +17,21 @@ from shared.test_doubles.fakes import FakeEmailSender
 
 pytestmark = pytest.mark.unit
 
+TEST_CONDOMINIUM_ID = 1
+
 
 class FakeDeliveryRepo(IDeliveryNotificationRepository):
     def __init__(self):
         self._items: dict[int, SimpleNamespace] = {}
         self._next_id = 1
 
-    def list_all(self):
-        return list(self._items.values())
+    def list_all(self, *, condominium_id):
+        return [
+            i
+            for i in self._items.values()
+            if getattr(getattr(i, "household", None), "condominium_id", None)
+            == condominium_id
+        ]
 
     def get_by_id(self, pk):
         return self._items.get(int(pk))
@@ -51,7 +58,7 @@ class FakeDeliveryRepo(IDeliveryNotificationRepository):
         self._next_id += 1
         return item
 
-    def count_created_between(self, start, end):
+    def count_created_between(self, start, end, *, condominium_id):
         return 0
 
 
@@ -66,22 +73,44 @@ class FakeHouseholdRepo:
             apartment=apartment,
             block=block,
             status=status,
+            condominium_id=TEST_CONDOMINIUM_ID,
         )
         self._households[self._next_id] = household
         self._next_id += 1
         return household
 
-    def list_all(self, status=None):
+    def list_all(self, status=None, *, condominium_id=None):
         items = list(self._households.values())
+        if condominium_id is not None:
+            items = [h for h in items if h.condominium_id == condominium_id]
         if status:
             items = [h for h in items if h.status == status]
         return items
 
-    def get_by_apartment_block(self, apartment, block):
+    def get_by_apartment_block(self, apartment, block, *, condominium_id):
         for household in self._households.values():
-            if household.apartment == apartment and household.block == (block or ""):
+            if (
+                household.condominium_id == condominium_id
+                and household.apartment == apartment
+                and household.block == (block or "")
+            ):
                 return household
         return None
+
+    def get_by_id(self, pk):
+        return self._households.get(int(pk))
+
+    def search(self, apartment, block, *, condominium_id):
+        return []
+
+    def create(self, data):
+        raise NotImplementedError
+
+    def update(self, instance, data):
+        raise NotImplementedError
+
+    def delete(self, instance):
+        raise NotImplementedError
 
 
 class FakeMembershipRepo:
@@ -134,6 +163,16 @@ def service(email_sender, household_repo, membership_repo):
     )
 
 
+def _staff():
+    return SimpleNamespace(
+        id=99,
+        is_authenticated=True,
+        is_staff=True,
+        role="ADMIN",
+        condominium_id=TEST_CONDOMINIUM_ID,
+    )
+
+
 def _setup_active_household(household_repo, membership_repo, *, email="h@example.com"):
     household = household_repo.add("101", "A")
     holder = SimpleNamespace(
@@ -141,6 +180,7 @@ def _setup_active_household(household_repo, membership_repo, *, email="h@example
         email=email,
         username="holder1",
         full_name="Holder One",
+        condominium_id=TEST_CONDOMINIUM_ID,
     )
     membership_repo.set_holder(household.id, holder)
     return household, holder
@@ -149,13 +189,14 @@ def _setup_active_household(household_repo, membership_repo, *, email="h@example
 def test_send_creates_record_and_emails_holder(service, email_sender, household_repo, membership_repo):
     household, holder = _setup_active_household(household_repo, membership_repo)
     result = service.send(
+        _staff(),
         {
             "apartment": household.apartment,
             "block": household.block,
             "title": "Package",
             "delivery_from": "iFood",
             "delivery_platform": "ifood",
-        }
+        },
     )
     assert result is not None
     assert result.notified_holder_email == holder.email
@@ -168,13 +209,14 @@ def test_send_creates_record_and_emails_holder(service, email_sender, household_
 def test_send_unknown_apartment_raises(service):
     with pytest.raises(NotFoundError):
         service.send(
+            _staff(),
             {
                 "apartment": "999",
                 "block": "Z",
                 "title": "x",
                 "delivery_from": "z",
                 "delivery_platform": "ifood",
-            }
+            },
         )
 
 
@@ -186,13 +228,14 @@ def test_send_inactive_household_raises(service, household_repo, membership_repo
     )
     with pytest.raises(BusinessRuleError):
         service.send(
+            _staff(),
             {
                 "apartment": household.apartment,
                 "block": household.block,
                 "title": "x",
                 "delivery_from": "z",
                 "delivery_platform": "ifood",
-            }
+            },
         )
 
 
@@ -200,19 +243,20 @@ def test_send_without_holder_raises(service, household_repo):
     household_repo.add("303", "C")
     with pytest.raises(BusinessRuleError):
         service.send(
+            _staff(),
             {
                 "apartment": "303",
                 "block": "C",
                 "title": "x",
                 "delivery_from": "z",
                 "delivery_platform": "ifood",
-            }
+            },
         )
 
 
 def test_get_not_found(service):
     with pytest.raises(NotFoundError):
-        service.get(123)
+        service.get(_staff(), 123)
 
 
 def test_send_with_holder_without_email_raises(
@@ -223,13 +267,14 @@ def test_send_with_holder_without_email_raises(
     )
     with pytest.raises(BusinessRuleError):
         service.send(
+            _staff(),
             {
                 "apartment": household.apartment,
                 "block": household.block,
                 "title": "x",
                 "delivery_from": "z",
                 "delivery_platform": "ifood",
-            }
+            },
         )
     assert email_sender.sent == []
 
@@ -238,7 +283,7 @@ def test_list_apartments_returns_active_units_with_holder_name(
     service, household_repo, membership_repo
 ):
     household, holder = _setup_active_household(household_repo, membership_repo)
-    staff = SimpleNamespace(is_authenticated=True, is_staff=True, role="ADMIN")
+    staff = _staff()
 
     items = service.list_apartments(staff)
 
@@ -254,9 +299,9 @@ def test_list_apartments_includes_non_archived_with_status(
     service, household_repo, membership_repo
 ):
     _setup_active_household(household_repo, membership_repo)
-    pending = household_repo.add("404", "D", status=Household.Status.PENDING_ADMIN)
+    household_repo.add("404", "D", status=Household.Status.PENDING_ADMIN)
     household_repo.add("505", "E", status=Household.Status.ARCHIVED)
-    staff = SimpleNamespace(is_authenticated=True, is_staff=True, role="ADMIN")
+    staff = _staff()
 
     items = service.list_apartments(staff)
 
@@ -264,4 +309,3 @@ def test_list_apartments_includes_non_archived_with_status(
     statuses = {item.apartment: item.status for item in items}
     assert statuses["101"] == Household.Status.ACTIVE
     assert statuses["404"] == Household.Status.PENDING_ADMIN
-

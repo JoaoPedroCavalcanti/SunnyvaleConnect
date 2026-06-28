@@ -11,6 +11,7 @@ from shared.infrastructure.code_generator import ICodeGenerator
 from shared.infrastructure.email_sender import IEmailSender
 from shared.infrastructure.qr_encoder import IQRCodeEncoder
 from shared.roles import can_doorman_ops, can_see_all_visits, ensure_not_employee, is_admin
+from shared.tenant import assert_same_condominium, require_condominium_id
 from visitor_access.models import VisitorAccessModel
 from visitor_access.repositories.visitor_access_repository import (
     IVisitorAccessRepository,
@@ -101,6 +102,7 @@ class VisitorAccessService(IVisitorAccessService):
                 scheduled_after=scheduled_after,
                 scheduled_before=scheduled_before,
                 is_group=is_group,
+                condominium_id=require_condominium_id(user),
             )
         return self._repo.list_for_user(
             user.id,
@@ -114,6 +116,7 @@ class VisitorAccessService(IVisitorAccessService):
         instance = self._repo.get_by_id(pk)
         if not instance:
             raise NotFoundError("No visitor access matches the given query.")
+        assert_same_condominium(user, instance.host_user.condominium_id)
         if not can_see_all_visits(user) and instance.host_user_id != user.id:
             raise NotFoundError("No visitor access matches the given query.")
         return instance

@@ -185,7 +185,7 @@ class LoginAPISmoke(BaseTestsUsers):
     def test_active_user_gets_tokens(self):
         response = self.client.post(
             LOGIN_URL,
-            data={"username": self.user_a.username, "password": "Abcd123!"},
+            data=self.login_payload(self.user_a),
             format="json",
         )
         self.assertEqual(response.status_code, 200, response.data)
@@ -197,7 +197,7 @@ class LoginAPISmoke(BaseTestsUsers):
 
         response = self.client.post(
             LOGIN_URL,
-            data={"username": self.admin.username, "password": "Abcd123!"},
+            data=self.login_payload(self.admin, password="Abcd123!"),
             format="json",
         )
         self.assertEqual(response.status_code, 200, response.data)
@@ -205,9 +205,11 @@ class LoginAPISmoke(BaseTestsUsers):
         self.assertEqual(token["role"], "ADMIN")
 
     def test_invalid_credentials_returns_401(self):
+        payload = self.login_payload(self.user_a)
+        payload["password"] = "wrong"
         response = self.client.post(
             LOGIN_URL,
-            data={"username": self.user_a.username, "password": "wrong"},
+            data=payload,
             format="json",
         )
         self.assertEqual(response.status_code, 401)
@@ -222,6 +224,7 @@ class LoginAPISmoke(BaseTestsUsers):
             apartment="701",
             block="C",
             status=Household.Status.PENDING_ADMIN,
+            condominium=self.condominium,
         )
         HouseholdMembership.objects.create(
             household=household,
@@ -232,7 +235,7 @@ class LoginAPISmoke(BaseTestsUsers):
 
         response = self.client.post(
             LOGIN_URL,
-            data={"username": self.user_a.username, "password": "Abcd123!"},
+            data=self.login_payload(self.user_a),
             format="json",
         )
         self.assertEqual(response.status_code, 403)

@@ -17,12 +17,14 @@ from visitor_access.models import VisitorAccessModel
 
 pytestmark = pytest.mark.unit
 
+TEST_CONDOMINIUM_ID = 1
+
 
 class FakeDeliveryRepo:
     def __init__(self, count=0):
         self.count = count
 
-    def count_created_between(self, start, end):
+    def count_created_between(self, start, end, *, condominium_id):
         return self.count
 
 
@@ -33,19 +35,32 @@ class FakeVisitorRepo:
         self.cleared = cleared
         self.upcoming = upcoming or []
 
-    def count_scheduled_between(self, start, end, *, exclude_statuses=None):
+    def count_scheduled_between(
+        self, start, end, *, condominium_id, exclude_statuses=None
+    ):
         return self.today
 
-    def count_checked_in_between(self, start, end):
+    def count_checked_in_between(self, start, end, *, condominium_id):
         return self.cleared
 
     def count_with_scheduled_after(
-        self, after, *, status_in=None, exclude_statuses=None
+        self,
+        after,
+        *,
+        condominium_id,
+        status_in=None,
+        exclude_statuses=None,
     ):
         return self.scheduled
 
     def list_upcoming(
-        self, after, *, limit=10, status_in=None, exclude_statuses=None
+        self,
+        after,
+        *,
+        condominium_id,
+        limit=10,
+        status_in=None,
+        exclude_statuses=None,
     ):
         return self.upcoming[:limit]
 
@@ -54,7 +69,7 @@ class FakeRequestRepo:
     def __init__(self, pending=0):
         self.pending = pending
 
-    def count_by_status(self, status=None):
+    def count_by_status(self, status=None, *, condominium_id):
         if status == ServiceRequestModel.Status.PENDING:
             return self.pending
         return 0
@@ -67,6 +82,7 @@ def _user(*, role=UserRole.EMPLOYEE, employee_types=None, is_staff=False):
         is_staff=is_staff,
         role=role,
         employee_types=list(employee_types or []),
+        condominium_id=TEST_CONDOMINIUM_ID,
     )
 
 

@@ -1,15 +1,7 @@
-"""Authentication rules: produces a verdict for the LoginView to act on.
-
-The view stays thin (only HTTP), while this service centralizes the policy:
-- invalid credentials  → 401 generic
-- pending household    → 403 with household info (front shows waiting screen)
-- disabled account     → 403 generic
-- ok                   → 200 with JWT pair
-"""
+"""Authentication rules: produces a verdict for the LoginView to act on."""
 
 from abc import ABC, abstractmethod
 
-from households.models import HouseholdMembership
 from households.repositories.membership_repository import IMembershipRepository
 from users.repositories.user_repository import IUserRepository
 
@@ -22,7 +14,7 @@ KIND_PENDING = "pending_household_approval"
 
 class IAuthService(ABC):
     @abstractmethod
-    def authenticate(self, username: str, password: str) -> dict: ...
+    def authenticate(self, email: str, password: str) -> dict: ...
 
 
 class AuthService(IAuthService):
@@ -34,13 +26,22 @@ class AuthService(IAuthService):
         self._users = user_repository
         self._memberships = membership_repository
 
-    def authenticate(self, username: str, password: str) -> dict:
-        user = self._users.get_by_username(username or "")
+    def authenticate(self, email: str, password: str):
+        normalized_email = (email or "").lower().strip()
+        user = self._users.get_by_email(normalized_email)
         if not user or not self._users.check_password(user, password or ""):
             return {"kind": KIND_INVALID}
 
+        condominium = getattr(user, "condominium", None)
+        if not condominium or not getattr(condominium, "is_active", True):
+            return {"kind": KIND_INVALID}
+
         if user.is_active:
-            return {"kind": KIND_OK, "user": user}
+            return {
+                "kind": KIND_OK,
+                "user": user,
+                "condominium": condominium,
+            }
 
         pending = list(self._memberships.list_pending_for_user(user.id))
         if pending:
@@ -49,6 +50,7 @@ class AuthService(IAuthService):
             return {
                 "kind": KIND_PENDING,
                 "user": user,
+                "condominium": condominium,
                 "household": {
                     "id": household.id,
                     "apartment": household.apartment,
@@ -59,4 +61,4 @@ class AuthService(IAuthService):
                 },
             }
 
-        return {"kind": KIND_DISABLED, "user": user}
+        return {"kind": KIND_DISABLED, "user": user, "condominium": condominium}

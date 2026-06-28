@@ -16,6 +16,8 @@ from visitor_access.services.visitor_group_service import VisitorGroupService
 
 pytestmark = pytest.mark.unit
 
+TEST_CONDOMINIUM_ID = 1
+
 
 # ---------------------------------------------------------------------- #
 # fakes                                                                  #
@@ -53,7 +55,7 @@ class FakeVisitorGroupRepo(IVisitorGroupRepository):
             if g.host_user.id == user_id
         ]
 
-    def list_all(self):
+    def list_all(self, *, condominium_id):
         return [self._attach_members(g) for g in self._groups.values()]
 
     def get_by_id(self, pk):
@@ -198,6 +200,7 @@ def _user(pk=1, is_staff=False, role=None):
         is_authenticated=True,
         role=role or ("ADMIN" if is_staff else "RESIDENT"),
         employee_types=[],
+        condominium_id=TEST_CONDOMINIUM_ID,
     )
 
 

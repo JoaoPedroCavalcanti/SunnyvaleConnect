@@ -35,7 +35,9 @@ class SunnyValeNewsListCreateView(APIView):
     )
     def get(self, request):
         kind = request.query_params.get("kind") or None
-        queryset = container.sunny_vale_news_service.list(kind=kind)
+        queryset = container.sunny_vale_news_service.list(
+            request.user, kind=kind
+        )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request, view=self)
         serializer = SunnyValeNewsOutputSerializer(page, many=True)
@@ -62,7 +64,7 @@ class SunnyValeNewsDetailView(APIView):
 
     @extend_schema(responses={200: SunnyValeNewsOutputSerializer})
     def get(self, request, pk: int):
-        news = container.sunny_vale_news_service.get(pk)
+        news = container.sunny_vale_news_service.get(request.user, pk)
         return Response(SunnyValeNewsOutputSerializer(news).data)
 
     @extend_schema(

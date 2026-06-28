@@ -26,6 +26,7 @@ def _create_active_household_with_holder(user):
         apartment=user.apartment,
         block=user.block,
         status=Household.Status.ACTIVE,
+        condominium=user.condominium,
     )
     HouseholdMembership.objects.create(
         household=household,

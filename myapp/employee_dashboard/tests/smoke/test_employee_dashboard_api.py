@@ -25,7 +25,7 @@ class EmployeeDashboardAPISmoke(BaseTestsUsers):
     def setUpTestData(cls):
         super().setUpTestData()
         cls.doorman = cls.User.objects.create_user(
-            username="porteiro",
+            username=f"{cls.condominium.code}:porteiro",
             email="porteiro@example.com",
             password="Abcd123!",
             full_name="Porteiro",
@@ -34,9 +34,10 @@ class EmployeeDashboardAPISmoke(BaseTestsUsers):
             phone="11988887777",
             role="EMPLOYEE",
             employee_types=["DOORMAN"],
+            condominium=cls.condominium,
         )
         cls.cleaner = cls.User.objects.create_user(
-            username="zelador",
+            username=f"{cls.condominium.code}:zelador",
             email="zelador@example.com",
             password="Abcd123!",
             full_name="Zelador",
@@ -45,6 +46,7 @@ class EmployeeDashboardAPISmoke(BaseTestsUsers):
             phone="11977776666",
             role="EMPLOYEE",
             employee_types=["CLEANING"],
+            condominium=cls.condominium,
         )
 
     def test_resident_forbidden(self):
@@ -56,6 +58,7 @@ class EmployeeDashboardAPISmoke(BaseTestsUsers):
             apartment=self.user_a.apartment,
             block=self.user_a.block,
             status=Household.Status.ACTIVE,
+            condominium=self.condominium,
         )
         DeliveryNotificationModel.objects.create(
             household=household,

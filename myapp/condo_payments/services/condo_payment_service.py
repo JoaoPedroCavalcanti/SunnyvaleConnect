@@ -7,6 +7,7 @@ from condo_payments.repositories.condo_payment_repository import (
     ICondoPaymentRepository,
 )
 from shared.exceptions import BusinessRuleError, NotFoundError, PermissionDeniedError
+from shared.tenant import assert_same_condominium, require_condominium_id
 
 
 class ICondoPaymentService(ABC):
@@ -41,14 +42,16 @@ class CondoPaymentService(ICondoPaymentService):
             )
 
     def list_for(self, user):
+        condominium_id = require_condominium_id(user)
         if user.is_staff:
-            return self._repo.list_all()
-        return self._repo.list_for_user(user.id)
+            return self._repo.list_all(condominium_id=condominium_id)
+        return self._repo.list_for_user(user.id, condominium_id=condominium_id)
 
     def get_for(self, user, pk):
         instance = self._repo.get_by_id(pk)
         if not instance:
             raise NotFoundError("No payment matches the given query.")
+        assert_same_condominium(user, instance.payer_user.condominium_id)
         if not user.is_staff and instance.payer_user_id != user.id:
             raise NotFoundError("No payment matches the given query.")
         return instance

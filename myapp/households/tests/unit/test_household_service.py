@@ -5,9 +5,11 @@ import pytest
 from households.models import Household, HouseholdMembership
 from households.services.household_service import HouseholdService
 from households.tests.unit._fakes import (
+    FakeCondominiumRepository,
     FakeHouseholdRepository,
     FakeMembershipRepository,
     FakeUserRepository,
+    TEST_CONDOMINIUM_CODE,
     make_user,
 )
 from shared.exceptions import (
@@ -34,6 +36,7 @@ def deps():
         user_repository=users,
         email_sender=email,
         transaction_runner=NullTransactionRunner(),
+        condominium_repository=FakeCondominiumRepository(),
     )
     return service, households, memberships, users, email
 
@@ -196,11 +199,11 @@ class TestSearchPublic:
     def test_finds_active_by_apartment_block(self, deps):
         service, households, *_ = deps
         service.request_create(make_user(1), "302", "A")
-        results = service.search_public("302", "A")
+        results = service.search_public(TEST_CONDOMINIUM_CODE, "302", "A")
         assert len(results) == 1
 
     def test_excludes_archived(self, deps):
         service, households, *_ = deps
         h = service.request_create(make_user(1), "302", "A")
         households.update(h, {"status": Household.Status.ARCHIVED})
-        assert service.search_public("302", "A") == []
+        assert service.search_public(TEST_CONDOMINIUM_CODE, "302", "A") == []

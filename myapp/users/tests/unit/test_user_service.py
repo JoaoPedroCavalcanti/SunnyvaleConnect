@@ -2,6 +2,8 @@
 
 from datetime import date
 
+from types import SimpleNamespace
+
 import pytest
 
 from shared.exceptions import (
@@ -14,6 +16,7 @@ from shared.infrastructure.document_validators import (
     BrazilianPhoneValidator,
 )
 from shared.infrastructure.password_policy import DefaultPasswordPolicy
+from shared.tenant import build_tenant_username
 from users.models import EmployeeType, UserRole
 from users.repositories.user_repository import IUserRepository
 from users.services.user_service import UserService
@@ -22,9 +25,19 @@ from users.services.user_service import UserService
 pytestmark = pytest.mark.unit
 
 
-# Two valid CPFs (correct check digits) for the tests.
 VALID_CPF_A = "39053344705"
 VALID_CPF_B = "12345678909"
+TEST_CONDOMINIUM_ID = 1
+TEST_CONDOMINIUM_CODE = "TEST01"
+
+
+def _test_condominium():
+    return SimpleNamespace(
+        id=TEST_CONDOMINIUM_ID,
+        pk=TEST_CONDOMINIUM_ID,
+        code=TEST_CONDOMINIUM_CODE,
+        is_active=True,
+    )
 
 
 class _FakeUser:
@@ -37,6 +50,7 @@ class _FakeUser:
         is_authenticated=True,
         role=UserRole.RESIDENT,
         employee_types=None,
+        condominium_id=TEST_CONDOMINIUM_ID,
     ):
         self.id = pk
         self.pk = pk
@@ -54,10 +68,12 @@ class _FakeUser:
         self.is_authenticated = is_authenticated
         self.role = role
         self.employee_types = list(employee_types or [])
+        self.condominium_id = condominium_id
+        self.condominium = _test_condominium()
 
 
 def _anon():
-    return _FakeUser(0, is_authenticated=False)
+    return _FakeUser(0, is_authenticated=False, condominium_id=None)
 
 
 class FakeUserRepository(IUserRepository):
@@ -65,14 +81,21 @@ class FakeUserRepository(IUserRepository):
         self._users: dict[int, _FakeUser] = {}
         self._next_id = 1
 
-    def list_all(self):
-        return list(self._users.values())
-
-    def list_by_role(self, role):
-        return [u for u in self._users.values() if u.role == role]
-
-    def list_filtered(self, *, role=None, is_active=None, employee_type=None):
+    def list_all(self, *, condominium_id=None):
         users = list(self._users.values())
+        if condominium_id is not None:
+            users = [u for u in users if u.condominium_id == condominium_id]
+        return users
+
+    def list_by_role(self, role, *, condominium_id=None):
+        return [
+            u
+            for u in self.list_all(condominium_id=condominium_id)
+            if u.role == role
+        ]
+
+    def list_filtered(self, *, role=None, is_active=None, employee_type=None, condominium_id=None):
+        users = self.list_all(condominium_id=condominium_id)
         if role is not None:
             users = [u for u in users if u.role == role]
         if is_active is not None:
@@ -89,13 +112,18 @@ class FakeUserRepository(IUserRepository):
         return self._users.get(int(pk))
 
     def exists_with_email(self, email):
-        return any(u.email == email for u in self._users.values())
+        normalized = (email or "").lower().strip()
+        return any(u.email.lower().strip() == normalized for u in self._users.values())
 
-    def exists_with_username(self, username):
-        return any(u.username == username for u in self._users.values())
+    def exists_with_username(self, username, *, condominium_code):
+        storage_username = build_tenant_username(condominium_code, username)
+        return any(u.username == storage_username for u in self._users.values())
 
-    def exists_with_cpf(self, cpf):
-        return any(u.cpf == cpf for u in self._users.values())
+    def exists_with_cpf(self, cpf, *, condominium_id):
+        return any(
+            u.cpf == cpf and u.condominium_id == condominium_id
+            for u in self._users.values()
+        )
 
     def create_user(self, **fields):
         password = fields.pop("password", "")
@@ -103,6 +131,7 @@ class FakeUserRepository(IUserRepository):
             self._next_id,
             username=fields.get("username", ""),
             email=fields.get("email", ""),
+            condominium_id=fields.get("condominium_id", TEST_CONDOMINIUM_ID),
         )
         for k, v in fields.items():
             setattr(user, k, v)
@@ -123,10 +152,23 @@ class FakeUserRepository(IUserRepository):
         instance.is_active = value
         return instance
 
-    def list_admin_emails(self):
-        return [u.email for u in self._users.values() if u.is_staff]
+    def list_admin_emails(self, *, condominium_id):
+        return [
+            u.email
+            for u in self._users.values()
+            if u.is_staff and u.condominium_id == condominium_id
+        ]
 
-    def get_by_username(self, username):
+    def get_by_email(self, email):
+        normalized = (email or "").lower().strip()
+        for user in self._users.values():
+            if user.email.lower().strip() == normalized:
+                return user
+        return None
+
+    def get_by_username(self, username, *, condominium_code=None):
+        if condominium_code:
+            username = build_tenant_username(condominium_code, username)
         for u in self._users.values():
             if u.username == username:
                 return u
@@ -135,10 +177,11 @@ class FakeUserRepository(IUserRepository):
     def check_password(self, instance, raw_password):
         return getattr(instance, "_password", None) == raw_password
 
-    def count_active(self):
-        return sum(
-            1 for u in self._users.values() if getattr(u, "is_active", True)
-        )
+    def count_active(self, *, condominium_id=None):
+        users = self._users.values()
+        if condominium_id is not None:
+            users = [u for u in users if u.condominium_id == condominium_id]
+        return sum(1 for u in users if getattr(u, "is_active", True))
 
 
 @pytest.fixture
@@ -162,6 +205,8 @@ def _valid_payload(**overrides):
         "email": "joao@example.com",
         "apartment": "101",
         "block": "A",
+        "condominium_id": TEST_CONDOMINIUM_ID,
+        "condominium_code": TEST_CONDOMINIUM_CODE,
     }
     data.update(overrides)
     return data
@@ -170,13 +215,13 @@ def _valid_payload(**overrides):
 class TestCreate:
     def test_anonymous_can_create(self, service):
         user = service.create(_anon(), _valid_payload())
-        assert user.username == "joao"
+        assert user.username == build_tenant_username(TEST_CONDOMINIUM_CODE, "joao")
         assert user.cpf == VALID_CPF_A
 
     def test_admin_can_create(self, service):
         admin = _FakeUser(99, is_staff=True)
         user = service.create(admin, _valid_payload())
-        assert user.username == "joao"
+        assert user.username == build_tenant_username(TEST_CONDOMINIUM_CODE, "joao")
 
     def test_regular_user_cannot_create(self, service):
         with pytest.raises(PermissionDeniedError):
@@ -269,7 +314,7 @@ class TestUpdateSelf:
     def test_drops_immutable_username(self, service):
         user = service.create(_anon(), _valid_payload())
         service.update_self(user, {"username": "hacked"})
-        assert user.username == "joao"
+        assert user.username == build_tenant_username(TEST_CONDOMINIUM_CODE, "joao")
 
 
 class TestEmployeeRestrictions:
@@ -511,4 +556,6 @@ class TestListByRole:
             service.list_for(admin, employee_type=EmployeeType.DOORMAN)
         )
         assert len(doormen) == 1
-        assert doormen[0].username == "porteiro"
+        assert doormen[0].username == build_tenant_username(
+            TEST_CONDOMINIUM_CODE, "porteiro"
+        )

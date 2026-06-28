@@ -37,7 +37,7 @@ class BBQReservationListCreateView(APIView):
     )
     def get(self, request):
         status_filter = request.query_params.get("status")
-        queryset = container.bbq_service.list(status=status_filter)
+        queryset = container.bbq_service.list(request.user, status=status_filter)
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request, view=self)
         serializer = BBQReservationOutputSerializer(page, many=True)
@@ -65,7 +65,7 @@ class BBQReservationDetailView(APIView):
 
     @extend_schema(responses={200: BBQReservationOutputSerializer})
     def get(self, request, pk: int):
-        instance = container.bbq_service.get(pk)
+        instance = container.bbq_service.get(request.user, pk)
         return Response(BBQReservationOutputSerializer(instance).data)
 
     @extend_schema(

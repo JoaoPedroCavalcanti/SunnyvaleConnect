@@ -33,6 +33,8 @@ from shared.test_doubles.fakes import FakeEmailSender
 
 pytestmark = pytest.mark.unit
 
+TEST_CONDOMINIUM_ID = 1
+
 
 class FakeRepo(IServiceRequestRepository):
     def __init__(self):
@@ -54,21 +56,37 @@ class FakeRepo(IServiceRequestRepository):
 
     # --- interface --------------------------------------------------- #
     def list_all(
-        self, status=None, priority=None, service_type=None, responded_by_id=None
+        self,
+        status=None,
+        priority=None,
+        service_type=None,
+        responded_by_id=None,
+        *,
+        condominium_id,
     ):
         return [
             i
             for i in self._items.values()
-            if self._matches(i, status, priority, service_type, responded_by_id)
+            if getattr(getattr(i, "requester", None), "condominium_id", None)
+            == condominium_id
+            and self._matches(i, status, priority, service_type, responded_by_id)
         ]
 
     def list_for_user(
-        self, user_id, status=None, priority=None, service_type=None
+        self,
+        user_id,
+        status=None,
+        priority=None,
+        service_type=None,
+        *,
+        condominium_id,
     ):
         return [
             i
             for i in self._items.values()
             if i.requester_id == user_id
+            and getattr(getattr(i, "requester", None), "condominium_id", None)
+            == condominium_id
             and self._matches(i, status, priority, service_type)
         ]
 
@@ -109,10 +127,9 @@ class FakeRepo(IServiceRequestRepository):
     def delete(self, instance):
         self._items.pop(instance.id, None)
 
-    def count_by_status(self, status=None):
-        if not status:
-            return len(self._items)
-        return sum(1 for i in self._items.values() if i.status == status)
+    def count_by_status(self, status=None, *, condominium_id):
+        items = self.list_all(status=status, condominium_id=condominium_id)
+        return len(items)
 
 
 @pytest.fixture
@@ -144,6 +161,7 @@ def _user(
         email=email,
         full_name=full_name,
         username=username,
+        condominium_id=TEST_CONDOMINIUM_ID,
     )
 
 

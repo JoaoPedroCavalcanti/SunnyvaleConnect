@@ -66,6 +66,7 @@ source = [
     "sunny_vale_news",
     "users",
     "households",
+    "condominiums",
     "admin_dashboard",
     "employee_dashboard",
     "sunnyValeConnect",

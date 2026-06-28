@@ -37,7 +37,7 @@ class HallReservationListCreateView(APIView):
     )
     def get(self, request):
         status_filter = request.query_params.get("status")
-        queryset = container.hall_service.list(status=status_filter)
+        queryset = container.hall_service.list(request.user, status=status_filter)
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request, view=self)
         serializer = HallReservationOutputSerializer(page, many=True)
@@ -65,7 +65,7 @@ class HallReservationDetailView(APIView):
 
     @extend_schema(responses={200: HallReservationOutputSerializer})
     def get(self, request, pk: int):
-        instance = container.hall_service.get(pk)
+        instance = container.hall_service.get(request.user, pk)
         return Response(HallReservationOutputSerializer(instance).data)
 
     @extend_schema(

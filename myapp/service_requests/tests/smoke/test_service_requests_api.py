@@ -204,7 +204,7 @@ class ServiceRequestsAPISmoke(BaseTestsUsers):
         from tests_base.base_tests_user import _gen_cpf
 
         cleaner = self.User.objects.create_user(
-            username="zelador",
+            username=f"{self.condominium.code}:zelador",
             email="zelador@example.com",
             password="Abcd123!",
             full_name="Zelador",
@@ -213,6 +213,7 @@ class ServiceRequestsAPISmoke(BaseTestsUsers):
             phone="11988887777",
             role="EMPLOYEE",
             employee_types=["CLEANING"],
+            condominium=self.condominium,
         )
         mine = _make_request(self.user_a, title="mine")
         other = _make_request(self.user_b, title="other")

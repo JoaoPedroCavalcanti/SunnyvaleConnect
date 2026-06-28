@@ -8,13 +8,13 @@ from hall_reservations.models import HallReservationModel
 
 class IHallRepository(ABC):
     @abstractmethod
-    def list_all(self, status: str | None = None): ...
+    def list_all(self, status: str | None = None, *, condominium_id: int): ...
 
     @abstractmethod
     def get_by_id(self, pk: int) -> HallReservationModel | None: ...
 
     @abstractmethod
-    def list_for_date(self, reservation_date: date): ...
+    def list_for_date(self, reservation_date: date, *, condominium_id: int): ...
 
     @abstractmethod
     def latest_date_for_household(self, household_id: int) -> date | None: ...
@@ -29,13 +29,13 @@ class IHallRepository(ABC):
     def delete(self, instance: HallReservationModel) -> None: ...
 
     @abstractmethod
-    def count_by_status(self, status: str | None = None) -> int: ...
+    def count_by_status(self, status: str | None = None, *, condominium_id: int) -> int: ...
 
 
 class DjangoHallRepository(IHallRepository):
-    def list_all(self, status=None):
+    def list_all(self, status=None, *, condominium_id):
         qs = (
-            HallReservationModel.objects.all()
+            HallReservationModel.objects.filter(household__condominium_id=condominium_id)
             .select_related("reservation_user", "household")
             .order_by("-reservation_date")
         )
@@ -51,11 +51,12 @@ class DjangoHallRepository(IHallRepository):
             .first()
         )
 
-    def list_for_date(self, reservation_date):
+    def list_for_date(self, reservation_date, *, condominium_id):
         """Only APPROVED bookings occupy a time slot."""
         return HallReservationModel.objects.filter(
             reservation_date=reservation_date,
             status=HallReservationModel.Status.APPROVED,
+            household__condominium_id=condominium_id,
         ).only("id", "start_time", "end_time", "reservation_date")
 
     def latest_date_for_household(self, household_id):
@@ -82,8 +83,10 @@ class DjangoHallRepository(IHallRepository):
     def delete(self, instance):
         instance.delete()
 
-    def count_by_status(self, status=None):
-        qs = HallReservationModel.objects.all()
+    def count_by_status(self, status=None, *, condominium_id):
+        qs = HallReservationModel.objects.filter(
+            household__condominium_id=condominium_id
+        )
         if status:
             qs = qs.filter(status=status)
         return qs.count()

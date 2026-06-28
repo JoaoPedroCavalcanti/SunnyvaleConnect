@@ -7,10 +7,10 @@ from condo_payments.models import CondoPaymentModel
 
 class ICondoPaymentRepository(ABC):
     @abstractmethod
-    def list_all(self): ...
+    def list_all(self, *, condominium_id: int): ...
 
     @abstractmethod
-    def list_for_user(self, user_id: int): ...
+    def list_for_user(self, user_id: int, *, condominium_id: int): ...
 
     @abstractmethod
     def get_by_id(self, pk: int) -> CondoPaymentModel | None: ...
@@ -32,13 +32,17 @@ class ICondoPaymentRepository(ABC):
 
 
 class DjangoCondoPaymentRepository(ICondoPaymentRepository):
-    def list_all(self):
-        return CondoPaymentModel.objects.all().order_by("-created_at")
-
-    def list_for_user(self, user_id):
-        return CondoPaymentModel.objects.filter(payer_user_id=user_id).order_by(
-            "-created_at"
+    def list_all(self, *, condominium_id):
+        return (
+            CondoPaymentModel.objects.filter(payer_user__condominium_id=condominium_id)
+            .order_by("-created_at")
         )
+
+    def list_for_user(self, user_id, *, condominium_id):
+        return CondoPaymentModel.objects.filter(
+            payer_user_id=user_id,
+            payer_user__condominium_id=condominium_id,
+        ).order_by("-created_at")
 
     def get_by_id(self, pk):
         return CondoPaymentModel.objects.filter(pk=pk).first()

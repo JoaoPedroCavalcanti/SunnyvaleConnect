@@ -1,13 +1,10 @@
-"""Orchestrates anonymous signup with an optional household request.
-
-This is the only service that may compose multiple other services. All other
-domain services stay focused on their own entity.
-"""
+"""Orchestrates anonymous signup with an optional household request."""
 
 from abc import ABC, abstractmethod
 
 from django.db import transaction
 
+from condominiums.services.condominium_service import ICondominiumService
 from households.services.household_service import IHouseholdService
 from households.services.membership_service import IMembershipService
 from shared.exceptions import BusinessRuleError
@@ -34,10 +31,12 @@ class SignupService(ISignupService):
         user_service: IUserService,
         household_service: IHouseholdService,
         membership_service: IMembershipService,
+        condominium_service: ICondominiumService,
     ):
         self._users = user_service
         self._households = household_service
         self._memberships = membership_service
+        self._condominiums = condominium_service
 
     def signup(self, requester, user_payload, household_request):
         role = user_payload.get("role", UserRole.RESIDENT)
@@ -47,11 +46,36 @@ class SignupService(ISignupService):
                 field="household_request",
             )
 
+        data = dict(user_payload)
+        is_anonymous = requester is None or not getattr(
+            requester, "is_authenticated", False
+        )
+        if is_anonymous:
+            condominium_code = data.pop("condominium_code", None)
+            if not condominium_code:
+                raise BusinessRuleError(
+                    "condominium_code is required for signup.",
+                    field="condominium_code",
+                )
+            condominium = self._condominiums.resolve_for_signup(condominium_code)
+            data["condominium_id"] = condominium.id
+            data["condominium_code"] = condominium.code
+        elif getattr(requester, "is_superuser", False):
+            if "condominium_id" not in data and "condominium_code" in data:
+                condominium = self._condominiums.resolve_for_signup(
+                    data.pop("condominium_code")
+                )
+                data["condominium_id"] = condominium.id
+                data["condominium_code"] = condominium.code
+        else:
+            data["condominium_id"] = requester.condominium_id
+            data["condominium_code"] = requester.condominium.code
+
         normalized = self._normalize_request(household_request)
 
         with transaction.atomic():
             user_data = self._merge_household_location(
-                dict(user_payload), normalized
+                data, normalized, data["condominium_id"]
             )
 
             user = self._users.create(
@@ -75,16 +99,9 @@ class SignupService(ISignupService):
 
             return user
 
-    # ---- internal helpers --------------------------------------------- #
     def _merge_household_location(
-        self, user_data: dict, normalized: dict | None
+        self, user_data: dict, normalized: dict | None, condominium_id: int
     ) -> dict:
-        """Denormalize household location into the User row.
-
-        Keeps ``User.apartment`` / ``User.block`` aligned with the household
-        the user is being attached to. Backwards-compat for code that still
-        reads ``user.apartment`` directly (reservations, payments, etc).
-        """
         if normalized is None:
             return user_data
 
@@ -93,15 +110,14 @@ class SignupService(ISignupService):
             user_data["block"] = normalized["block"]
             return user_data
 
-        # join_existing: peek the household to copy its location.
-        # The membership_service will validate it again and raise if invalid.
-        household = self._households.peek(normalized["household_id"])
+        household = self._households.peek(
+            normalized["household_id"], condominium_id=condominium_id
+        )
         if household:
             user_data["apartment"] = household.apartment
             user_data["block"] = household.block
         return user_data
 
-    # ---- internal helpers --------------------------------------------- #
     def _normalize_request(self, household_request: dict | None) -> dict | None:
         if household_request is None:
             return None
@@ -126,6 +142,4 @@ class SignupService(ISignupService):
             field="household_request",
         )
 
-    # Kept around so callers know which keys are valid. Not enforced at runtime
-    # to avoid serializer-style validation inside the service.
     KINDS = _HOUSEHOLD_REQUEST_KINDS

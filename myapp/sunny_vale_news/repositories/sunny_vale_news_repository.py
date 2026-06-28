@@ -8,10 +8,12 @@ from sunny_vale_news.models import SunnyValeNewsModel
 
 class ISunnyValeNewsRepository(ABC):
     @abstractmethod
-    def list_all(self) -> Iterable[SunnyValeNewsModel]: ...
+    def list_all(self, *, condominium_id: int) -> Iterable[SunnyValeNewsModel]: ...
 
     @abstractmethod
-    def list_by_kind(self, kind: str) -> Iterable[SunnyValeNewsModel]: ...
+    def list_by_kind(
+        self, kind: str, *, condominium_id: int
+    ) -> Iterable[SunnyValeNewsModel]: ...
 
     @abstractmethod
     def get_by_id(self, news_id: int) -> SunnyValeNewsModel | None: ...
@@ -20,27 +22,29 @@ class ISunnyValeNewsRepository(ABC):
     def create(self, data: dict) -> SunnyValeNewsModel: ...
 
     @abstractmethod
-    def update(self, instance: SunnyValeNewsModel, data: dict) -> SunnyValeNewsModel: ...
+    def update(
+        self, instance: SunnyValeNewsModel, data: dict
+    ) -> SunnyValeNewsModel: ...
 
     @abstractmethod
     def delete(self, instance: SunnyValeNewsModel) -> None: ...
 
     @abstractmethod
-    def count_all(self) -> int: ...
+    def count_all(self, *, condominium_id: int) -> int: ...
 
 
 class DjangoSunnyValeNewsRepository(ISunnyValeNewsRepository):
-    def list_all(self):
+    def list_all(self, *, condominium_id):
         return (
             SunnyValeNewsModel.objects.select_related("created_by")
-            .all()
+            .filter(condominium_id=condominium_id)
             .order_by("-created_at")
         )
 
-    def list_by_kind(self, kind):
+    def list_by_kind(self, kind, *, condominium_id):
         return (
             SunnyValeNewsModel.objects.select_related("created_by")
-            .filter(kind=kind)
+            .filter(condominium_id=condominium_id, kind=kind)
             .order_by("-created_at")
         )
 
@@ -63,5 +67,7 @@ class DjangoSunnyValeNewsRepository(ISunnyValeNewsRepository):
     def delete(self, instance):
         instance.delete()
 
-    def count_all(self):
-        return SunnyValeNewsModel.objects.count()
+    def count_all(self, *, condominium_id):
+        return SunnyValeNewsModel.objects.filter(
+            condominium_id=condominium_id
+        ).count()

@@ -13,6 +13,7 @@ from households.repositories.membership_repository import IMembershipRepository
 from shared.exceptions import BusinessRuleError, NotFoundError, PermissionDeniedError
 from shared.infrastructure.email_sender import IEmailSender
 from shared.roles import can_doorman_ops
+from shared.tenant import assert_same_condominium, require_condominium_id
 
 
 @dataclass(frozen=True)
@@ -29,13 +30,13 @@ class IDeliveryNotificationService(ABC):
     def list_apartments(self, user) -> list[DeliveryApartmentItem]: ...
 
     @abstractmethod
-    def list(self): ...
+    def list(self, user): ...
 
     @abstractmethod
-    def get(self, pk: int) -> DeliveryNotificationModel: ...
+    def get(self, user, pk: int) -> DeliveryNotificationModel: ...
 
     @abstractmethod
-    def send(self, payload: dict) -> DeliveryNotificationModel: ...
+    def send(self, user, payload: dict) -> DeliveryNotificationModel: ...
 
 
 class DeliveryNotificationService(IDeliveryNotificationService):
@@ -59,7 +60,9 @@ class DeliveryNotificationService(IDeliveryNotificationService):
 
         households = [
             h
-            for h in self._households.list_all()
+            for h in self._households.list_all(
+                condominium_id=require_condominium_id(user)
+            )
             if h.status != Household.Status.ARCHIVED
         ]
         if not households:
@@ -89,20 +92,27 @@ class DeliveryNotificationService(IDeliveryNotificationService):
             )
         return items
 
-    def list(self):
-        return self._repo.list_all()
+    def list(self, user):
+        return self._repo.list_all(
+            condominium_id=require_condominium_id(user)
+        )
 
-    def get(self, pk):
+    def get(self, user, pk):
         instance = self._repo.get_by_id(pk)
         if not instance:
             raise NotFoundError("No delivery notification matches the given query.")
+        assert_same_condominium(user, instance.household.condominium_id)
         return instance
 
-    def send(self, payload: dict) -> DeliveryNotificationModel:
+    def send(self, user, payload: dict) -> DeliveryNotificationModel:
         apartment = payload["apartment"]
         block = payload.get("block") or ""
 
-        household = self._households.get_by_apartment_block(apartment, block)
+        household = self._households.get_by_apartment_block(
+            apartment,
+            block,
+            condominium_id=require_condominium_id(user),
+        )
         if not household:
             raise NotFoundError("No household matches the given apartment and block.")
         if household.status != Household.Status.ACTIVE:

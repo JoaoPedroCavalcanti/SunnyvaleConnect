@@ -9,6 +9,12 @@ from shared.infrastructure.document_validators import (
 )
 from shared.infrastructure.password_policy import IPasswordPolicy
 from shared.roles import ensure_not_employee, is_admin, is_employee
+from shared.tenant import (
+    assert_same_condominium,
+    build_tenant_username,
+    is_platform_superuser,
+    require_condominium_id,
+)
 from users.models import EmployeeType, UserRole
 from users.repositories.user_repository import IUserRepository
 
@@ -83,6 +89,7 @@ class UserService(IUserService):
             role=role,
             is_active=is_active,
             employee_type=normalized_employee_type,
+            condominium_id=require_condominium_id(user),
         )
 
     def get_for(self, user, pk):
@@ -91,6 +98,7 @@ class UserService(IUserService):
             raise NotFoundError("No user matches the given query.")
         if not is_admin(user) and instance.id != user.id:
             raise NotFoundError("No user matches the given query.")
+        assert_same_condominium(user, instance.condominium_id)
         return instance
 
     def activate(self, user) -> None:
@@ -118,17 +126,44 @@ class UserService(IUserService):
                 "Only admins can create non-resident users."
             )
 
+        condominium_id = payload.pop("condominium_id", None)
+        condominium_code = payload.pop("condominium_code", None)
+        if is_anonymous:
+            if not condominium_id:
+                raise BusinessRuleError(
+                    "condominium_id is required for anonymous signup.",
+                    field="condominium_code",
+                )
+        elif is_platform_superuser(requester):
+            if not condominium_id:
+                raise BusinessRuleError(
+                    "condominium_id is required when creating users as superuser.",
+                    field="condominium_id",
+                )
+        else:
+            condominium_id = require_condominium_id(requester)
+            condominium_code = requester.condominium.code
+
         password = payload.get("password", "")
         errors = self._policy.validate(password)
         if errors:
             raise BusinessRuleError(message=errors, field="password")
 
         username = payload.get("username", "")
-        if username and self._repo.exists_with_username(username):
-            raise BusinessRuleError(
-                message="A user with that username already exists.",
-                field="username",
-            )
+        if username:
+            if not condominium_code:
+                raise BusinessRuleError(
+                    "condominium_code is required to validate username.",
+                    field="condominium_code",
+                )
+            if self._repo.exists_with_username(
+                username, condominium_code=condominium_code
+            ):
+                raise BusinessRuleError(
+                    message="A user with that username already exists.",
+                    field="username",
+                )
+            payload["username"] = build_tenant_username(condominium_code, username)
 
         email = (payload.get("email") or "").lower().strip()
         if email and self._repo.exists_with_email(email):
@@ -141,7 +176,7 @@ class UserService(IUserService):
         cpf_error = self._cpf.validate(cpf)
         if cpf_error:
             raise BusinessRuleError(message=cpf_error, field="cpf")
-        if self._repo.exists_with_cpf(cpf):
+        if self._repo.exists_with_cpf(cpf, condominium_id=condominium_id):
             raise BusinessRuleError(
                 message="An account with this CPF already exists.", field="cpf"
             )
@@ -163,7 +198,7 @@ class UserService(IUserService):
             )
 
         return self._repo.create_user(
-            username=username,
+            username=payload.get("username", username),
             password=password,
             email=email,
             full_name=payload["full_name"],
@@ -177,6 +212,7 @@ class UserService(IUserService):
             role=role,
             is_staff=role == UserRole.ADMIN,
             employee_types=employee_types,
+            condominium_id=condominium_id,
         )
 
     def update(self, user, pk, payload):

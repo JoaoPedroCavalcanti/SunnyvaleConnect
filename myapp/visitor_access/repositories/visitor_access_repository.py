@@ -17,6 +17,8 @@ class IVisitorAccessRepository(ABC):
         scheduled_after: datetime | None = None,
         scheduled_before: datetime | None = None,
         is_group: bool | None = None,
+        *,
+        condominium_id: int,
     ): ...
 
     @abstractmethod
@@ -62,17 +64,21 @@ class IVisitorAccessRepository(ABC):
         start: datetime,
         end: datetime,
         *,
+        condominium_id: int,
         exclude_statuses: Iterable[str] | None = None,
     ) -> int: ...
 
     @abstractmethod
-    def count_checked_in_between(self, start: datetime, end: datetime) -> int: ...
+    def count_checked_in_between(
+        self, start: datetime, end: datetime, *, condominium_id: int
+    ) -> int: ...
 
     @abstractmethod
     def count_with_scheduled_after(
         self,
         after: datetime,
         *,
+        condominium_id: int,
         status_in: Iterable[str] | None = None,
         exclude_statuses: Iterable[str] | None = None,
     ) -> int: ...
@@ -82,6 +88,7 @@ class IVisitorAccessRepository(ABC):
         self,
         after: datetime,
         *,
+        condominium_id: int,
         limit: int = 10,
         status_in: Iterable[str] | None = None,
         exclude_statuses: Iterable[str] | None = None,
@@ -101,9 +108,13 @@ class DjangoVisitorAccessRepository(IVisitorAccessRepository):
         scheduled_after=None,
         scheduled_before=None,
         is_group=None,
+        *,
+        condominium_id,
     ):
         qs = self._list_queryset(
-            VisitorAccessModel.objects.all().order_by("-scheduled_date")
+            VisitorAccessModel.objects.filter(
+                host_user__condominium_id=condominium_id
+            ).order_by("-scheduled_date")
         )
         return self._apply_filters(
             qs, status_in, scheduled_after, scheduled_before, is_group
@@ -188,9 +199,11 @@ class DjangoVisitorAccessRepository(IVisitorAccessRepository):
         start: datetime,
         end: datetime,
         *,
+        condominium_id: int,
         exclude_statuses: Iterable[str] | None = None,
     ) -> int:
         qs = VisitorAccessModel.objects.filter(
+            host_user__condominium_id=condominium_id,
             scheduled_date__gte=start,
             scheduled_date__lt=end,
         )
@@ -198,8 +211,9 @@ class DjangoVisitorAccessRepository(IVisitorAccessRepository):
             qs = qs.exclude(status__in=list(exclude_statuses))
         return qs.count()
 
-    def count_checked_in_between(self, start: datetime, end: datetime) -> int:
+    def count_checked_in_between(self, start: datetime, end: datetime, *, condominium_id):
         return VisitorAccessModel.objects.filter(
+            host_user__condominium_id=condominium_id,
             status=VisitorAccessModel.Status.CHECKED_IN,
             updated_at__gte=start,
             updated_at__lt=end,
@@ -209,10 +223,13 @@ class DjangoVisitorAccessRepository(IVisitorAccessRepository):
         self,
         after: datetime,
         *,
+        condominium_id: int,
         status_in: Iterable[str] | None = None,
         exclude_statuses: Iterable[str] | None = None,
     ) -> int:
-        qs = VisitorAccessModel.objects.filter(self._visit_window_after(after))
+        qs = VisitorAccessModel.objects.filter(
+            host_user__condominium_id=condominium_id
+        ).filter(self._visit_window_after(after))
         if status_in:
             qs = qs.filter(status__in=list(status_in))
         if exclude_statuses:
@@ -223,12 +240,16 @@ class DjangoVisitorAccessRepository(IVisitorAccessRepository):
         self,
         after: datetime,
         *,
+        condominium_id: int,
         limit: int = 10,
         status_in: Iterable[str] | None = None,
         exclude_statuses: Iterable[str] | None = None,
     ):
         qs = (
             VisitorAccessModel.objects.select_related("host_user", "visitor_group")
+            .filter(
+                host_user__condominium_id=condominium_id,
+            )
             .filter(self._visit_window_after(after))
             .order_by("scheduled_date")
         )

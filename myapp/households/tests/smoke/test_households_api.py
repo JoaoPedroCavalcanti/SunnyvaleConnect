@@ -10,7 +10,7 @@ from households.models import (
     HouseholdMembership,
     MembershipDecision,
 )
-from tests_base.base_tests_user import BaseTestsUsers, _gen_cpf, fake
+from tests_base.base_tests_user import BaseTestsUsers
 
 
 pytestmark = pytest.mark.api
@@ -72,23 +72,15 @@ def _decisions_url(pk):
     return reverse("households:decisions-list", kwargs={"pk": pk})
 
 
-def _signup_payload(**overrides):
-    payload = {
-        "username": fake.unique.user_name(),
-        "email": fake.unique.email(),
-        "password": "StrongPass1!",
-        "full_name": fake.name(),
-        "birth_date": "1990-01-01",
-        "cpf": _gen_cpf(),
-        "phone": "11987654321",
-    }
+def _signup_payload(base_test, **overrides):
+    payload = base_test.create_random_user_from_faker()
     payload.update(overrides)
     return payload
 
 
 class SignupFlowSmoke(BaseTestsUsers):
     def test_signup_with_new_household_returns_pending_user(self):
-        payload = _signup_payload()
+        payload = _signup_payload(self)
         payload["household_request"] = {"apartment": "302", "block": "A"}
         response = self.client.post(SIGNUP_URL, data=payload, format="json")
         self.assertEqual(response.status_code, 201, response.data)
@@ -105,9 +97,9 @@ class SignupFlowSmoke(BaseTestsUsers):
 
     def test_signup_join_existing_household(self):
         household = Household.objects.create(
-            apartment="555", block="B", status=Household.Status.ACTIVE
+            apartment="555", condominium=self.condominium, block="B", status=Household.Status.ACTIVE
         )
-        payload = _signup_payload()
+        payload = _signup_payload(self)
         payload["household_request"] = {"household_id": household.id}
         response = self.client.post(SIGNUP_URL, data=payload, format="json")
         self.assertEqual(response.status_code, 201, response.data)
@@ -118,12 +110,12 @@ class SignupFlowSmoke(BaseTestsUsers):
         self.assertEqual(membership.role, HouseholdMembership.Role.RESIDENT)
 
     def test_signup_without_household_request_creates_active_user(self):
-        response = self.client.post(SIGNUP_URL, data=_signup_payload(), format="json")
+        response = self.client.post(SIGNUP_URL, data=_signup_payload(self), format="json")
         self.assertEqual(response.status_code, 201, response.data)
         self.assertTrue(self.User.objects.get(pk=response.data["id"]).is_active)
 
     def test_signup_copies_apartment_block_from_new_household(self):
-        payload = _signup_payload()
+        payload = _signup_payload(self)
         payload["household_request"] = {"apartment": "402", "block": "C"}
         response = self.client.post(SIGNUP_URL, data=payload, format="json")
         self.assertEqual(response.status_code, 201, response.data)
@@ -133,9 +125,9 @@ class SignupFlowSmoke(BaseTestsUsers):
 
     def test_signup_copies_apartment_block_from_existing_household(self):
         household = Household.objects.create(
-            apartment="888", block="D", status=Household.Status.ACTIVE
+            apartment="888", condominium=self.condominium, block="D", status=Household.Status.ACTIVE
         )
-        payload = _signup_payload()
+        payload = _signup_payload(self)
         payload["household_request"] = {"household_id": household.id}
         response = self.client.post(SIGNUP_URL, data=payload, format="json")
         self.assertEqual(response.status_code, 201, response.data)
@@ -147,12 +139,14 @@ class SignupFlowSmoke(BaseTestsUsers):
 class HouseholdSearchSmoke(BaseTestsUsers):
     def test_public_search_returns_active_only(self):
         Household.objects.create(
-            apartment="101", block="A", status=Household.Status.ACTIVE
+            apartment="101", condominium=self.condominium, block="A", status=Household.Status.ACTIVE
         )
         Household.objects.create(
-            apartment="101", block="B", status=Household.Status.ARCHIVED
+            apartment="101", condominium=self.condominium, block="B", status=Household.Status.ARCHIVED
         )
-        response = self.client.get(SEARCH_URL + "?apartment=101")
+        response = self.client.get(
+            SEARCH_URL + f"?apartment=101&condominium_code={self.condominium.code}"
+        )
         self.assertEqual(response.status_code, 200)
         blocks = {h["block"] for h in response.data}
         self.assertIn("A", blocks)
@@ -161,7 +155,7 @@ class HouseholdSearchSmoke(BaseTestsUsers):
 
 class HouseholdApprovalSmoke(BaseTestsUsers):
     def _signup_with_new_household(self):
-        payload = _signup_payload()
+        payload = _signup_payload(self)
         payload["household_request"] = {"apartment": "777", "block": "Z"}
         response = self.client.post(SIGNUP_URL, data=payload, format="json")
         return self.User.objects.get(pk=response.data["id"])
@@ -204,7 +198,7 @@ class HouseholdApprovalSmoke(BaseTestsUsers):
 class MembershipFlowSmoke(BaseTestsUsers):
     def _seed_active_household(self):
         household = Household.objects.create(
-            apartment="888", block="C", status=Household.Status.ACTIVE
+            apartment="888", condominium=self.condominium, block="C", status=Household.Status.ACTIVE
         )
         HouseholdMembership.objects.create(
             household=household,
@@ -282,7 +276,7 @@ class PendingApprovalsSmoke(BaseTestsUsers):
         self.assertEqual(self.client.get(PENDING_URL).status_code, 401)
 
     def test_admin_sees_pending_admin_households(self):
-        payload = _signup_payload()
+        payload = _signup_payload(self)
         payload["household_request"] = {"apartment": "201", "block": "A"}
         self.client.post(SIGNUP_URL, data=payload, format="json")
 
@@ -294,7 +288,7 @@ class PendingApprovalsSmoke(BaseTestsUsers):
 
     def test_holder_sees_only_pending_of_own_household(self):
         own = Household.objects.create(
-            apartment="201", block="B", status=Household.Status.ACTIVE
+            apartment="201", condominium=self.condominium, block="B", status=Household.Status.ACTIVE
         )
         HouseholdMembership.objects.create(
             household=own,
@@ -310,7 +304,7 @@ class PendingApprovalsSmoke(BaseTestsUsers):
         )
         # noise: pending in a different household
         other = Household.objects.create(
-            apartment="999", block="X", status=Household.Status.ACTIVE
+            apartment="999", condominium=self.condominium, block="X", status=Household.Status.ACTIVE
         )
         HouseholdMembership.objects.create(
             household=other,
@@ -335,7 +329,7 @@ class PendingApprovalsSmoke(BaseTestsUsers):
 class DependentsSmoke(BaseTestsUsers):
     def _seed_active_household(self):
         household = Household.objects.create(
-            apartment="333", block="D", status=Household.Status.ACTIVE
+            apartment="333", condominium=self.condominium, block="D", status=Household.Status.ACTIVE
         )
         HouseholdMembership.objects.create(
             household=household,
@@ -411,7 +405,7 @@ class DependentsSmoke(BaseTestsUsers):
 class HouseholdListSmoke(BaseTestsUsers):
     def _seed_two_houses(self):
         h1 = Household.objects.create(
-            apartment="100", block="A", status=Household.Status.ACTIVE
+            apartment="100", condominium=self.condominium, block="A", status=Household.Status.ACTIVE
         )
         HouseholdMembership.objects.create(
             household=h1,
@@ -420,7 +414,7 @@ class HouseholdListSmoke(BaseTestsUsers):
             status=HouseholdMembership.Status.ACTIVE,
         )
         h2 = Household.objects.create(
-            apartment="200", block="B", status=Household.Status.ACTIVE
+            apartment="200", condominium=self.condominium, block="B", status=Household.Status.ACTIVE
         )
         HouseholdMembership.objects.create(
             household=h2,
@@ -456,7 +450,7 @@ class HouseholdListSmoke(BaseTestsUsers):
 class DecisionsHistorySmoke(BaseTestsUsers):
     def _seed_active_household_with_holder(self):
         household = Household.objects.create(
-            apartment="444", block="E", status=Household.Status.ACTIVE
+            apartment="444", condominium=self.condominium, block="E", status=Household.Status.ACTIVE
         )
         HouseholdMembership.objects.create(
             household=household,

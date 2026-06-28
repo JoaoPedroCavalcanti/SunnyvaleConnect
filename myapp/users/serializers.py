@@ -3,6 +3,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
+from condominiums.serializers import CondominiumLookupOutputSerializer
 from households.serializers import HouseholdRequestSerializer
 from users.models import EmployeeType, UserRole
 
@@ -24,6 +25,7 @@ class UserInputSerializer(serializers.Serializer):
         required=False,
         allow_empty=False,
     )
+    condominium_code = serializers.CharField(required=False, max_length=8)
     household_request = HouseholdRequestSerializer(required=False, allow_null=True)
 
 
@@ -49,6 +51,7 @@ class UserPatchSerializer(serializers.Serializer):
 
 class UserOutputSerializer(serializers.ModelSerializer):
     photo = serializers.ImageField(read_only=True)
+    username = serializers.SerializerMethodField()
 
     class Meta:
         model = get_user_model()
@@ -68,12 +71,18 @@ class UserOutputSerializer(serializers.ModelSerializer):
             "is_active",
         ]
 
+    def get_username(self, obj):
+        from shared.tenant import display_username
+
+        return display_username(obj)
+
 
 class LoginInputSerializer(serializers.Serializer):
-    username = serializers.CharField(required=True)
+    email = serializers.EmailField(required=True)
     password = serializers.CharField(required=True, write_only=True)
 
 
 class LoginOutputSerializer(serializers.Serializer):
     access = serializers.CharField(read_only=True)
     refresh = serializers.CharField(read_only=True)
+    condominium = CondominiumLookupOutputSerializer(read_only=True)

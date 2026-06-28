@@ -23,7 +23,7 @@ class SunnyValeNewsAPISmoke(BaseTestsUsers):
         self.assertEqual(self.client.get(LIST_URL).status_code, 401)
 
     def test_user_can_read(self):
-        baker.make(SunnyValeNewsModel)
+        baker.make(SunnyValeNewsModel, condominium=self.condominium)
         self.authenticate(self.user_a)
         self.assertEqual(self.client.get(LIST_URL).status_code, 200)
 
@@ -69,9 +69,9 @@ class SunnyValeNewsAPISmoke(BaseTestsUsers):
         self.assertEqual(response.data["kind"], "NOTICE")
 
     def test_kind_filter(self):
-        baker.make(SunnyValeNewsModel, kind="NOTICE")
-        baker.make(SunnyValeNewsModel, kind="EVENT")
-        baker.make(SunnyValeNewsModel, kind="EVENT")
+        baker.make(SunnyValeNewsModel, condominium=self.condominium, kind="NOTICE")
+        baker.make(SunnyValeNewsModel, condominium=self.condominium, kind="EVENT")
+        baker.make(SunnyValeNewsModel, condominium=self.condominium, kind="EVENT")
         self.authenticate(self.user_a)
         response = self.client.get(LIST_URL, {"kind": "EVENT"})
         self.assertEqual(response.status_code, 200)

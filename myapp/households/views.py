@@ -36,7 +36,10 @@ class HouseholdSearchView(APIView):
     def get(self, request):
         apartment = request.query_params.get("apartment")
         block = request.query_params.get("block")
-        results = container.household_service.search_public(apartment, block)
+        condominium_code = request.query_params.get("condominium_code", "")
+        results = container.household_service.search_public(
+            condominium_code, apartment, block
+        )
         serializer = HouseholdOutputSerializer(results, many=True)
         return Response(serializer.data)
 

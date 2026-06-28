@@ -25,6 +25,7 @@ from shared.exceptions import (
 )
 from shared.infrastructure.email_sender import IEmailSender
 from shared.roles import can_manage_service_requests, is_admin, is_employee
+from shared.tenant import assert_same_condominium, require_condominium_id
 
 
 class IServiceRequestService(ABC):
@@ -99,10 +100,13 @@ class ServiceRequestService(IServiceRequestService):
             priority=priority,
             service_type=service_type,
             responded_by_id=responded_by_id,
+            condominium_id=require_condominium_id(user),
         )
 
     def get(self, user, pk):
-        return self._fetch_or_404(pk)
+        instance = self._fetch_or_404(pk)
+        assert_same_condominium(user, instance.requester.condominium_id)
+        return instance
 
     def create(self, user, payload: dict):
         if is_employee(user):

@@ -12,6 +12,7 @@ from shared.exceptions import (
     PermissionDeniedError,
 )
 from shared.infrastructure.document_validators import ICPFValidator
+from shared.tenant import require_condominium_id
 from users.repositories.user_repository import IUserRepository
 
 
@@ -81,13 +82,14 @@ class DependentService(IDependentService):
         self._require_active_member(user, household.id)
 
         data = dict(payload)
+        condominium_id = require_condominium_id(user)
         cpf_raw = data.get("cpf", "") or ""
         if cpf_raw:
             cpf = self._cpf.normalize(cpf_raw)
             cpf_error = self._cpf.validate(cpf)
             if cpf_error:
                 raise BusinessRuleError(message=cpf_error, field="cpf")
-            if self._users.exists_with_cpf(cpf):
+            if self._users.exists_with_cpf(cpf, condominium_id=condominium_id):
                 raise BusinessRuleError(
                     "A user with this CPF already exists.", field="cpf"
                 )
@@ -105,13 +107,14 @@ class DependentService(IDependentService):
         self._require_active_member(user, dependent.household_id)
 
         data = dict(payload)
+        condominium_id = require_condominium_id(user)
         if "cpf" in data and data["cpf"]:
             cpf = self._cpf.normalize(data["cpf"])
             cpf_error = self._cpf.validate(cpf)
             if cpf_error:
                 raise BusinessRuleError(message=cpf_error, field="cpf")
             if cpf != dependent.cpf:
-                if self._users.exists_with_cpf(cpf):
+                if self._users.exists_with_cpf(cpf, condominium_id=condominium_id):
                     raise BusinessRuleError(
                         "A user with this CPF already exists.", field="cpf"
                     )

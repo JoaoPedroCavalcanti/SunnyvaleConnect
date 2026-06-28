@@ -125,6 +125,14 @@ class Container:
         return self._resolve("user_repository", DjangoUserRepository)
 
     @property
+    def condominium_repository(self):
+        from condominiums.repositories.condominium_repository import (
+            DjangoCondominiumRepository,
+        )
+
+        return self._resolve("condominium_repository", DjangoCondominiumRepository)
+
+    @property
     def bbq_repository(self):
         from bbq_reservations.repositories.bbq_repository import DjangoBBQRepository
 
@@ -250,6 +258,18 @@ class Container:
         )
 
     @property
+    def condominium_service(self):
+        from condominiums.services.condominium_service import CondominiumService
+
+        return self._resolve(
+            "condominium_service",
+            lambda: CondominiumService(
+                repository=self.condominium_repository,
+                code_generator=self.code_generator,
+            ),
+        )
+
+    @property
     def bbq_service(self):
         from bbq_reservations.services.bbq_service import BBQReservationService
 
@@ -364,6 +384,7 @@ class Container:
                 user_repository=self.user_repository,
                 email_sender=self.email_sender,
                 transaction_runner=self.transaction_runner,
+                condominium_repository=self.condominium_repository,
             ),
         )
 
@@ -423,6 +444,7 @@ class Container:
                 user_service=self.user_service,
                 household_service=self.household_service,
                 membership_service=self.membership_service,
+                condominium_service=self.condominium_service,
             ),
         )
 

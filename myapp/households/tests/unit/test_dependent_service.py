@@ -8,6 +8,7 @@ from households.services.dependent_service import DependentService
 from households.services.household_service import HouseholdService
 from households.services.membership_service import MembershipService
 from households.tests.unit._fakes import (
+    FakeCondominiumRepository,
     FakeDependentRepository,
     FakeHouseholdRepository,
     FakeMembershipDecisionRepository,
@@ -41,12 +42,14 @@ def fixtures():
     email = FakeEmailSender()
 
     tx = NullTransactionRunner()
+    condominiums = FakeCondominiumRepository()
     household_service = HouseholdService(
         household_repository=households,
         membership_repository=memberships,
         user_repository=users,
         email_sender=email,
         transaction_runner=tx,
+        condominium_repository=condominiums,
     )
     membership_service = MembershipService(
         membership_repository=memberships,

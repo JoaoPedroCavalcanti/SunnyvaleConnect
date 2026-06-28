@@ -24,6 +24,8 @@ from visitor_access.services.visitor_access_service import VisitorAccessService
 
 pytestmark = pytest.mark.unit
 
+TEST_CONDOMINIUM_ID = 1
+
 
 Status = VisitorAccessModel.Status
 
@@ -58,6 +60,8 @@ class FakeVisitorAccessRepo(IVisitorAccessRepository):
         scheduled_after=None,
         scheduled_before=None,
         is_group=None,
+        *,
+        condominium_id,
     ):
         return self._filtered(
             self._items.values(),
@@ -154,7 +158,7 @@ class FakeVisitorAccessRepo(IVisitorAccessRepository):
         return out
 
     def count_scheduled_between(
-        self, start, end, *, exclude_statuses=None
+        self, start, end, *, condominium_id, exclude_statuses=None
     ):
         rows = self._filtered(
             self._items.values(), None, start, end, None
@@ -164,7 +168,7 @@ class FakeVisitorAccessRepo(IVisitorAccessRepository):
             rows = [r for r in rows if r.status not in excluded]
         return len(rows)
 
-    def count_checked_in_between(self, start, end):
+    def count_checked_in_between(self, start, end, *, condominium_id):
         return len(
             [
                 r
@@ -174,7 +178,12 @@ class FakeVisitorAccessRepo(IVisitorAccessRepository):
         )
 
     def count_with_scheduled_after(
-        self, after, *, status_in=None, exclude_statuses=None
+        self,
+        after,
+        *,
+        condominium_id,
+        status_in=None,
+        exclude_statuses=None,
     ):
         rows = self._filtered(
             self._items.values(), status_in, after, None, None
@@ -185,7 +194,13 @@ class FakeVisitorAccessRepo(IVisitorAccessRepository):
         return len(rows)
 
     def list_upcoming(
-        self, after, *, limit=10, status_in=None, exclude_statuses=None
+        self,
+        after,
+        *,
+        condominium_id,
+        limit=10,
+        status_in=None,
+        exclude_statuses=None,
     ):
         rows = self._filtered(
             self._items.values(), status_in, after, None, None
@@ -210,7 +225,7 @@ class FakeGroupRepo(IVisitorGroupRepository):
     def list_for_user(self, user_id):  # pragma: no cover - not used
         return []
 
-    def list_all(self):  # pragma: no cover
+    def list_all(self, *, condominium_id):  # pragma: no cover
         return []
 
     def get_by_id(self, pk):  # pragma: no cover
@@ -263,6 +278,7 @@ def _user(pk=1, is_staff=False, role=None, employee_types=None):
         is_authenticated=True,
         role=role or ("ADMIN" if is_staff else "RESIDENT"),
         employee_types=list(employee_types or []),
+        condominium_id=TEST_CONDOMINIUM_ID,
     )
 
 

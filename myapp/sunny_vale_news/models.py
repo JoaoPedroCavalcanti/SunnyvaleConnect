@@ -31,6 +31,11 @@ class SunnyValeNewsModel(models.Model):
     )
     author = models.CharField(max_length=150, blank=True, default="")
     author_role = models.CharField(max_length=20, blank=True, default="")
+    condominium = models.ForeignKey(
+        "condominiums.Condominium",
+        on_delete=models.CASCADE,
+        related_name="news",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

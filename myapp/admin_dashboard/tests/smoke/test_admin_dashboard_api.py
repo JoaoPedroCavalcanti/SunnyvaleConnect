@@ -10,6 +10,7 @@ from model_bakery import baker
 from bbq_reservations.models import BBQReservationModel
 from hall_reservations.models import HallReservationModel
 from sunny_vale_news.models import SunnyValeNewsModel
+from households.models import Household, HouseholdMembership
 from tests_base.base_tests_user import BaseTestsUsers
 
 
@@ -37,10 +38,23 @@ class AdminDashboardOverviewSmoke(BaseTestsUsers):
         self.assertEqual(self.client.get(URL).status_code, 403)
 
     def test_admin_gets_aggregated_counts(self):
+        household = Household.objects.create(
+            apartment="900",
+            block="Z",
+            status=Household.Status.ACTIVE,
+            condominium=self.condominium,
+        )
+        HouseholdMembership.objects.create(
+            household=household,
+            user=self.user_a,
+            role=HouseholdMembership.Role.HOLDER,
+            status=HouseholdMembership.Status.ACTIVE,
+        )
         # 1 approved + 1 pending + 1 rejected BBQ
         tomorrow = date.today() + timedelta(days=1)
         baker.make(
             BBQReservationModel,
+            household=household,
             reservation_date=tomorrow,
             start_time=time(10, 0),
             end_time=time(11, 0),
@@ -48,6 +62,7 @@ class AdminDashboardOverviewSmoke(BaseTestsUsers):
         )
         baker.make(
             BBQReservationModel,
+            household=household,
             reservation_date=tomorrow,
             start_time=time(12, 0),
             end_time=time(13, 0),
@@ -55,6 +70,7 @@ class AdminDashboardOverviewSmoke(BaseTestsUsers):
         )
         baker.make(
             BBQReservationModel,
+            household=household,
             reservation_date=tomorrow,
             start_time=time(14, 0),
             end_time=time(15, 0),
@@ -63,6 +79,7 @@ class AdminDashboardOverviewSmoke(BaseTestsUsers):
         # 1 approved Hall + 2 pending Hall
         baker.make(
             HallReservationModel,
+            household=household,
             reservation_date=tomorrow,
             start_time=time(10, 0),
             end_time=time(11, 0),
@@ -70,6 +87,7 @@ class AdminDashboardOverviewSmoke(BaseTestsUsers):
         )
         baker.make(
             HallReservationModel,
+            household=household,
             reservation_date=tomorrow,
             start_time=time(12, 0),
             end_time=time(13, 0),
@@ -77,13 +95,14 @@ class AdminDashboardOverviewSmoke(BaseTestsUsers):
         )
         baker.make(
             HallReservationModel,
+            household=household,
             reservation_date=tomorrow,
             start_time=time(14, 0),
             end_time=time(15, 0),
             status=HallReservationModel.Status.PENDING,
         )
         # 2 news
-        baker.make(SunnyValeNewsModel, _quantity=2)
+        baker.make(SunnyValeNewsModel, condominium=self.condominium, _quantity=2)
 
         self.authenticate(self.admin)
         response = self.client.get(URL)
@@ -117,7 +136,7 @@ class AdminDashboardOverviewSmoke(BaseTestsUsers):
 
         # New news created AFTER the first call: cache should still hold
         # the stale value within the 1h TTL window.
-        baker.make(SunnyValeNewsModel, _quantity=3)
+        baker.make(SunnyValeNewsModel, condominium=self.condominium, _quantity=3)
 
         second = self.client.get(URL)
         self.assertEqual(second.status_code, 200, second.data)

@@ -13,16 +13,18 @@ from shared.exceptions import BusinessRuleError, NotFoundError, PermissionDenied
 
 pytestmark = pytest.mark.unit
 
+TEST_CONDOMINIUM_ID = 1
+
 
 class FakeCondoPaymentRepository(ICondoPaymentRepository):
     def __init__(self):
         self._items: dict[int, SimpleNamespace] = {}
         self._next_id = 1
 
-    def list_all(self):
+    def list_all(self, *, condominium_id):
         return sorted(self._items.values(), key=lambda i: -i.id)
 
-    def list_for_user(self, user_id):
+    def list_for_user(self, user_id, *, condominium_id):
         return [i for i in self._items.values() if i.payer_user_id == user_id]
 
     def get_by_id(self, pk):
@@ -32,9 +34,13 @@ class FakeCondoPaymentRepository(ICondoPaymentRepository):
         return [self._items[i] for i in ids if i in self._items]
 
     def create(self, data):
-        payer_user_id = getattr(data.get("payer_user"), "id", None) or data.get(
-            "payer_user_id"
-        )
+        payer_user = data.get("payer_user")
+        payer_user_id = getattr(payer_user, "id", None) or data.get("payer_user_id")
+        if payer_user is None and payer_user_id is not None:
+            payer_user = SimpleNamespace(
+                id=payer_user_id,
+                condominium_id=TEST_CONDOMINIUM_ID,
+            )
         cleaned = {
             k: v
             for k, v in data.items()
@@ -42,6 +48,7 @@ class FakeCondoPaymentRepository(ICondoPaymentRepository):
         }
         item = SimpleNamespace(
             id=self._next_id,
+            payer_user=payer_user,
             payer_user_id=payer_user_id,
             status=data.get("status", "pending"),
             **cleaned,
@@ -69,7 +76,7 @@ def service():
 
 
 def _user(pk=1, is_staff=False):
-    return SimpleNamespace(id=pk, is_staff=is_staff)
+    return SimpleNamespace(id=pk, is_staff=is_staff, condominium_id=TEST_CONDOMINIUM_ID)
 
 
 def _admin():
@@ -106,7 +113,7 @@ class TestGetFor:
 
     def test_admin_can_get_anything(self, service):
         item = service.create(_admin(), {"payer_user_id": 1, "status": "pending"})
-        assert service.get_for(_user(is_staff=True), item.id) is item
+        assert service.get_for(_admin(), item.id) is item
 
 
 class TestMarkAsPaid:

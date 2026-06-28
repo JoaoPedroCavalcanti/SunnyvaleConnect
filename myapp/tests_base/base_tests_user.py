@@ -5,6 +5,8 @@ from faker import Faker
 from rest_framework.test import APIClient, APITestCase
 from rest_framework_simplejwt.tokens import AccessToken
 
+from condominiums.models import Condominium
+
 fake = Faker("pt_BR")
 
 
@@ -20,9 +22,10 @@ def _gen_cpf() -> str:
     return "".join(str(d) for d in base)
 
 
-def _make_user(model, **overrides):
+def _make_user(model, *, condominium, **overrides):
+    local_username = overrides.pop("username", fake.unique.user_name())
     defaults = {
-        "username": fake.unique.user_name(),
+        "username": f"{condominium.code}:{local_username}",
         "email": fake.unique.email(),
         "password": "Abcd123!",
         "full_name": fake.name(),
@@ -31,6 +34,7 @@ def _make_user(model, **overrides):
         "phone": "11987654321",
         "apartment": "101",
         "block": "A",
+        "condominium": condominium,
     }
     defaults.update(overrides)
     password = defaults.pop("password")
@@ -40,18 +44,22 @@ def _make_user(model, **overrides):
 class BaseTestsUsers(APITestCase):
     """
     Shared scaffold:
-      • self.admin   – staff user (also authenticated client when needed)
-      • self.user_a  – regular user
-      • self.user_b  – another regular user
-      • self.token_user_{a,b} – JWT for the regular users
-      • self.client  – DRF APIClient (anonymous by default)
+      • self.condominium – default tenant for all test users
+      • self.admin       – staff user linked to the condominium
+      • self.user_a/b    – regular users in the same condominium
     """
 
     @classmethod
     def setUpTestData(cls):
         cls.User = get_user_model()
+        cls.condominium = Condominium.objects.create(
+            name="Sunnyvale Test",
+            slug="sunnyvale-test",
+            code="SUNNY001",
+            is_active=True,
+        )
         cls.admin = cls.User.objects.create_superuser(
-            username="admin",
+            username=f"{cls.condominium.code}:admin",
             email="admin@example.com",
             password="Abcd123!",
             full_name="Admin User",
@@ -60,9 +68,10 @@ class BaseTestsUsers(APITestCase):
             phone="11999999999",
             apartment="0",
             role="ADMIN",
+            condominium=cls.condominium,
         )
-        cls.user_a = _make_user(cls.User)
-        cls.user_b = _make_user(cls.User)
+        cls.user_a = _make_user(cls.User, condominium=cls.condominium)
+        cls.user_b = _make_user(cls.User, condominium=cls.condominium)
         cls.token_user_a = AccessToken.for_user(cls.user_a)
         cls.token_user_b = AccessToken.for_user(cls.user_b)
         cls.token_admin = AccessToken.for_user(cls.admin)
@@ -95,4 +104,11 @@ class BaseTestsUsers(APITestCase):
             "phone": "11987654321",
             "apartment": "202",
             "block": "B",
+            "condominium_code": self.condominium.code,
+        }
+
+    def login_payload(self, user, password="Abcd123!"):
+        return {
+            "email": user.email,
+            "password": password,
         }

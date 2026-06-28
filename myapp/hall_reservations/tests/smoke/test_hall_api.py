@@ -22,7 +22,10 @@ class HallAPISmoke(BaseTestsUsers):
 
     def _seed_household_with(self, user, apartment="1101", block="A"):
         household = Household.objects.create(
-            apartment=apartment, block=block, status=Household.Status.ACTIVE
+            apartment=apartment,
+            block=block,
+            status=Household.Status.ACTIVE,
+            condominium=self.condominium,
         )
         HouseholdMembership.objects.create(
             household=household,

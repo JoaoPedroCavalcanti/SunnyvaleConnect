@@ -10,7 +10,7 @@ class IVisitorGroupRepository(ABC):
     def list_for_user(self, user_id: int): ...
 
     @abstractmethod
-    def list_all(self): ...
+    def list_all(self, *, condominium_id: int): ...
 
     @abstractmethod
     def get_by_id(self, pk: int) -> VisitorGroupModel | None: ...
@@ -53,9 +53,11 @@ class DjangoVisitorGroupRepository(IVisitorGroupRepository):
             .order_by("-created_at")
         )
 
-    def list_all(self):
-        return VisitorGroupModel.objects.all().prefetch_related("members").order_by(
-            "-created_at"
+    def list_all(self, *, condominium_id):
+        return (
+            VisitorGroupModel.objects.filter(host_user__condominium_id=condominium_id)
+            .prefetch_related("members")
+            .order_by("-created_at")
         )
 
     def get_by_id(self, pk):

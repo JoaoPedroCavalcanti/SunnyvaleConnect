@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "delivery_notification",
     "sunny_vale_news",
     "households",
+    "condominiums",
     "admin_dashboard",
     "employee_dashboard",
 ]

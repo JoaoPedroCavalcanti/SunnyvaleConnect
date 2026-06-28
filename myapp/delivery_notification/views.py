@@ -42,7 +42,7 @@ class SendDeliveryNotificationView(APIView):
         serializer = DeliveryNotificationInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         instance = container.delivery_notification_service.send(
-            serializer.validated_data
+            request.user, serializer.validated_data
         )
         return Response(
             DeliveryNotificationOutputSerializer(instance).data,
@@ -56,7 +56,7 @@ class ListDeliveryNotificationsView(APIView):
 
     @extend_schema(responses={200: DeliveryNotificationOutputSerializer(many=True)})
     def get(self, request):
-        items = container.delivery_notification_service.list()
+        items = container.delivery_notification_service.list(request.user)
         return Response(
             DeliveryNotificationOutputSerializer(items, many=True).data,
             status=status.HTTP_200_OK,
@@ -69,7 +69,7 @@ class DetailDeliveryNotificationView(APIView):
 
     @extend_schema(responses={200: DeliveryNotificationOutputSerializer})
     def get(self, request, pk: int):
-        instance = container.delivery_notification_service.get(pk)
+        instance = container.delivery_notification_service.get(request.user, pk)
         return Response(
             DeliveryNotificationOutputSerializer(instance).data,
             status=status.HTTP_200_OK,

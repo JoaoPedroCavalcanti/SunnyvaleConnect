@@ -22,6 +22,8 @@ from users.repositories.user_repository import IUserRepository
 
 pytestmark = pytest.mark.unit
 
+TEST_CONDOMINIUM_ID = 1
+
 
 class _CountUserRepo(IUserRepository):
     """Tiny fake: only ``count_active`` matters here. Other ABC methods raise."""
@@ -29,14 +31,14 @@ class _CountUserRepo(IUserRepository):
     def __init__(self, active: int):
         self._active = active
 
-    def count_active(self):
+    def count_active(self, *, condominium_id=None):
         return self._active
 
     # rest of the ABC is unused by AdminDashboardService
-    def list_all(self):  # pragma: no cover
+    def list_all(self, *, condominium_id=None):  # pragma: no cover
         raise NotImplementedError
 
-    def list_by_role(self, role):  # pragma: no cover
+    def list_by_role(self, role, *, condominium_id=None):  # pragma: no cover
         raise NotImplementedError
 
     def list_filtered(self, **kwargs):  # pragma: no cover
@@ -48,10 +50,10 @@ class _CountUserRepo(IUserRepository):
     def exists_with_email(self, email):  # pragma: no cover
         raise NotImplementedError
 
-    def exists_with_username(self, username):  # pragma: no cover
+    def exists_with_username(self, username, *, condominium_code):  # pragma: no cover
         raise NotImplementedError
 
-    def exists_with_cpf(self, cpf):  # pragma: no cover
+    def exists_with_cpf(self, cpf, *, condominium_id):  # pragma: no cover
         raise NotImplementedError
 
     def create_user(self, **fields):  # pragma: no cover
@@ -66,10 +68,13 @@ class _CountUserRepo(IUserRepository):
     def set_active(self, instance, value):  # pragma: no cover
         raise NotImplementedError
 
-    def list_admin_emails(self):  # pragma: no cover
+    def list_admin_emails(self, *, condominium_id):  # pragma: no cover
         raise NotImplementedError
 
-    def get_by_username(self, username):  # pragma: no cover
+    def get_by_email(self, email):  # pragma: no cover
+        raise NotImplementedError
+
+    def get_by_username(self, username, *, condominium_code=None):  # pragma: no cover
         raise NotImplementedError
 
     def check_password(self, instance, raw_password):  # pragma: no cover
@@ -80,18 +85,18 @@ class _CountBBQRepo(IBBQRepository):
     def __init__(self, by_status: dict[str, int]):
         self._by_status = by_status
 
-    def count_by_status(self, status=None):
+    def count_by_status(self, status=None, *, condominium_id):
         if status is None:
             return sum(self._by_status.values())
         return self._by_status.get(status, 0)
 
-    def list_all(self, status=None):  # pragma: no cover
+    def list_all(self, status=None, *, condominium_id):  # pragma: no cover
         raise NotImplementedError
 
     def get_by_id(self, pk):  # pragma: no cover
         raise NotImplementedError
 
-    def list_for_date(self, reservation_date):  # pragma: no cover
+    def list_for_date(self, reservation_date, *, condominium_id):  # pragma: no cover
         raise NotImplementedError
 
     def latest_date_for_household(self, household_id):  # pragma: no cover
@@ -111,18 +116,18 @@ class _CountHallRepo(IHallRepository):
     def __init__(self, by_status: dict[str, int]):
         self._by_status = by_status
 
-    def count_by_status(self, status=None):
+    def count_by_status(self, status=None, *, condominium_id):
         if status is None:
             return sum(self._by_status.values())
         return self._by_status.get(status, 0)
 
-    def list_all(self, status=None):  # pragma: no cover
+    def list_all(self, status=None, *, condominium_id):  # pragma: no cover
         raise NotImplementedError
 
     def get_by_id(self, pk):  # pragma: no cover
         raise NotImplementedError
 
-    def list_for_date(self, reservation_date):  # pragma: no cover
+    def list_for_date(self, reservation_date, *, condominium_id):  # pragma: no cover
         raise NotImplementedError
 
     def latest_date_for_household(self, household_id):  # pragma: no cover
@@ -142,13 +147,13 @@ class _CountNewsRepo(ISunnyValeNewsRepository):
     def __init__(self, total: int):
         self._total = total
 
-    def count_all(self):
+    def count_all(self, *, condominium_id):
         return self._total
 
-    def list_all(self):  # pragma: no cover
+    def list_all(self, *, condominium_id):  # pragma: no cover
         raise NotImplementedError
 
-    def list_by_kind(self, kind):  # pragma: no cover
+    def list_by_kind(self, kind, *, condominium_id):  # pragma: no cover
         raise NotImplementedError
 
     def get_by_id(self, news_id):  # pragma: no cover
@@ -165,11 +170,15 @@ class _CountNewsRepo(ISunnyValeNewsRepository):
 
 
 def _admin():
-    return SimpleNamespace(id=1, is_staff=True, role="ADMIN")
+    return SimpleNamespace(
+        id=1, is_staff=True, role="ADMIN", condominium_id=TEST_CONDOMINIUM_ID
+    )
 
 
 def _resident():
-    return SimpleNamespace(id=2, is_staff=False, role="RESIDENT")
+    return SimpleNamespace(
+        id=2, is_staff=False, role="RESIDENT", condominium_id=TEST_CONDOMINIUM_ID
+    )
 
 
 def _service(
@@ -248,13 +257,17 @@ def test_overview_is_cached_with_one_hour_ttl():
     svc = _service(active=5, news=2, cache=cache)
     svc.overview(_admin())
     assert cache.set_calls == [
-        (AdminDashboardService.CACHE_KEY, cache.store[AdminDashboardService.CACHE_KEY], 3600)
+        (
+            f"{AdminDashboardService.CACHE_KEY_PREFIX}:1",
+            cache.store[f"{AdminDashboardService.CACHE_KEY_PREFIX}:1"],
+            3600,
+        )
     ]
 
 
 def test_second_call_hits_cache_and_skips_repos():
     cache = FakeCache()
-    cache.store[AdminDashboardService.CACHE_KEY] = AdminDashboardOverview(
+    cache.store[f"{AdminDashboardService.CACHE_KEY_PREFIX}:1"] = AdminDashboardOverview(
         active_residents=42,
         total_reservations=7,
         pending_reservations=3,
@@ -277,7 +290,7 @@ def test_second_call_hits_cache_and_skips_repos():
 
 def test_permission_check_runs_before_cache_lookup():
     cache = FakeCache()
-    cache.store[AdminDashboardService.CACHE_KEY] = AdminDashboardOverview(
+    cache.store[f"{AdminDashboardService.CACHE_KEY_PREFIX}:1"] = AdminDashboardOverview(
         active_residents=1,
         total_reservations=1,
         pending_reservations=1,

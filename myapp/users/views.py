@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from condominiums.serializers import CondominiumLookupOutputSerializer
 from shared.container import container
 from users.models import EmployeeType, UserRole
 from users.serializers import (
@@ -166,22 +167,35 @@ class LoginView(APIView):
         serializer.is_valid(raise_exception=True)
 
         result = container.auth_service.authenticate(
-            serializer.validated_data["username"],
+            serializer.validated_data["email"],
             serializer.validated_data["password"],
         )
         kind = result["kind"]
+        condominium_payload = None
+        if "condominium" in result:
+            condominium_payload = CondominiumLookupOutputSerializer(
+                result["condominium"], context={"request": request}
+            ).data
 
         if kind == KIND_OK:
             user = result["user"]
             refresh = RefreshToken.for_user(user)
             refresh["role"] = user.role
             refresh["employee_types"] = list(getattr(user, "employee_types", None) or [])
+            refresh["condominium_id"] = user.condominium_id
             access = refresh.access_token
             access["role"] = user.role
             access["employee_types"] = list(
                 getattr(user, "employee_types", None) or []
             )
-            return Response({"access": str(access), "refresh": str(refresh)})
+            access["condominium_id"] = user.condominium_id
+            return Response(
+                {
+                    "access": str(access),
+                    "refresh": str(refresh),
+                    "condominium": condominium_payload,
+                }
+            )
 
         if kind == KIND_PENDING:
             return Response(
@@ -189,6 +203,7 @@ class LoginView(APIView):
                     "detail": "Your account is waiting for approval.",
                     "code": KIND_PENDING,
                     "household": result["household"],
+                    "condominium": condominium_payload,
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
@@ -198,6 +213,7 @@ class LoginView(APIView):
                 {
                     "detail": "Your account is disabled. Contact the administrator.",
                     "code": KIND_DISABLED,
+                    "condominium": condominium_payload,
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
@@ -215,7 +231,12 @@ class UserMeView(APIView):
 
     @extend_schema(responses={200: UserOutputSerializer})
     def get(self, request):
-        return Response(UserOutputSerializer(request.user).data)
+        payload = UserOutputSerializer(request.user).data
+        if request.user.condominium_id:
+            payload["condominium"] = CondominiumLookupOutputSerializer(
+                request.user.condominium, context={"request": request}
+            ).data
+        return Response(payload)
 
     @extend_schema(
         request=UserPatchSerializer,
