@@ -9,3 +9,30 @@ class CondominiumAdmin(admin.ModelAdmin):
     list_filter = ("is_active",)
     search_fields = ("name", "code", "slug")
     readonly_fields = ("code", "slug", "created_at")
+
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "name",
+                    "code",
+                    "slug",
+                    "is_active",
+                    "welcome_message",
+                )
+            },
+        ),
+        (
+            "Branding",
+            {
+                "fields": (
+                    "primary_color",
+                    "secondary_color",
+                    "accent_color",
+                    "logo",
+                )
+            },
+        ),
+        ("Metadata", {"fields": ("created_at",)}),
+    )
