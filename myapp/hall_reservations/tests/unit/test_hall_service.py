@@ -55,6 +55,35 @@ class FakeHallRepository(IHallRepository):
             )
         ]
 
+    def list_approved_between(self, from_date, to_date, *, condominium_id):
+        return [
+            i
+            for i in self._items
+            if from_date <= i.reservation_date <= to_date
+            and i.status == HallReservationModel.Status.APPROVED
+            and (
+                getattr(getattr(i, "unit", None), "condominium_id", None)
+                == condominium_id
+                or getattr(i, "unit", None) is None
+            )
+        ]
+
+    def list_pending_for_user_between(
+        self, user_id, from_date, to_date, *, condominium_id
+    ):
+        return [
+            i
+            for i in self._items
+            if from_date <= i.reservation_date <= to_date
+            and i.status == HallReservationModel.Status.PENDING
+            and getattr(i.reservation_user, "id", None) == user_id
+            and (
+                getattr(getattr(i, "unit", None), "condominium_id", None)
+                == condominium_id
+                or getattr(i, "unit", None) is None
+            )
+        ]
+
     def create(self, data):
         unit = data.get("unit")
         item = SimpleNamespace(
@@ -107,9 +136,13 @@ class FakeMembershipRepo:
 
 
 def _unit(pk=1, apt="1101", block="A"):
-    return SimpleNamespace(
+    unit = SimpleNamespace(
         id=pk, apartment=apt, block=block, condominium_id=TEST_CONDOMINIUM_ID
     )
+    unit.display_name = lambda: (
+        f"Apt {apt} / Block {block}" if block else f"Apt {apt}"
+    )
+    return unit
 
 
 def _user(pk=1, is_staff=False, email="user@example.com", username="user1"):
@@ -421,6 +454,27 @@ def test_pending_does_not_occupy_slot(fixtures):
     f["memberships"].add(roommate.id, f["unit"])
     item = f["service"].create(roommate, {"reservation_date": _future(15)})
     assert item is not None
+
+
+def test_availability_partial_day(fixtures):
+    f = fixtures
+    d = _future(10)
+    f["book_approved"](
+        f["holder"],
+        reservation_date=d,
+        start_time=time(12, 0),
+        end_time=time(18, 0),
+    )
+    result = f["service"].availability(f["holder"], from_date=d, to_date=d)
+    day = result.days[0]
+    assert day.status == "partial"
+    assert day.free_slots[0].end_time == time(11, 30)
+    assert day.free_slots[1].start_time == time(18, 30)
+
+
+def test_resident_cannot_list(fixtures):
+    with pytest.raises(PermissionDeniedError):
+        fixtures["service"].list(fixtures["holder"])
 
 
 def test_not_found_on_get(fixtures):

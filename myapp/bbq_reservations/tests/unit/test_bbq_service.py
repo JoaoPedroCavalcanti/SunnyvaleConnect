@@ -55,6 +55,35 @@ class FakeBBQRepository(IBBQRepository):
             )
         ]
 
+    def list_approved_between(self, from_date, to_date, *, condominium_id):
+        return [
+            i
+            for i in self._items
+            if from_date <= i.reservation_date <= to_date
+            and i.status == BBQReservationModel.Status.APPROVED
+            and (
+                getattr(getattr(i, "unit", None), "condominium_id", None)
+                == condominium_id
+                or getattr(i, "unit", None) is None
+            )
+        ]
+
+    def list_pending_for_user_between(
+        self, user_id, from_date, to_date, *, condominium_id
+    ):
+        return [
+            i
+            for i in self._items
+            if from_date <= i.reservation_date <= to_date
+            and i.status == BBQReservationModel.Status.PENDING
+            and getattr(i.reservation_user, "id", None) == user_id
+            and (
+                getattr(getattr(i, "unit", None), "condominium_id", None)
+                == condominium_id
+                or getattr(i, "unit", None) is None
+            )
+        ]
+
     def create(self, data):
         unit = data.get("unit")
         item = SimpleNamespace(
@@ -109,9 +138,13 @@ class FakeMembershipRepo:
 
 
 def _unit(pk=1, apt="1101", block="A"):
-    return SimpleNamespace(
+    unit = SimpleNamespace(
         id=pk, apartment=apt, block=block, condominium_id=TEST_CONDOMINIUM_ID
     )
+    unit.display_name = lambda: (
+        f"Apt {apt} / Block {block}" if block else f"Apt {apt}"
+    )
+    return unit
 
 
 def _user(pk=1, is_staff=False, email="user@example.com", username="user1"):
@@ -443,6 +476,65 @@ class TestCreate:
             roommate, {"reservation_date": _future(15)}
         )
         assert item is not None
+
+
+class TestAvailability:
+    def test_free_day_and_partial_with_gap(self, fixtures):
+        f = fixtures
+        d = _future(10)
+        f["book_approved"](
+            f["holder"],
+            reservation_date=d,
+            start_time=time(12, 0),
+            end_time=time(18, 0),
+        )
+        result = f["service"].availability(
+            f["holder"], from_date=d, to_date=d
+        )
+        assert len(result.days) == 1
+        day = result.days[0]
+        assert day.status == "partial"
+        assert len(day.bookings) == 1
+        assert day.bookings[0].status == "APPROVED"
+        assert day.free_slots[0].start_time == time(0, 0)
+        assert day.free_slots[0].end_time == time(11, 30)
+        assert day.free_slots[1].start_time == time(18, 30)
+        assert day.free_slots[1].end_time == time(23, 59, 59)
+
+    def test_includes_own_pending_without_occupying(self, fixtures):
+        f = fixtures
+        d = _future(12)
+        f["service"].create(
+            f["holder"],
+            {
+                "reservation_date": d,
+                "start_time": time(10, 0),
+                "end_time": time(12, 0),
+            },
+        )
+        result = f["service"].availability(
+            f["holder"], from_date=d, to_date=d
+        )
+        day = result.days[0]
+        assert day.status == "free"
+        assert len(day.bookings) == 1
+        assert day.bookings[0].status == "PENDING"
+        assert day.free_slots[0].start_time == time(0, 0)
+        assert day.free_slots[0].end_time == time(23, 59, 59)
+
+    def test_rejects_inverted_range(self, fixtures):
+        f = fixtures
+        with pytest.raises(BusinessRuleError):
+            f["service"].availability(
+                f["holder"],
+                from_date=_future(20),
+                to_date=_future(10),
+            )
+
+    def test_resident_cannot_list(self, fixtures):
+        f = fixtures
+        with pytest.raises(PermissionDeniedError):
+            f["service"].list(f["holder"])
 
 
 class TestApproveReject:

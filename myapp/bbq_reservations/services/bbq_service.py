@@ -6,12 +6,14 @@ least 30 minutes between one ending and the next starting.
 """
 
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from datetime import date, time
 
 from bbq_reservations.models import BBQReservationModel
 from bbq_reservations.repositories.bbq_repository import IBBQRepository
 from units.models import UnitMembership
 from units.repositories.unit_membership_repository import IUnitMembershipRepository
+from shared.availability import AvailabilityRange, build_availability_range
 from shared.exceptions import (
     BusinessRuleError,
     NotFoundError,
@@ -20,12 +22,20 @@ from shared.exceptions import (
 from shared.infrastructure.email_sender import IEmailSender
 from shared.roles import ensure_not_employee
 from shared.tenant import assert_same_condominium, require_condominium_id
-from shared.time_slots import slots_overlap, slots_too_close
+from shared.time_slots import DEFAULT_MIN_GAP, slots_overlap, slots_too_close
+
+
+_MAX_AVAILABILITY_DAYS = 93
 
 
 class IBBQReservationService(ABC):
     @abstractmethod
     def list(self, user, status: str | None = None): ...
+
+    @abstractmethod
+    def availability(
+        self, user, *, from_date: date, to_date: date
+    ) -> AvailabilityRange: ...
 
     @abstractmethod
     def get(self, user, pk: int) -> BBQReservationModel: ...
@@ -58,11 +68,57 @@ class BBQReservationService(IBBQReservationService):
         self._email = email_sender
 
     def list(self, user, status=None):
+        if not getattr(user, "is_staff", False):
+            raise PermissionDeniedError(
+                "Only admins can list barbecue bookings. "
+                "Use the availability calendar instead."
+            )
         normalized = self._normalize_status_filter(status)
         return self._repo.list_all(
             status=normalized,
             condominium_id=require_condominium_id(user),
         )
+
+    def availability(self, user, *, from_date, to_date):
+        self._validate_availability_range(from_date, to_date)
+        condominium_id = require_condominium_id(user)
+
+        approved_by_date: dict[date, list] = defaultdict(list)
+        for item in self._repo.list_approved_between(
+            from_date, to_date, condominium_id=condominium_id
+        ):
+            approved_by_date[item.reservation_date].append(item)
+
+        pending_mine_by_date: dict[date, list] = defaultdict(list)
+        for item in self._repo.list_pending_for_user_between(
+            user.id,
+            from_date,
+            to_date,
+            condominium_id=condominium_id,
+        ):
+            pending_mine_by_date[item.reservation_date].append(item)
+
+        return build_availability_range(
+            from_date=from_date,
+            to_date=to_date,
+            approved_by_date=approved_by_date,
+            pending_mine_by_date=pending_mine_by_date,
+            min_gap=DEFAULT_MIN_GAP,
+        )
+
+    @staticmethod
+    def _validate_availability_range(from_date: date, to_date: date) -> None:
+        if to_date < from_date:
+            raise BusinessRuleError(
+                "`to` must be on or after `from`.",
+                field="to",
+            )
+        span = (to_date - from_date).days + 1
+        if span > _MAX_AVAILABILITY_DAYS:
+            raise BusinessRuleError(
+                f"Availability range cannot exceed {_MAX_AVAILABILITY_DAYS} days.",
+                field="to",
+            )
 
     @staticmethod
     def _normalize_status_filter(status: str | None) -> str | None:

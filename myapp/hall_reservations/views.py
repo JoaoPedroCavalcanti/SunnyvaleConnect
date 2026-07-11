@@ -8,6 +8,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from hall_reservations.serializers import (
+    AvailabilityQuerySerializer,
+    AvailabilityRangeSerializer,
     HallReservationInputSerializer,
     HallReservationOutputSerializer,
     HallReservationPatchSerializer,
@@ -17,16 +19,58 @@ from shared.container import container
 
 
 @extend_schema(tags=["hall_reservations"])
-class HallReservationListCreateView(APIView):
+class HallAvailabilityView(APIView):
+    """Calendar availability for the party hall."""
+
     permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="from",
+                description="Range start (inclusive), YYYY-MM-DD.",
+                required=True,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="to",
+                description="Range end (inclusive), YYYY-MM-DD. Max 93 days.",
+                required=True,
+                type=str,
+            ),
+        ],
+        responses={200: AvailabilityRangeSerializer},
+    )
+    def get(self, request):
+        query = AvailabilityQuerySerializer(
+            data={
+                "from_date": request.query_params.get("from"),
+                "to_date": request.query_params.get("to"),
+            }
+        )
+        query.is_valid(raise_exception=True)
+        result = container.hall_service.availability(
+            request.user,
+            from_date=query.validated_data["from_date"],
+            to_date=query.validated_data["to_date"],
+        )
+        return Response(AvailabilityRangeSerializer(result).data)
+
+
+@extend_schema(tags=["hall_reservations"])
+class HallReservationListCreateView(APIView):
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [IsAdminUser()]
+        return [IsAuthenticated()]
 
     @extend_schema(
         parameters=[
             OpenApiParameter(
                 name="status",
                 description=(
-                    "Filter by booking status. Useful for the admin "
-                    "dashboard to fetch only the pending queue."
+                    "Filter by booking status. Admin-only queue "
+                    "(e.g. PENDING for approvals)."
                 ),
                 required=False,
                 type=str,

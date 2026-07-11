@@ -38,6 +38,47 @@ class HallReservationRejectSerializer(serializers.Serializer):
     reason = serializers.CharField(required=True, allow_blank=False)
 
 
+class AvailabilityQuerySerializer(serializers.Serializer):
+    from_date = serializers.DateField(required=True)
+    to_date = serializers.DateField(required=True)
+
+
+class AvailabilityBookingSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    start_time = serializers.TimeField(allow_null=True)
+    end_time = serializers.TimeField(allow_null=True)
+    status = serializers.CharField()
+    unit = serializers.DictField(allow_null=True)
+    reservation_user = serializers.DictField(allow_null=True)
+
+
+class FreeSlotSerializer(serializers.Serializer):
+    start_time = serializers.TimeField()
+    end_time = serializers.TimeField()
+
+
+class DayAvailabilitySerializer(serializers.Serializer):
+    date = serializers.DateField()
+    status = serializers.ChoiceField(
+        choices=["free", "partial", "full", "past"]
+    )
+    bookings = AvailabilityBookingSerializer(many=True)
+    free_slots = FreeSlotSerializer(many=True)
+
+
+class AvailabilityRangeSerializer(serializers.Serializer):
+    min_gap_minutes = serializers.IntegerField()
+    days = DayAvailabilitySerializer(many=True)
+
+    def to_representation(self, instance):
+        return {
+            "from": instance.from_date,
+            "to": instance.to_date,
+            "min_gap_minutes": instance.min_gap_minutes,
+            "days": DayAvailabilitySerializer(instance.days, many=True).data,
+        }
+
+
 class HallReservationOutputSerializer(serializers.ModelSerializer):
     """Output payload with the unit (apartment) inlined."""
 

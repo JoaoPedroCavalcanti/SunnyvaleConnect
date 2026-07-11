@@ -99,6 +99,16 @@ class _CountBBQRepo(IBBQRepository):
     def list_for_date(self, reservation_date, *, condominium_id):  # pragma: no cover
         raise NotImplementedError
 
+    def list_approved_between(
+        self, from_date, to_date, *, condominium_id
+    ):  # pragma: no cover
+        raise NotImplementedError
+
+    def list_pending_for_user_between(
+        self, user_id, from_date, to_date, *, condominium_id
+    ):  # pragma: no cover
+        raise NotImplementedError
+
     def create(self, data):  # pragma: no cover
         raise NotImplementedError
 
@@ -125,6 +135,16 @@ class _CountHallRepo(IHallRepository):
         raise NotImplementedError
 
     def list_for_date(self, reservation_date, *, condominium_id):  # pragma: no cover
+        raise NotImplementedError
+
+    def list_approved_between(
+        self, from_date, to_date, *, condominium_id
+    ):  # pragma: no cover
+        raise NotImplementedError
+
+    def list_pending_for_user_between(
+        self, user_id, from_date, to_date, *, condominium_id
+    ):  # pragma: no cover
         raise NotImplementedError
 
     def create(self, data):  # pragma: no cover

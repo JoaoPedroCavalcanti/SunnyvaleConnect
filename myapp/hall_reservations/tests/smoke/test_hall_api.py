@@ -14,6 +14,7 @@ pytestmark = pytest.mark.api
 
 
 LIST_URL = reverse("hall_reservations:list-create")
+AVAILABILITY_URL = reverse("hall_reservations:availability")
 
 
 class HallAPISmoke(BaseTestsUsers):
@@ -39,6 +40,11 @@ class HallAPISmoke(BaseTestsUsers):
 
     def test_anonymous_blocked(self):
         self.assertEqual(self.client.get(LIST_URL).status_code, 401)
+        self.assertEqual(self.client.get(AVAILABILITY_URL).status_code, 401)
+
+    def test_resident_cannot_list(self):
+        self.authenticate(self.user_a)
+        self.assertEqual(self.client.get(LIST_URL).status_code, 403)
 
     def test_regular_user_creates_for_self(self):
         house = self._seed_unit_with(self.user_a)
@@ -262,3 +268,30 @@ class HallAPISmoke(BaseTestsUsers):
         self.authenticate(self.admin)
         response = self.client.get(LIST_URL + "?status=NOPE")
         self.assertEqual(response.status_code, 400)
+
+    def test_availability_calendar_for_resident(self):
+        self._seed_unit_with(self.user_a, "1101", "A")
+        self._seed_unit_with(self.user_b, "1102", "A")
+        day = self._future(10)
+
+        self.authenticate(self.admin)
+        approved = self.client.post(
+            LIST_URL,
+            data={
+                "reservation_date": day,
+                "start_time": "12:00",
+                "end_time": "18:00",
+                "reservation_user": self.user_a.id,
+            },
+        )
+        self.assertEqual(approved.status_code, 201, approved.data)
+
+        self.authenticate(self.user_b)
+        response = self.client.get(
+            AVAILABILITY_URL, {"from": day, "to": day}
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        day_payload = response.data["days"][0]
+        self.assertEqual(day_payload["status"], "partial")
+        self.assertEqual(day_payload["free_slots"][0]["end_time"], "11:30:00")
+        self.assertEqual(day_payload["free_slots"][1]["start_time"], "18:30:00")

@@ -1,6 +1,7 @@
 from django.urls import path
 
 from bbq_reservations.views import (
+    BBQAvailabilityView,
     BBQReservationApproveView,
     BBQReservationDetailView,
     BBQReservationListCreateView,
@@ -10,6 +11,11 @@ from bbq_reservations.views import (
 app_name = "bbq_reservations"
 
 urlpatterns = [
+    path(
+        "availability/",
+        BBQAvailabilityView.as_view(),
+        name="availability",
+    ),
     path("", BBQReservationListCreateView.as_view(), name="list-create"),
     path("<int:pk>/", BBQReservationDetailView.as_view(), name="detail"),
     path(
