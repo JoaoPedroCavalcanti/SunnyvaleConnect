@@ -138,7 +138,7 @@ class HallReservationService(IHallReservationService):
         instance = self._repo.get_by_id(pk)
         if not instance:
             raise NotFoundError("No Hall reservation matches the given query.")
-        assert_same_condominium(user, instance.unit.condominium_id)
+        assert_same_condominium(user, self._resource_condominium_id(instance))
         return instance
 
     def create(self, user, payload: dict):
@@ -147,7 +147,7 @@ class HallReservationService(IHallReservationService):
         reservation_user = self._resolve_reservation_user(
             user, data.get("reservation_user")
         )
-        unit = self._resolve_unit(reservation_user)
+        unit = self._resolve_unit(reservation_user, requester=user)
         data["reservation_user"] = reservation_user
         data["unit"] = unit
 
@@ -251,26 +251,31 @@ class HallReservationService(IHallReservationService):
 
     def _resolve_reservation_user(self, requester, passed_user):
         if requester.is_staff:
-            if not passed_user:
-                raise BusinessRuleError(
-                    "reservation_user can not be empty."
-                )
-            return passed_user
+            return passed_user or requester
         if passed_user and passed_user.id != requester.id:
             raise BusinessRuleError("You can not pass a reservation_user.")
         return requester
 
-    def _resolve_unit(self, target_user):
+    def _resolve_unit(self, target_user, *, requester):
         memberships = [
             m
             for m in self._memberships.list_active_for_user(target_user.id)
             if m.status == UnitMembership.Status.ACTIVE
         ]
-        if not memberships:
-            raise BusinessRuleError(
-                "User must belong to an active unit to book the hall."
-            )
-        return memberships[0].unit
+        if memberships:
+            return memberships[0].unit
+        if getattr(requester, "is_staff", False):
+            return None
+        raise BusinessRuleError(
+            "User must belong to an active unit to book the hall."
+        )
+
+    @staticmethod
+    def _resource_condominium_id(instance) -> int | None:
+        if getattr(instance, "unit_id", None) and instance.unit is not None:
+            return instance.unit.condominium_id
+        user = getattr(instance, "reservation_user", None)
+        return getattr(user, "condominium_id", None) if user else None
 
     def _validate_date(self, reservation_date: date):
         if reservation_date < date.today():

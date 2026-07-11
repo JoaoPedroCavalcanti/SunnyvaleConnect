@@ -3,7 +3,18 @@
 from abc import ABC, abstractmethod
 from datetime import date
 
+from django.db.models import Q
+
 from hall_reservations.models import HallReservationModel
+
+
+def _condominium_scope(condominium_id: int) -> Q:
+    """Match bookings tied to a unit in the condo, or unit-less
+    admin bookings whose reservation_user belongs to the condo."""
+    return Q(unit__condominium_id=condominium_id) | Q(
+        unit__isnull=True,
+        reservation_user__condominium_id=condominium_id,
+    )
 
 
 class IHallRepository(ABC):
@@ -47,7 +58,7 @@ class IHallRepository(ABC):
 class DjangoHallRepository(IHallRepository):
     def list_all(self, status=None, *, condominium_id):
         qs = (
-            HallReservationModel.objects.filter(unit__condominium_id=condominium_id)
+            HallReservationModel.objects.filter(_condominium_scope(condominium_id))
             .select_related("reservation_user", "unit")
             .order_by("-reservation_date")
         )
@@ -66,18 +77,18 @@ class DjangoHallRepository(IHallRepository):
     def list_for_date(self, reservation_date, *, condominium_id):
         """Only APPROVED bookings occupy a time slot."""
         return HallReservationModel.objects.filter(
+            _condominium_scope(condominium_id),
             reservation_date=reservation_date,
             status=HallReservationModel.Status.APPROVED,
-            unit__condominium_id=condominium_id,
         ).only("id", "start_time", "end_time", "reservation_date")
 
     def list_approved_between(self, from_date, to_date, *, condominium_id):
         return (
             HallReservationModel.objects.filter(
+                _condominium_scope(condominium_id),
                 reservation_date__gte=from_date,
                 reservation_date__lte=to_date,
                 status=HallReservationModel.Status.APPROVED,
-                unit__condominium_id=condominium_id,
             )
             .select_related("reservation_user", "unit")
             .order_by("reservation_date", "start_time", "id")
@@ -88,11 +99,11 @@ class DjangoHallRepository(IHallRepository):
     ):
         return (
             HallReservationModel.objects.filter(
+                _condominium_scope(condominium_id),
                 reservation_user_id=user_id,
                 reservation_date__gte=from_date,
                 reservation_date__lte=to_date,
                 status=HallReservationModel.Status.PENDING,
-                unit__condominium_id=condominium_id,
             )
             .select_related("reservation_user", "unit")
             .order_by("reservation_date", "start_time", "id")
@@ -112,7 +123,7 @@ class DjangoHallRepository(IHallRepository):
 
     def count_by_status(self, status=None, *, condominium_id):
         qs = HallReservationModel.objects.filter(
-            unit__condominium_id=condominium_id
+            _condominium_scope(condominium_id)
         )
         if status:
             qs = qs.filter(status=status)

@@ -134,12 +134,17 @@ class BBQAPISmoke(BaseTestsUsers):
         )
         self.assertEqual(r2.status_code, 201, r2.data)
 
-    def test_admin_must_pass_reservation_user(self):
+    def test_admin_can_book_for_self_without_unit(self):
         self.authenticate(self.admin)
         response = self.client.post(
             LIST_URL, data={"reservation_date": self._future()}
         )
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["status"], "APPROVED")
+        self.assertIsNone(response.data["unit"])
+        self.assertEqual(
+            response.data["reservation_user"]["id"], self.admin.id
+        )
 
     def test_past_date_rejected(self):
         self._seed_unit_with(self.user_a)

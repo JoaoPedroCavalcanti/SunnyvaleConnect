@@ -27,14 +27,16 @@ class FakeHallRepository(IHallRepository):
         self._items = []
         self._next_id = 1
 
+    @staticmethod
+    def _in_condo(item, condominium_id):
+        unit = getattr(item, "unit", None)
+        if unit is not None:
+            return getattr(unit, "condominium_id", None) == condominium_id
+        user = getattr(item, "reservation_user", None)
+        return getattr(user, "condominium_id", None) == condominium_id
+
     def list_all(self, status=None, *, condominium_id):
-        items = [
-            i
-            for i in self._items
-            if getattr(getattr(i, "unit", None), "condominium_id", None)
-            == condominium_id
-            or getattr(i, "unit", None) is None
-        ]
+        items = [i for i in self._items if self._in_condo(i, condominium_id)]
         if status:
             return [i for i in items if i.status == status]
         return items
@@ -48,11 +50,7 @@ class FakeHallRepository(IHallRepository):
             for i in self._items
             if i.reservation_date == reservation_date
             and i.status == HallReservationModel.Status.APPROVED
-            and (
-                getattr(getattr(i, "unit", None), "condominium_id", None)
-                == condominium_id
-                or getattr(i, "unit", None) is None
-            )
+            and self._in_condo(i, condominium_id)
         ]
 
     def list_approved_between(self, from_date, to_date, *, condominium_id):
@@ -61,11 +59,7 @@ class FakeHallRepository(IHallRepository):
             for i in self._items
             if from_date <= i.reservation_date <= to_date
             and i.status == HallReservationModel.Status.APPROVED
-            and (
-                getattr(getattr(i, "unit", None), "condominium_id", None)
-                == condominium_id
-                or getattr(i, "unit", None) is None
-            )
+            and self._in_condo(i, condominium_id)
         ]
 
     def list_pending_for_user_between(
@@ -77,11 +71,7 @@ class FakeHallRepository(IHallRepository):
             if from_date <= i.reservation_date <= to_date
             and i.status == HallReservationModel.Status.PENDING
             and getattr(i.reservation_user, "id", None) == user_id
-            and (
-                getattr(getattr(i, "unit", None), "condominium_id", None)
-                == condominium_id
-                or getattr(i, "unit", None) is None
-            )
+            and self._in_condo(i, condominium_id)
         ]
 
     def create(self, data):
@@ -243,12 +233,13 @@ def test_user_without_active_unit_rejected(fixtures):
         f["service"].create(homeless, {"reservation_date": _future()})
 
 
-def test_admin_must_pass_reservation_user(fixtures):
+def test_admin_can_book_for_self_without_unit(fixtures):
     f = fixtures
-    with pytest.raises(BusinessRuleError):
-        f["service"].create(
-            _user(is_staff=True), {"reservation_date": _future()}
-        )
+    admin = _user(50, is_staff=True)
+    item = f["service"].create(admin, {"reservation_date": _future()})
+    assert item.reservation_user is admin
+    assert item.unit is None
+    assert item.status == HallReservationModel.Status.APPROVED
 
 
 def test_past_date_rejected(fixtures):
