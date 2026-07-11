@@ -17,6 +17,7 @@ from shared.tenant import (
     is_platform_superuser,
     require_condominium_id,
 )
+from units.unit_catalog import build_catalog, build_filter_options
 
 
 def _norm_code(value: str) -> str:
@@ -45,7 +46,18 @@ class BulkProvisionResult:
 
 class IUnitService(ABC):
     @abstractmethod
-    def list_public(self, condominium_code: str) -> list[dict]: ...
+    def list_public(
+        self,
+        condominium_code: str,
+        *,
+        block: str | None = None,
+        floor: str | None = None,
+        apartment: str | None = None,
+        name: str | None = None,
+    ) -> dict: ...
+
+    @abstractmethod
+    def list_public_filters(self, condominium_code: str) -> dict: ...
 
     @abstractmethod
     def list_for(self, user, status: str | None = None): ...
@@ -82,16 +94,51 @@ class UnitService(IUnitService):
         self._memberships = membership_repository
         self._condominiums = condominium_repository
 
-    def list_public(self, condominium_code: str) -> list[dict]:
-        condominium = self._condominiums.get_by_code(condominium_code)
-        if not condominium or not condominium.is_active:
-            raise NotFoundError("Invalid or inactive condominium code.")
+    def list_public(
+        self,
+        condominium_code: str,
+        *,
+        block: str | None = None,
+        floor: str | None = None,
+        apartment: str | None = None,
+        name: str | None = None,
+    ) -> dict:
+        condominium = self._require_active_condominium(condominium_code)
         units = list(
             self._repo.list_all(
                 status=Unit.Status.ACTIVE, condominium_id=condominium.id
             )
         )
-        return [self._with_occupancy(u) for u in units]
+        entries = [self._with_occupancy(u) for u in units]
+        return build_catalog(
+            entries,
+            condominium_id=condominium.id,
+            condominium_code=getattr(condominium, "code", "") or "",
+            block=(block or "").strip() or None,
+            floor=(floor or "").strip() or None,
+            apartment=(apartment or "").strip() or None,
+            name=(name or "").strip() or None,
+        )
+
+    def list_public_filters(self, condominium_code: str) -> dict:
+        condominium = self._require_active_condominium(condominium_code)
+        units = list(
+            self._repo.list_all(
+                status=Unit.Status.ACTIVE, condominium_id=condominium.id
+            )
+        )
+        entries = [self._with_occupancy(u) for u in units]
+        return build_filter_options(
+            entries,
+            condominium_id=condominium.id,
+            condominium_code=getattr(condominium, "code", "") or "",
+        )
+
+    def _require_active_condominium(self, condominium_code: str):
+        condominium = self._condominiums.get_by_code(condominium_code)
+        if not condominium or not condominium.is_active:
+            raise NotFoundError("Invalid or inactive condominium code.")
+        return condominium
 
     def list_for(self, user, status=None):
         condominium_id = require_condominium_id(user)

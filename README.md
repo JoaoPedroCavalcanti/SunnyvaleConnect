@@ -631,6 +631,38 @@ make schema
 
 ---
 
+## Units — catálogo público (signup)
+
+Sem auth. Inferência de andar: últimos 2 dígitos = porta (`1501` → andar `15`, label `01`). Códigos curtos (`1`…`90`) ficam flat (casas).
+
+### Filtros disponíveis
+
+```
+GET {{base_url}}/units/filters/?condominium_code=CHACON
+```
+
+Retorna `layout` (`blocks` | `floors` | `flat`) e `filters.{block,floor,apartment,name}` com `enabled` + `options` (e `options_by_block` no floor).
+
+### Lista agrupada
+
+```
+GET {{base_url}}/units/?condominium_code=CHACON
+GET {{base_url}}/units/?condominium_code=CHACON&block=A&floor=17
+GET {{base_url}}/units/?condominium_code=FOO&apartment=12
+```
+
+Query opcional (strings): `block`, `floor`, `apartment`, `name`.
+
+Shape:
+- `layout=blocks` → `blocks[].floors[].units[]`
+- `layout=floors` → `floors[].units[]` (prédio sem bloco)
+- `layout=flat` → `units[]` (casas / números curtos)
+- `named[]` sempre separado (Pool House, etc.)
+
+Cada item tem `id`, `label`, `apartment`, `block`, `floor`, `is_occupied`, `display_name`.
+
+---
+
 ## Units — bulk provision (platform superuser)
 
 Cria várias units de uma vez a partir de uma “receita” JSON.  

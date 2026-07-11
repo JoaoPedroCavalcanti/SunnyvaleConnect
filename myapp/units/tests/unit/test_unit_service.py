@@ -149,7 +149,7 @@ class TestListPublic:
         unit = units.create(
             {
                 "kind": Unit.Kind.APARTMENT,
-                "apartment": "101",
+                "apartment": "1",
                 "status": Unit.Status.ACTIVE,
                 "condominium_id": 1,
             }
@@ -166,18 +166,17 @@ class TestListPublic:
         units.create(
             {
                 "kind": Unit.Kind.APARTMENT,
-                "apartment": "102",
+                "apartment": "2",
                 "status": Unit.Status.ACTIVE,
                 "condominium_id": 1,
             }
         )
 
         results = service.list_public(TEST_CONDOMINIUM_CODE)
-        assert len(results) == 2
-        occupied = next(r for r in results if r["unit"].apartment == "101")
-        vacant = next(r for r in results if r["unit"].apartment == "102")
-        assert occupied["is_occupied"] is True
-        assert vacant["is_occupied"] is False
+        assert results["layout"] == "flat"
+        by_apt = {u["apartment"]: u for u in results["units"]}
+        assert by_apt["1"]["is_occupied"] is True
+        assert by_apt["2"]["is_occupied"] is False
 
     def test_invalid_condominium_code(self, deps):
         service, *_ = deps

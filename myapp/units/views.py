@@ -1,6 +1,6 @@
 """Plain APIViews for units app."""
 
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
@@ -11,11 +11,12 @@ from units.serializers import (
     PendingUnitApprovalSerializer,
     UnitBulkProvisionInputSerializer,
     UnitBulkProvisionOutputSerializer,
+    UnitCatalogFiltersOutputSerializer,
+    UnitCatalogOutputSerializer,
     UnitCreateInputSerializer,
     UnitMembershipOutputSerializer,
     UnitMembershipRejectSerializer,
     UnitOutputSerializer,
-    UnitPublicOutputSerializer,
     UnitWithMembersOutputSerializer,
 )
 from shared.container import container
@@ -45,8 +46,31 @@ class UnitBulkProvisionView(APIView):
 
 
 @extend_schema(tags=["units"])
+class UnitCatalogFiltersView(APIView):
+    """Public: which block / floor / apartment filters a condo supports."""
+
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="condominium_code",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=True,
+            ),
+        ],
+        responses={200: UnitCatalogFiltersOutputSerializer},
+    )
+    def get(self, request):
+        code = request.query_params.get("condominium_code", "")
+        payload = container.unit_service.list_public_filters(code)
+        return Response(UnitCatalogFiltersOutputSerializer(payload).data)
+
+
+@extend_schema(tags=["units"])
 class UnitListCreateView(APIView):
-    """GET public list (``?condominium_code=``) or authenticated scoped list.
+    """GET public catalog (``?condominium_code=``) or authenticated scoped list.
 
     POST creates a unit (admin only).
     """
@@ -58,7 +82,49 @@ class UnitListCreateView(APIView):
             return [IsAuthenticated()]
         return [AllowAny()]
 
-    @extend_schema(responses={200: UnitPublicOutputSerializer(many=True)})
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="condominium_code",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Required for anonymous catalog.",
+            ),
+            OpenApiParameter(
+                name="block",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=False,
+            ),
+            OpenApiParameter(
+                name="floor",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=False,
+            ),
+            OpenApiParameter(
+                name="apartment",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=False,
+            ),
+            OpenApiParameter(
+                name="name",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=False,
+            ),
+            OpenApiParameter(
+                name="status",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Authenticated list only.",
+            ),
+        ],
+        responses={200: UnitCatalogOutputSerializer},
+    )
     def get(self, request):
         if request.user.is_authenticated:
             status_filter = request.query_params.get("status") or None
@@ -71,9 +137,14 @@ class UnitListCreateView(APIView):
             return paginator.get_paginated_response(serializer.data)
 
         condominium_code = request.query_params.get("condominium_code", "")
-        items = container.unit_service.list_public(condominium_code)
-        serializer = UnitPublicOutputSerializer(items, many=True)
-        return Response(serializer.data)
+        catalog = container.unit_service.list_public(
+            condominium_code,
+            block=request.query_params.get("block"),
+            floor=request.query_params.get("floor"),
+            apartment=request.query_params.get("apartment"),
+            name=request.query_params.get("name"),
+        )
+        return Response(UnitCatalogOutputSerializer(catalog).data)
 
     @extend_schema(
         request=UnitCreateInputSerializer,

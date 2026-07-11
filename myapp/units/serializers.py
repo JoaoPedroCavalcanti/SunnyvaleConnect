@@ -39,13 +39,71 @@ class UnitOutputSerializer(serializers.ModelSerializer):
 
 
 class UnitPublicOutputSerializer(serializers.Serializer):
-    """Public list item: unit fields plus ``is_occupied``."""
+    """Legacy flat public item (kept for OpenAPI nested unit fields)."""
 
     def to_representation(self, instance):
         unit = instance["unit"]
         data = UnitOutputSerializer(unit).data
         data["is_occupied"] = instance["is_occupied"]
         return data
+
+
+class UnitCatalogItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    kind = serializers.CharField()
+    name = serializers.CharField(allow_blank=True)
+    apartment = serializers.CharField(allow_blank=True)
+    block = serializers.CharField(allow_blank=True)
+    label = serializers.CharField(allow_blank=True)
+    floor = serializers.CharField(allow_null=True, required=False)
+    display_name = serializers.CharField()
+    is_occupied = serializers.BooleanField()
+
+
+class UnitCatalogFloorSerializer(serializers.Serializer):
+    floor = serializers.CharField(allow_blank=True)
+    units = UnitCatalogItemSerializer(many=True)
+
+
+class UnitCatalogBlockSerializer(serializers.Serializer):
+    block = serializers.CharField(allow_blank=True)
+    floors = UnitCatalogFloorSerializer(many=True)
+
+
+class UnitCatalogOutputSerializer(serializers.Serializer):
+    condominium_id = serializers.IntegerField()
+    condominium_code = serializers.CharField()
+    layout = serializers.ChoiceField(choices=["blocks", "floors", "flat"])
+    blocks = UnitCatalogBlockSerializer(many=True)
+    floors = UnitCatalogFloorSerializer(many=True)
+    units = UnitCatalogItemSerializer(many=True)
+    named = UnitCatalogItemSerializer(many=True)
+
+
+class UnitFilterOptionsFieldSerializer(serializers.Serializer):
+    enabled = serializers.BooleanField()
+    options = serializers.ListField(child=serializers.CharField())
+
+
+class UnitFloorFilterOptionsSerializer(UnitFilterOptionsFieldSerializer):
+    options_by_block = serializers.DictField(
+        child=serializers.ListField(child=serializers.CharField()),
+        required=False,
+    )
+
+
+class UnitCatalogFiltersBagSerializer(serializers.Serializer):
+    block = UnitFilterOptionsFieldSerializer()
+    floor = UnitFloorFilterOptionsSerializer()
+    apartment = UnitFilterOptionsFieldSerializer()
+    name = UnitFilterOptionsFieldSerializer()
+
+
+class UnitCatalogFiltersOutputSerializer(serializers.Serializer):
+    condominium_id = serializers.IntegerField()
+    condominium_code = serializers.CharField()
+    layout = serializers.ChoiceField(choices=["blocks", "floors", "flat"])
+    filters = UnitCatalogFiltersBagSerializer()
 
 
 class UnitWithMembersOutputSerializer(serializers.Serializer):

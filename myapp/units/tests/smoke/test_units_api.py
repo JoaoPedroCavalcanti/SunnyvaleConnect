@@ -37,13 +37,13 @@ class UnitPublicListSmoke(BaseTestsUsers):
     def test_public_list_returns_active_units_with_occupancy(self):
         vacant = Unit.objects.create(
             kind=Unit.Kind.APARTMENT,
-            apartment="101",
+            apartment="1",
             condominium=self.condominium,
             status=Unit.Status.ACTIVE,
         )
         occupied = Unit.objects.create(
             kind=Unit.Kind.APARTMENT,
-            apartment="102",
+            apartment="2",
             condominium=self.condominium,
             status=Unit.Status.ACTIVE,
         )
@@ -55,7 +55,7 @@ class UnitPublicListSmoke(BaseTestsUsers):
         )
         Unit.objects.create(
             kind=Unit.Kind.APARTMENT,
-            apartment="103",
+            apartment="3",
             condominium=self.condominium,
             status=Unit.Status.ARCHIVED,
         )
@@ -64,11 +64,37 @@ class UnitPublicListSmoke(BaseTestsUsers):
             LIST_URL + f"?condominium_code={self.condominium.code}"
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data), 2)
-        by_apartment = {item["apartment"]: item for item in response.data}
-        self.assertFalse(by_apartment["101"]["is_occupied"])
-        self.assertTrue(by_apartment["102"]["is_occupied"])
-        self.assertNotIn("103", by_apartment)
+        self.assertEqual(response.data["layout"], "flat")
+        by_apartment = {
+            item["apartment"]: item for item in response.data["units"]
+        }
+        self.assertEqual(set(by_apartment), {"1", "2"})
+        self.assertFalse(by_apartment["1"]["is_occupied"])
+        self.assertTrue(by_apartment["2"]["is_occupied"])
+
+    def test_public_filters_lists_blocks_and_floors(self):
+        Unit.objects.create(
+            kind=Unit.Kind.APARTMENT_BLOCK,
+            apartment="101",
+            block="A",
+            condominium=self.condominium,
+            status=Unit.Status.ACTIVE,
+        )
+        Unit.objects.create(
+            kind=Unit.Kind.APARTMENT_BLOCK,
+            apartment="201",
+            block="B",
+            condominium=self.condominium,
+            status=Unit.Status.ACTIVE,
+        )
+        response = self.client.get(
+            reverse("units:filters")
+            + f"?condominium_code={self.condominium.code}"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["layout"], "blocks")
+        self.assertEqual(response.data["filters"]["block"]["options"], ["A", "B"])
+        self.assertEqual(response.data["filters"]["floor"]["options"], ["1", "2"])
 
 
 class UnitAdminCreateSmoke(BaseTestsUsers):
