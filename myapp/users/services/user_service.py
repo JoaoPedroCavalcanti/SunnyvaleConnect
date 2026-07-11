@@ -87,7 +87,7 @@ class UserService(IUserService):
                 )
         return self._repo.list_filtered(
             role=role,
-            is_active=is_active,
+            is_active=True if is_active is None else is_active,
             employee_type=normalized_employee_type,
             condominium_id=require_condominium_id(user),
         )

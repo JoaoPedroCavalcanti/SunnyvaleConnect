@@ -163,6 +163,11 @@ class UnitMembershipFlowSmoke(BaseTestsUsers):
         self.assertEqual(pending.status_code, 200)
         self.assertEqual(len(pending.data), 1)
 
+        # Legacy households path still works for old clients.
+        legacy = self.client.get("/households/pending-approvals/")
+        self.assertEqual(legacy.status_code, 200)
+        self.assertEqual(len(legacy.data), 1)
+
         approve = self.client.post(
             _membership_approve_url(unit.id, membership.id)
         )

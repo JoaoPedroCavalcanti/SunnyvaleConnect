@@ -12,7 +12,7 @@ from shared.exceptions import (
 )
 from shared.infrastructure.email_sender import IEmailSender
 from shared.infrastructure.transactions import ITransactionRunner
-from shared.tenant import assert_same_condominium
+from shared.tenant import assert_same_condominium, require_condominium_id
 from users.repositories.user_repository import IUserRepository
 
 
@@ -69,7 +69,10 @@ class UnitMembershipService(IUnitMembershipService):
 
     def list_pending_approvals(self, user):
         if getattr(user, "is_staff", False):
-            return list(self._repo.list_pending_admin())
+            condominium_id = require_condominium_id(user)
+            return list(
+                self._repo.list_pending_admin(condominium_id=condominium_id)
+            )
         return list(self._repo.list_pending_owner_for_units_of(user.id))
 
     def request_join(self, user, unit_id):

@@ -34,6 +34,21 @@ class UsersAPISmoke(BaseTestsUsers):
         self.authenticate(self.admin)
         self.assertGreaterEqual(self.client.get(LIST_URL).data["count"], 3)
 
+    def test_admin_list_excludes_inactive_by_default(self):
+        self.user_b.is_active = False
+        self.user_b.save(update_fields=["is_active"])
+        self.authenticate(self.admin)
+        ids = {u["id"] for u in self.client.get(LIST_URL).data["results"]}
+        self.assertNotIn(self.user_b.id, ids)
+        self.assertIn(self.user_a.id, ids)
+        inactive_ids = {
+            u["id"]
+            for u in self.client.get(LIST_URL, {"is_active": "false"}).data[
+                "results"
+            ]
+        }
+        self.assertIn(self.user_b.id, inactive_ids)
+
     def test_me_returns_current_user(self):
         self.authenticate(self.user_a)
         response = self.client.get(ME_URL)

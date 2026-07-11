@@ -51,7 +51,9 @@ class UserListCreateView(APIView):
     @extend_schema(
         summary="List users",
         description=(
-            "Admins receive every account (residents, admins, employees). "
+            "Admins receive active accounts by default (residents, admins, "
+            "employees). Pending / inactive users are excluded unless "
+            "`is_active=false` is passed. "
             "Other callers only see themselves. "
             "Omit `role` to list all roles; use `role=RESIDENT`, `ADMIN` or "
             "`EMPLOYEE` to filter. "
@@ -71,7 +73,10 @@ class UserListCreateView(APIView):
                 type=bool,
                 location=OpenApiParameter.QUERY,
                 required=False,
-                description="Filter by active status (admin only).",
+                description=(
+                    "Filter by active status (admin only). "
+                    "Defaults to true when omitted."
+                ),
             ),
             OpenApiParameter(
                 name="employee_type",

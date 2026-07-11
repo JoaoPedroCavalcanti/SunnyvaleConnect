@@ -36,7 +36,9 @@ class IUnitMembershipRepository(ABC):
     def list_pending_for_user(self, user_id: int) -> Iterable[UnitMembership]: ...
 
     @abstractmethod
-    def list_pending_admin(self) -> Iterable[UnitMembership]: ...
+    def list_pending_admin(
+        self, *, condominium_id: int | None = None
+    ) -> Iterable[UnitMembership]: ...
 
     @abstractmethod
     def list_pending_owner_for_units_of(
@@ -124,14 +126,13 @@ class DjangoUnitMembershipRepository(IUnitMembershipRepository):
             ],
         )
 
-    def list_pending_admin(self):
-        return (
-            UnitMembership.objects.filter(
-                status=UnitMembership.Status.PENDING_ADMIN
-            )
-            .select_related("unit", "user")
-            .order_by("id")
+    def list_pending_admin(self, *, condominium_id=None):
+        qs = UnitMembership.objects.filter(
+            status=UnitMembership.Status.PENDING_ADMIN
         )
+        if condominium_id is not None:
+            qs = qs.filter(unit__condominium_id=condominium_id)
+        return qs.select_related("unit", "user").order_by("id")
 
     def list_pending_owner_for_units_of(self, owner_user_id):
         owner_unit_ids = UnitMembership.objects.filter(

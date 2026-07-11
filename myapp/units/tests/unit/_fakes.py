@@ -401,12 +401,19 @@ class FakeUnitMembershipRepository(IUnitMembershipRepository):
             if m.user_id == user_id and m.status in pending
         ]
 
-    def list_pending_admin(self):
-        return [
+    def list_pending_admin(self, *, condominium_id=None):
+        items = [
             m
             for m in self._items.values()
             if m.status == UnitMembership.Status.PENDING_ADMIN
         ]
+        if condominium_id is not None:
+            items = [
+                m
+                for m in items
+                if getattr(m.unit, "condominium_id", None) == condominium_id
+            ]
+        return items
 
     def list_pending_owner_for_units_of(self, owner_user_id):
         owner_unit_ids = {

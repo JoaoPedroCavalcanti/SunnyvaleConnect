@@ -523,8 +523,12 @@ class TestListByRole:
             ),
         )
         service._repo.set_active(inactive, False)
+        # Default list excludes inactive / pending accounts.
+        assert list(service.list_for(admin)) == [active]
         active_only = list(service.list_for(admin, is_active=True))
         assert active_only == [active]
+        inactive_only = list(service.list_for(admin, is_active=False))
+        assert inactive_only == [inactive]
 
     def test_employee_type_filter(self, service):
         admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
