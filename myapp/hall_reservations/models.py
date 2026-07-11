@@ -6,11 +6,10 @@ class HallReservationModel(models.Model):
     """A booking for the shared party hall.
 
     Same shape as ``BBQReservationModel``: ownership is per unit
-    (apartment), so the 30-day cool-down is enforced across all members
-    of the same apartment. ``reservation_user`` keeps a snapshot of who
-    created the entry (informational). ``status`` drives the approval
-    workflow (PENDING by default; only APPROVED bookings occupy slot
-    and count toward the cool-down).
+    (apartment). ``reservation_user`` keeps a snapshot of who created
+    the entry (informational). ``status`` drives the approval workflow
+    (PENDING by default; only APPROVED bookings occupy the slot — no
+    overlap and a minimum 30-minute gap between bookings).
     """
 
     class Status(models.TextChoices):

@@ -17,9 +17,6 @@ class IHallRepository(ABC):
     def list_for_date(self, reservation_date: date, *, condominium_id: int): ...
 
     @abstractmethod
-    def latest_date_for_unit(self, unit_id: int) -> date | None: ...
-
-    @abstractmethod
     def create(self, data: dict) -> HallReservationModel: ...
 
     @abstractmethod
@@ -58,18 +55,6 @@ class DjangoHallRepository(IHallRepository):
             status=HallReservationModel.Status.APPROVED,
             unit__condominium_id=condominium_id,
         ).only("id", "start_time", "end_time", "reservation_date")
-
-    def latest_date_for_unit(self, unit_id):
-        """Only APPROVED bookings count toward the 30-day cool-down."""
-        last = (
-            HallReservationModel.objects.filter(
-                unit_id=unit_id,
-                status=HallReservationModel.Status.APPROVED,
-            )
-            .order_by("-reservation_date")
-            .first()
-        )
-        return last.reservation_date if last else None
 
     def create(self, data):
         return HallReservationModel.objects.create(**data)

@@ -102,9 +102,8 @@ class BBQAPISmoke(BaseTestsUsers):
         )
         self.assertEqual(response.status_code, 400)
 
-    def test_30_day_window_is_per_apartment(self):
-        """Roommate of the same apartment can't bypass the cool-down.
-        Only APPROVED bookings count, so we seed an admin-created one."""
+    def test_same_unit_can_book_again_within_30_days(self):
+        """Cool-down per apartment was removed."""
         house = self._seed_unit_with(self.user_a, "1101", "A")
         UnitMembership.objects.create(
             unit=house,
@@ -127,7 +126,7 @@ class BBQAPISmoke(BaseTestsUsers):
         r2 = self.client.post(
             LIST_URL, data={"reservation_date": self._future(15)}
         )
-        self.assertEqual(r2.status_code, 400, r2.data)
+        self.assertEqual(r2.status_code, 201, r2.data)
 
     def test_admin_must_pass_reservation_user(self):
         self.authenticate(self.admin)
@@ -143,9 +142,8 @@ class BBQAPISmoke(BaseTestsUsers):
         response = self.client.post(LIST_URL, data={"reservation_date": past})
         self.assertEqual(response.status_code, 400)
 
-    def test_two_non_overlapping_slots_same_day(self):
-        """Two apartments can share the same day if slots don't overlap.
-        Booked by admin so both are APPROVED (PENDING don't occupy slot)."""
+    def test_two_slots_same_day_require_30_min_gap(self):
+        """Adjacent slots fail; slots with a 30-minute gap succeed."""
         self._seed_unit_with(self.user_a, "1101", "A")
         self._seed_unit_with(self.user_b, "1102", "A")
         self.authenticate(self.admin)
@@ -163,11 +161,23 @@ class BBQAPISmoke(BaseTestsUsers):
         self.assertEqual(r1.data["start_time"], "12:00:00")
         self.assertEqual(r1.data["status"], "APPROVED")
 
-        r2 = self.client.post(
+        adjacent = self.client.post(
             LIST_URL,
             data={
                 "reservation_date": self._future(),
                 "start_time": "18:00",
+                "end_time": "22:00",
+                "reservation_user": self.user_b.id,
+            },
+        )
+        self.assertEqual(adjacent.status_code, 400, adjacent.data)
+        self.assertIn("30 minutes", str(adjacent.data))
+
+        r2 = self.client.post(
+            LIST_URL,
+            data={
+                "reservation_date": self._future(),
+                "start_time": "18:30",
                 "end_time": "22:00",
                 "reservation_user": self.user_b.id,
             },

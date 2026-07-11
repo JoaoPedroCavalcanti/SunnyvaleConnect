@@ -1,25 +1,31 @@
-"""Tiny helpers for half-open day time intervals.
+"""Tiny helpers for day time intervals.
 
 Used by ``bbq_reservations`` and ``hall_reservations`` to detect
-multiple bookings overlapping on the same day. The conventions are:
+overlapping or too-close bookings on the same day. The conventions are:
 
 - ``start_time`` missing  → 00:00:00 (beginning of the day).
 - ``end_time``   missing  → 23:59:59 (end of the day).
-- Adjacent intervals (one ends exactly when the next starts) are
-  considered NON-overlapping.
+- Same-type bookings must not overlap and must leave a minimum gap
+  (default 30 minutes) between one ending and the next starting.
 """
 
-from datetime import time
+from datetime import datetime, time, timedelta
 
 
 DAY_START = time(0, 0, 0)
 DAY_END = time(23, 59, 59)
+DEFAULT_MIN_GAP = timedelta(minutes=30)
 
 
 def normalize_slot(
     start: time | None, end: time | None
 ) -> tuple[time, time]:
     return (start or DAY_START, end or DAY_END)
+
+
+def _as_datetime(value: time) -> datetime:
+    # Date is arbitrary — we only compare times within the same day.
+    return datetime.combine(datetime.min.date(), value)
 
 
 def slots_overlap(
@@ -31,3 +37,34 @@ def slots_overlap(
     a_s, a_e = normalize_slot(a_start, a_end)
     b_s, b_e = normalize_slot(b_start, b_end)
     return a_s < b_e and b_s < a_e
+
+
+def slots_gap(
+    a_start: time | None,
+    a_end: time | None,
+    b_start: time | None,
+    b_end: time | None,
+) -> timedelta | None:
+    """Gap between two non-overlapping slots, or ``None`` if they overlap."""
+    a_s, a_e = normalize_slot(a_start, a_end)
+    b_s, b_e = normalize_slot(b_start, b_end)
+    if a_s < b_e and b_s < a_e:
+        return None
+    if a_e <= b_s:
+        return _as_datetime(b_s) - _as_datetime(a_e)
+    return _as_datetime(a_s) - _as_datetime(b_e)
+
+
+def slots_too_close(
+    a_start: time | None,
+    a_end: time | None,
+    b_start: time | None,
+    b_end: time | None,
+    *,
+    min_gap: timedelta = DEFAULT_MIN_GAP,
+) -> bool:
+    """True when slots do not overlap but the gap between them is < ``min_gap``."""
+    gap = slots_gap(a_start, a_end, b_start, b_end)
+    if gap is None:
+        return False
+    return gap < min_gap

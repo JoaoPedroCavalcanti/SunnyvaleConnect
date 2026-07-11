@@ -85,7 +85,7 @@ class HallAPISmoke(BaseTestsUsers):
         )
         self.assertEqual(response.status_code, 400)
 
-    def test_30_day_window_is_per_apartment(self):
+    def test_same_unit_can_book_again_within_30_days(self):
         house = self._seed_unit_with(self.user_a, "1101", "A")
         UnitMembership.objects.create(
             unit=house,
@@ -106,7 +106,7 @@ class HallAPISmoke(BaseTestsUsers):
         r2 = self.client.post(
             LIST_URL, data={"reservation_date": self._future(15)}
         )
-        self.assertEqual(r2.status_code, 400, r2.data)
+        self.assertEqual(r2.status_code, 201, r2.data)
 
     def test_admin_must_pass_reservation_user(self):
         self.authenticate(self.admin)
@@ -115,7 +115,7 @@ class HallAPISmoke(BaseTestsUsers):
         )
         self.assertEqual(response.status_code, 400)
 
-    def test_two_non_overlapping_slots_same_day(self):
+    def test_two_slots_same_day_require_30_min_gap(self):
         self._seed_unit_with(self.user_a, "1101", "A")
         self._seed_unit_with(self.user_b, "1102", "A")
         self.authenticate(self.admin)
@@ -133,11 +133,23 @@ class HallAPISmoke(BaseTestsUsers):
         self.assertEqual(r1.data["end_time"], "18:00:00")
         self.assertEqual(r1.data["status"], "APPROVED")
 
-        r2 = self.client.post(
+        adjacent = self.client.post(
             LIST_URL,
             data={
                 "reservation_date": self._future(),
                 "start_time": "18:00",
+                "end_time": "22:00",
+                "reservation_user": self.user_b.id,
+            },
+        )
+        self.assertEqual(adjacent.status_code, 400, adjacent.data)
+        self.assertIn("30 minutes", str(adjacent.data))
+
+        r2 = self.client.post(
+            LIST_URL,
+            data={
+                "reservation_date": self._future(),
+                "start_time": "18:30",
                 "end_time": "22:00",
                 "reservation_user": self.user_b.id,
             },

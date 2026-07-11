@@ -55,16 +55,6 @@ class FakeHallRepository(IHallRepository):
             )
         ]
 
-    def latest_date_for_unit(self, unit_id):
-        dates = [
-            i.reservation_date
-            for i in self._items
-            if getattr(i, "unit", None)
-            and i.unit.id == unit_id
-            and i.status == HallReservationModel.Status.APPROVED
-        ]
-        return max(dates) if dates else None
-
     def create(self, data):
         unit = data.get("unit")
         item = SimpleNamespace(
@@ -262,7 +252,47 @@ def test_full_day_collides_with_any_slot(fixtures):
         )
 
 
-def test_adjacent_slots_are_allowed(fixtures):
+def test_adjacent_slots_rejected_without_gap(fixtures):
+    f = fixtures
+    d = _future()
+    f["book_approved"](
+        f["holder"],
+        reservation_date=d,
+        start_time=time(12, 0),
+        end_time=time(18, 0),
+    )
+    other = _user(2)
+    f["memberships"].add(other.id, _unit(2, "1102", "A"))
+    with pytest.raises(BusinessRuleError, match="30 minutes"):
+        f["book_approved"](
+            other,
+            reservation_date=d,
+            start_time=time(18, 0),
+            end_time=time(22, 0),
+        )
+
+
+def test_slots_with_less_than_30_min_gap_rejected(fixtures):
+    f = fixtures
+    d = _future()
+    f["book_approved"](
+        f["holder"],
+        reservation_date=d,
+        start_time=time(12, 0),
+        end_time=time(18, 0),
+    )
+    other = _user(2)
+    f["memberships"].add(other.id, _unit(2, "1102", "A"))
+    with pytest.raises(BusinessRuleError, match="30 minutes"):
+        f["book_approved"](
+            other,
+            reservation_date=d,
+            start_time=time(18, 15),
+            end_time=time(22, 0),
+        )
+
+
+def test_slots_with_exactly_30_min_gap_allowed(fixtures):
     f = fixtures
     d = _future()
     f["book_approved"](
@@ -276,10 +306,10 @@ def test_adjacent_slots_are_allowed(fixtures):
     item = f["book_approved"](
         other,
         reservation_date=d,
-        start_time=time(18, 0),
+        start_time=time(18, 30),
         end_time=time(22, 0),
     )
-    assert item.start_time == time(18, 0)
+    assert item.start_time == time(18, 30)
 
 
 def test_overlapping_slots_collide(fixtures):
@@ -293,7 +323,7 @@ def test_overlapping_slots_collide(fixtures):
     )
     other = _user(2)
     f["memberships"].add(other.id, _unit(2, "1102", "A"))
-    with pytest.raises(BusinessRuleError):
+    with pytest.raises(BusinessRuleError, match="time window"):
         f["book_approved"](
             other,
             reservation_date=d,
@@ -319,7 +349,7 @@ def test_open_end_blocks_late_window(fixtures):
         )
 
 
-def test_open_end_allows_earlier_window(fixtures):
+def test_open_end_allows_earlier_window_with_gap(fixtures):
     f = fixtures
     d = _future()
     f["book_approved"](
@@ -331,9 +361,26 @@ def test_open_end_allows_earlier_window(fixtures):
         other,
         reservation_date=d,
         start_time=time(8, 0),
-        end_time=time(15, 0),
+        end_time=time(14, 30),
     )
     assert item is not None
+
+
+def test_open_end_rejects_earlier_window_without_gap(fixtures):
+    f = fixtures
+    d = _future()
+    f["book_approved"](
+        f["holder"], reservation_date=d, start_time=time(15, 0)
+    )
+    other = _user(2)
+    f["memberships"].add(other.id, _unit(2, "1102", "A"))
+    with pytest.raises(BusinessRuleError, match="30 minutes"):
+        f["book_approved"](
+            other,
+            reservation_date=d,
+            start_time=time(8, 0),
+            end_time=time(15, 0),
+        )
 
 
 def test_invalid_slot_start_after_end(fixtures):
@@ -349,16 +396,16 @@ def test_invalid_slot_start_after_end(fixtures):
         )
 
 
-def test_30_day_window_is_per_unit(fixtures):
+def test_same_unit_can_book_again_within_30_days(fixtures):
     f = fixtures
     f["book_approved"](f["holder"], reservation_date=_future(5))
     roommate = _user(2)
     f["memberships"].add(roommate.id, f["unit"])
-    with pytest.raises(BusinessRuleError):
-        f["service"].create(roommate, {"reservation_date": _future(15)})
+    item = f["service"].create(roommate, {"reservation_date": _future(15)})
+    assert item is not None
 
 
-def test_30_day_window_does_not_cross_units(fixtures):
+def test_different_units_can_book_close_days(fixtures):
     f = fixtures
     f["book_approved"](f["holder"], reservation_date=_future(5))
     other = _user(2)
@@ -367,7 +414,7 @@ def test_30_day_window_does_not_cross_units(fixtures):
     assert item is not None
 
 
-def test_pending_does_not_count_toward_cooldown(fixtures):
+def test_pending_does_not_occupy_slot(fixtures):
     f = fixtures
     f["service"].create(f["holder"], {"reservation_date": _future(5)})
     roommate = _user(2)

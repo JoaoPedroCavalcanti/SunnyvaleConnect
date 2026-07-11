@@ -1,11 +1,12 @@
 """Business rules for Hall reservations.
 
-Mirrors ``BBQReservationService``: ownership and the 30-day cool-down
-are per unit (apartment), not per individual user.
+Mirrors ``BBQReservationService``: ownership is per unit (apartment).
+Same-day bookings of this resource must not overlap and must leave at
+least 30 minutes between one ending and the next starting.
 """
 
 from abc import ABC, abstractmethod
-from datetime import date, time, timedelta
+from datetime import date, time
 
 from hall_reservations.models import HallReservationModel
 from hall_reservations.repositories.hall_repository import IHallRepository
@@ -19,7 +20,7 @@ from shared.exceptions import (
 from shared.infrastructure.email_sender import IEmailSender
 from shared.roles import ensure_not_employee
 from shared.tenant import assert_same_condominium, require_condominium_id
-from shared.time_slots import slots_overlap
+from shared.time_slots import slots_overlap, slots_too_close
 
 
 class IHallReservationService(ABC):
@@ -46,8 +47,6 @@ class IHallReservationService(ABC):
 
 
 class HallReservationService(IHallReservationService):
-    MIN_DAYS_BETWEEN_BOOKINGS = 30
-
     def __init__(
         self,
         repository: IHallRepository,
@@ -102,9 +101,6 @@ class HallReservationService(IHallReservationService):
         self._validate_date(reservation_date)
         self._validate_slot(user, reservation_date, start_time, end_time)
 
-        if not user.is_staff:
-            self._validate_30_day_window(unit.id, reservation_date)
-
         # Admin bookings skip the approval queue; everyone else lands
         # as PENDING and waits for an admin to approve/reject.
         data["status"] = (
@@ -141,10 +137,6 @@ class HallReservationService(IHallReservationService):
             instance.start_time,
             instance.end_time,
         )
-        if instance.unit_id:
-            self._validate_30_day_window(
-                instance.unit_id, instance.reservation_date
-            )
         updated = self._repo.update(
             instance, {"status": HallReservationModel.Status.APPROVED}
         )
@@ -237,15 +229,15 @@ class HallReservationService(IHallReservationService):
         start_time: time | None,
         end_time: time | None,
     ):
-        """Enforce slot sanity and detect overlap with same-day bookings.
+        """Enforce slot sanity, overlap, and the 30-minute gap rule.
 
         Semantics:
           - missing ``start_time`` → 00:00:00
           - missing ``end_time``   → 23:59:59
           - ``start_time >= end_time`` is invalid.
-          - Two reservations on the same day are allowed as long as their
-            (normalized) intervals do not overlap. Adjacent intervals
-            (one ends exactly when the next starts) are allowed.
+          - Two APPROVED reservations on the same day must not overlap.
+          - There must be at least 30 minutes between one ending and
+            the next starting.
         """
         if start_time and end_time and start_time >= end_time:
             raise BusinessRuleError(
@@ -264,17 +256,13 @@ class HallReservationService(IHallReservationService):
                     "The Hall already has a booking in this time window.",
                     field="reservation_date",
                 )
-
-    def _validate_30_day_window(
-        self, unit_id: int, reservation_date: date
-    ):
-        last_date = self._repo.latest_date_for_unit(unit_id)
-        if not last_date:
-            return
-        if reservation_date - last_date < timedelta(
-            days=self.MIN_DAYS_BETWEEN_BOOKINGS
-        ):
-            raise BusinessRuleError(
-                "This apartment already booked the hall less than "
-                f"{self.MIN_DAYS_BETWEEN_BOOKINGS} days ago."
-            )
+            if slots_too_close(
+                start_time, end_time,
+                existing.start_time, existing.end_time,
+            ):
+                raise BusinessRuleError(
+                    "Hall reservations must be at least 30 minutes "
+                    "apart. One ends and the next starts too close "
+                    "together.",
+                    field="start_time",
+                )

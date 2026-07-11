@@ -5,16 +5,15 @@ from django.db import models
 class BBQReservationModel(models.Model):
     """A booking for the shared barbecue area.
 
-    The booking belongs to a ``unit`` (the apartment) so the 30-day
-    cool-down rule and the ownership are scoped per apartment, not per
-    user. ``reservation_user`` keeps a pointer to the person who actually
-    created the entry (informational, for the front to render "booked
-    by X").
+    The booking belongs to a ``unit`` (the apartment); ownership is
+    scoped per apartment, not per user. ``reservation_user`` keeps a
+    pointer to the person who actually created the entry (informational,
+    for the front to render "booked by X").
 
     ``status`` drives the approval workflow. Bookings created by a
     regular morador are PENDING until an admin approves them; bookings
     created directly by an admin are auto-APPROVED. Only APPROVED
-    bookings consume the time slot and count toward the 30-day cool-down.
+    bookings consume the time slot (no overlap; min 30-minute gap).
     """
 
     class Status(models.TextChoices):

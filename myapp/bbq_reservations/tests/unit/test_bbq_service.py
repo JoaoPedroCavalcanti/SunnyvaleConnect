@@ -55,16 +55,6 @@ class FakeBBQRepository(IBBQRepository):
             )
         ]
 
-    def latest_date_for_unit(self, unit_id):
-        dates = [
-            i.reservation_date
-            for i in self._items
-            if getattr(i, "unit", None)
-            and i.unit.id == unit_id
-            and i.status == BBQReservationModel.Status.APPROVED
-        ]
-        return max(dates) if dates else None
-
     def create(self, data):
         unit = data.get("unit")
         item = SimpleNamespace(
@@ -281,7 +271,46 @@ class TestCreate:
                 end_time=time(18, 0),
             )
 
-    def test_adjacent_slots_are_allowed(self, fixtures):
+    def test_adjacent_slots_rejected_without_gap(self, fixtures):
+        """Back-to-back slots (gap = 0) violate the 30-minute rule."""
+        f = fixtures
+        d = _future()
+        f["book_approved"](
+            f["holder"],
+            reservation_date=d,
+            start_time=time(12, 0),
+            end_time=time(18, 0),
+        )
+        other = _user(2)
+        f["memberships"].add(other.id, _unit(2, "1102", "A"))
+        with pytest.raises(BusinessRuleError, match="30 minutes"):
+            f["book_approved"](
+                other,
+                reservation_date=d,
+                start_time=time(18, 0),
+                end_time=time(22, 0),
+            )
+
+    def test_slots_with_less_than_30_min_gap_rejected(self, fixtures):
+        f = fixtures
+        d = _future()
+        f["book_approved"](
+            f["holder"],
+            reservation_date=d,
+            start_time=time(12, 0),
+            end_time=time(18, 0),
+        )
+        other = _user(2)
+        f["memberships"].add(other.id, _unit(2, "1102", "A"))
+        with pytest.raises(BusinessRuleError, match="30 minutes"):
+            f["book_approved"](
+                other,
+                reservation_date=d,
+                start_time=time(18, 15),
+                end_time=time(22, 0),
+            )
+
+    def test_slots_with_exactly_30_min_gap_allowed(self, fixtures):
         f = fixtures
         d = _future()
         f["book_approved"](
@@ -295,10 +324,10 @@ class TestCreate:
         item = f["book_approved"](
             other,
             reservation_date=d,
-            start_time=time(18, 0),
+            start_time=time(18, 30),
             end_time=time(22, 0),
         )
-        assert item.start_time == time(18, 0)
+        assert item.start_time == time(18, 30)
 
     def test_overlapping_slots_collide(self, fixtures):
         f = fixtures
@@ -311,7 +340,7 @@ class TestCreate:
         )
         other = _user(2)
         f["memberships"].add(other.id, _unit(2, "1102", "A"))
-        with pytest.raises(BusinessRuleError):
+        with pytest.raises(BusinessRuleError, match="time window"):
             f["book_approved"](
                 other,
                 reservation_date=d,
@@ -337,7 +366,7 @@ class TestCreate:
                 end_time=time(22, 0),
             )
 
-    def test_open_end_allows_earlier_window(self, fixtures):
+    def test_open_end_allows_earlier_window_with_gap(self, fixtures):
         f = fixtures
         d = _future()
         f["book_approved"](
@@ -349,9 +378,25 @@ class TestCreate:
             other,
             reservation_date=d,
             start_time=time(8, 0),
-            end_time=time(15, 0),
+            end_time=time(14, 30),
         )
         assert item is not None
+
+    def test_open_end_rejects_earlier_window_without_gap(self, fixtures):
+        f = fixtures
+        d = _future()
+        f["book_approved"](
+            f["holder"], reservation_date=d, start_time=time(15, 0)
+        )
+        other = _user(2)
+        f["memberships"].add(other.id, _unit(2, "1102", "A"))
+        with pytest.raises(BusinessRuleError, match="30 minutes"):
+            f["book_approved"](
+                other,
+                reservation_date=d,
+                start_time=time(8, 0),
+                end_time=time(15, 0),
+            )
 
     def test_invalid_slot_start_after_end(self, fixtures):
         f = fixtures
@@ -365,18 +410,19 @@ class TestCreate:
                 },
             )
 
-    def test_30_day_window_is_per_unit(self, fixtures):
-        """Two different residents of the same apartment can't both
-        book within 30 days — the cool-down is per unit. Only
-        APPROVED bookings count toward this window."""
+    def test_same_unit_can_book_again_within_30_days(self, fixtures):
+        """Cool-down per apartment was removed — roommates may book
+        on different days freely."""
         f = fixtures
         f["book_approved"](f["holder"], reservation_date=_future(5))
         roommate = _user(2)
         f["memberships"].add(roommate.id, f["unit"])
-        with pytest.raises(BusinessRuleError):
-            f["service"].create(roommate, {"reservation_date": _future(15)})
+        item = f["service"].create(
+            roommate, {"reservation_date": _future(15)}
+        )
+        assert item is not None
 
-    def test_30_day_window_does_not_cross_units(self, fixtures):
+    def test_different_units_can_book_close_days(self, fixtures):
         f = fixtures
         f["book_approved"](f["holder"], reservation_date=_future(5))
         other = _user(2)
@@ -386,9 +432,9 @@ class TestCreate:
         )
         assert item is not None
 
-    def test_pending_does_not_count_toward_cooldown(self, fixtures):
-        """A PENDING booking from the same apartment must not block
-        another booking from being created — only APPROVED counts."""
+    def test_pending_does_not_occupy_slot(self, fixtures):
+        """A PENDING booking must not block another booking on a
+        different day — only APPROVED occupies the slot."""
         f = fixtures
         f["service"].create(f["holder"], {"reservation_date": _future(5)})
         roommate = _user(2)
@@ -396,19 +442,6 @@ class TestCreate:
         item = f["service"].create(
             roommate, {"reservation_date": _future(15)}
         )
-        assert item is not None
-
-    def test_admin_bypasses_30_day_window(self, fixtures):
-        f = fixtures
-        # Admin books day 5 (auto-APPROVED, counts toward cooldown)
-        # then books day 15 — admins skip the 30-day check.
-        # But since they're APPROVED back-to-back, the second one would
-        # normally collide with the first via cooldown rule. The bypass
-        # makes it allowed.
-        d1 = _future(5)
-        d2 = _future(15)
-        f["book_approved"](f["holder"], reservation_date=d1)
-        item = f["book_approved"](f["holder"], reservation_date=d2)
         assert item is not None
 
 
