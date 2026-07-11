@@ -113,9 +113,9 @@ class UserListCreateView(APIView):
         serializer = UserInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = dict(serializer.validated_data)
-        household_request = data.pop("household_request", None)
-        user = container.signup_service.signup(
-            request.user, data, household_request
+        unit_request = data.pop("unit_request", None)
+        user = container.unit_signup_service.signup(
+            request.user, data, unit_request
         )
         return Response(UserOutputSerializer(user).data, status=status.HTTP_201_CREATED)
 
@@ -202,7 +202,7 @@ class LoginView(APIView):
                 {
                     "detail": "Your account is waiting for approval.",
                     "code": KIND_PENDING,
-                    "household": result["household"],
+                    "unit": result["unit"],
                     "condominium": condominium_payload,
                 },
                 status=status.HTTP_403_FORBIDDEN,

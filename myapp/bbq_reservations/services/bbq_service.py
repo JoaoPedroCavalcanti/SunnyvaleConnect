@@ -1,8 +1,8 @@
 """Business rules for BBQ reservations.
 
-A booking belongs to a *household* (the apartment), not to an
+A booking belongs to a *unit* (the apartment), not to an
 individual. The 30-day cool-down window and the "one booking per
-apartment per month" rule are therefore enforced per household — any
+apartment per month" rule are therefore enforced per unit — any
 member of the same apartment shares the cool-down.
 """
 
@@ -11,8 +11,8 @@ from datetime import date, time, timedelta
 
 from bbq_reservations.models import BBQReservationModel
 from bbq_reservations.repositories.bbq_repository import IBBQRepository
-from households.models import HouseholdMembership
-from households.repositories.membership_repository import IMembershipRepository
+from units.models import UnitMembership
+from units.repositories.unit_membership_repository import IUnitMembershipRepository
 from shared.exceptions import (
     BusinessRuleError,
     NotFoundError,
@@ -53,7 +53,7 @@ class BBQReservationService(IBBQReservationService):
     def __init__(
         self,
         repository: IBBQRepository,
-        membership_repository: IMembershipRepository,
+        membership_repository: IUnitMembershipRepository,
         email_sender: IEmailSender,
     ):
         self._repo = repository
@@ -85,7 +85,7 @@ class BBQReservationService(IBBQReservationService):
         instance = self._repo.get_by_id(pk)
         if not instance:
             raise NotFoundError("No BBQ reservation matches the given query.")
-        assert_same_condominium(user, instance.household.condominium_id)
+        assert_same_condominium(user, instance.unit.condominium_id)
         return instance
 
     def create(self, user, payload: dict):
@@ -94,9 +94,9 @@ class BBQReservationService(IBBQReservationService):
         reservation_user = self._resolve_reservation_user(
             user, data.get("reservation_user")
         )
-        household = self._resolve_household(reservation_user)
+        unit = self._resolve_unit(reservation_user)
         data["reservation_user"] = reservation_user
-        data["household"] = household
+        data["unit"] = unit
 
         reservation_date = data.get("reservation_date")
         start_time = data.get("start_time")
@@ -105,7 +105,7 @@ class BBQReservationService(IBBQReservationService):
         self._validate_slot(user, reservation_date, start_time, end_time)
 
         if not user.is_staff:
-            self._validate_30_day_window(household.id, reservation_date)
+            self._validate_30_day_window(unit.id, reservation_date)
 
         # Admin bookings skip the approval queue; everyone else lands
         # as PENDING and waits for an admin to approve/reject.
@@ -144,9 +144,9 @@ class BBQReservationService(IBBQReservationService):
             instance.start_time,
             instance.end_time,
         )
-        if instance.household_id:
+        if instance.unit_id:
             self._validate_30_day_window(
-                instance.household_id, instance.reservation_date
+                instance.unit_id, instance.reservation_date
             )
         updated = self._repo.update(
             instance, {"status": BBQReservationModel.Status.APPROVED}
@@ -220,20 +220,18 @@ class BBQReservationService(IBBQReservationService):
             raise BusinessRuleError("You can not pass a reservation_user.")
         return requester
 
-    def _resolve_household(self, target_user):
+    def _resolve_unit(self, target_user):
         memberships = [
             m
             for m in self._memberships.list_active_for_user(target_user.id)
-            if m.status == HouseholdMembership.Status.ACTIVE
+            if m.status == UnitMembership.Status.ACTIVE
         ]
         if not memberships:
             raise BusinessRuleError(
-                "User must belong to an active household to book the "
+                "User must belong to an active unit to book the "
                 "barbecue."
             )
-        # If the user happens to be in more than one active household
-        # (rare in practice), use the first deterministic match.
-        return memberships[0].household
+        return memberships[0].unit
 
     def _validate_date(self, reservation_date: date):
         if reservation_date < date.today():
@@ -279,9 +277,9 @@ class BBQReservationService(IBBQReservationService):
                 )
 
     def _validate_30_day_window(
-        self, household_id: int, reservation_date: date
+        self, unit_id: int, reservation_date: date
     ):
-        last_date = self._repo.latest_date_for_household(household_id)
+        last_date = self._repo.latest_date_for_unit(unit_id)
         if not last_date:
             return
         if reservation_date - last_date < timedelta(

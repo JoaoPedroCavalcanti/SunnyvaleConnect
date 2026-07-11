@@ -8,7 +8,7 @@ import pytest
 from hall_reservations.models import HallReservationModel
 from hall_reservations.repositories.hall_repository import IHallRepository
 from hall_reservations.services.hall_service import HallReservationService
-from households.models import HouseholdMembership
+from units.models import UnitMembership
 from shared.exceptions import (
     BusinessRuleError,
     NotFoundError,
@@ -31,9 +31,9 @@ class FakeHallRepository(IHallRepository):
         items = [
             i
             for i in self._items
-            if getattr(getattr(i, "household", None), "condominium_id", None)
+            if getattr(getattr(i, "unit", None), "condominium_id", None)
             == condominium_id
-            or getattr(i, "household", None) is None
+            or getattr(i, "unit", None) is None
         ]
         if status:
             return [i for i in items if i.status == status]
@@ -49,29 +49,29 @@ class FakeHallRepository(IHallRepository):
             if i.reservation_date == reservation_date
             and i.status == HallReservationModel.Status.APPROVED
             and (
-                getattr(getattr(i, "household", None), "condominium_id", None)
+                getattr(getattr(i, "unit", None), "condominium_id", None)
                 == condominium_id
-                or getattr(i, "household", None) is None
+                or getattr(i, "unit", None) is None
             )
         ]
 
-    def latest_date_for_household(self, household_id):
+    def latest_date_for_unit(self, unit_id):
         dates = [
             i.reservation_date
             for i in self._items
-            if getattr(i, "household", None)
-            and i.household.id == household_id
+            if getattr(i, "unit", None)
+            and i.unit.id == unit_id
             and i.status == HallReservationModel.Status.APPROVED
         ]
         return max(dates) if dates else None
 
     def create(self, data):
-        household = data.get("household")
+        unit = data.get("unit")
         item = SimpleNamespace(
             id=self._next_id,
             start_time=data.get("start_time"),
             end_time=data.get("end_time"),
-            household_id=household.id if household else None,
+            unit_id=unit.id if unit else None,
             **{k: v for k, v in data.items() if k not in (
                 "start_time", "end_time"
             )},
@@ -97,12 +97,12 @@ class FakeMembershipRepo:
     def __init__(self):
         self._by_user: dict[int, list] = {}
 
-    def add(self, user_id, household, status=HouseholdMembership.Status.ACTIVE):
+    def add(self, user_id, unit, status=UnitMembership.Status.ACTIVE):
         m = SimpleNamespace(
             id=len(self._by_user.get(user_id, [])) + 1,
             user_id=user_id,
-            household=household,
-            household_id=household.id,
+            unit=unit,
+            unit_id=unit.id,
             status=status,
         )
         self._by_user.setdefault(user_id, []).append(m)
@@ -112,11 +112,11 @@ class FakeMembershipRepo:
         return [
             m
             for m in self._by_user.get(user_id, [])
-            if m.status == HouseholdMembership.Status.ACTIVE
+            if m.status == UnitMembership.Status.ACTIVE
         ]
 
 
-def _household(pk=1, apt="1101", block="A"):
+def _unit(pk=1, apt="1101", block="A"):
     return SimpleNamespace(
         id=pk, apartment=apt, block=block, condominium_id=TEST_CONDOMINIUM_ID
     )
@@ -147,10 +147,10 @@ def fixtures():
         membership_repository=memberships,
         email_sender=email,
     )
-    house = _household(1, "1101", "A")
+    unit = _unit(1, "1101", "A")
     holder = _user(1)
     admin = _user(99, is_staff=True)
-    memberships.add(holder.id, house)
+    memberships.add(holder.id, unit)
 
     def book_approved(target_user, **payload):
         return service.create(
@@ -162,7 +162,7 @@ def fixtures():
         "repo": repo,
         "memberships": memberships,
         "email": email,
-        "house": house,
+        "unit": unit,
         "holder": holder,
         "admin": admin,
         "book_approved": book_approved,
@@ -173,7 +173,7 @@ def test_regular_user_creates_for_self(fixtures):
     f = fixtures
     item = f["service"].create(f["holder"], {"reservation_date": _future()})
     assert item.reservation_user is f["holder"]
-    assert item.household is f["house"]
+    assert item.unit is f["unit"]
     assert item.status == HallReservationModel.Status.PENDING
 
 
@@ -188,7 +188,7 @@ def test_pending_does_not_block_other_pending(fixtures):
     d = _future()
     f["service"].create(f["holder"], {"reservation_date": d})
     other = _user(2)
-    f["memberships"].add(other.id, _household(2, "1102", "A"))
+    f["memberships"].add(other.id, _unit(2, "1102", "A"))
     item = f["service"].create(other, {"reservation_date": d})
     assert item.status == HallReservationModel.Status.PENDING
 
@@ -205,7 +205,7 @@ def test_tolerates_passing_own_id(fixtures):
 def test_regular_user_cannot_pass_another_user(fixtures):
     f = fixtures
     other = _user(2)
-    f["memberships"].add(other.id, _household(2, "1102", "A"))
+    f["memberships"].add(other.id, _unit(2, "1102", "A"))
     with pytest.raises(BusinessRuleError):
         f["service"].create(
             f["holder"],
@@ -213,7 +213,7 @@ def test_regular_user_cannot_pass_another_user(fixtures):
         )
 
 
-def test_user_without_active_household_rejected(fixtures):
+def test_user_without_active_unit_rejected(fixtures):
     f = fixtures
     homeless = _user(99)
     with pytest.raises(BusinessRuleError):
@@ -242,7 +242,7 @@ def test_full_day_collides_with_full_day(fixtures):
     d = _future()
     f["book_approved"](f["holder"], reservation_date=d)
     other = _user(2)
-    f["memberships"].add(other.id, _household(2, "1102", "A"))
+    f["memberships"].add(other.id, _unit(2, "1102", "A"))
     with pytest.raises(BusinessRuleError):
         f["book_approved"](other, reservation_date=d)
 
@@ -252,7 +252,7 @@ def test_full_day_collides_with_any_slot(fixtures):
     d = _future()
     f["book_approved"](f["holder"], reservation_date=d)
     other = _user(2)
-    f["memberships"].add(other.id, _household(2, "1102", "A"))
+    f["memberships"].add(other.id, _unit(2, "1102", "A"))
     with pytest.raises(BusinessRuleError):
         f["book_approved"](
             other,
@@ -272,7 +272,7 @@ def test_adjacent_slots_are_allowed(fixtures):
         end_time=time(18, 0),
     )
     other = _user(2)
-    f["memberships"].add(other.id, _household(2, "1102", "A"))
+    f["memberships"].add(other.id, _unit(2, "1102", "A"))
     item = f["book_approved"](
         other,
         reservation_date=d,
@@ -292,7 +292,7 @@ def test_overlapping_slots_collide(fixtures):
         end_time=time(18, 0),
     )
     other = _user(2)
-    f["memberships"].add(other.id, _household(2, "1102", "A"))
+    f["memberships"].add(other.id, _unit(2, "1102", "A"))
     with pytest.raises(BusinessRuleError):
         f["book_approved"](
             other,
@@ -309,7 +309,7 @@ def test_open_end_blocks_late_window(fixtures):
         f["holder"], reservation_date=d, start_time=time(15, 0)
     )
     other = _user(2)
-    f["memberships"].add(other.id, _household(2, "1102", "A"))
+    f["memberships"].add(other.id, _unit(2, "1102", "A"))
     with pytest.raises(BusinessRuleError):
         f["book_approved"](
             other,
@@ -326,7 +326,7 @@ def test_open_end_allows_earlier_window(fixtures):
         f["holder"], reservation_date=d, start_time=time(15, 0)
     )
     other = _user(2)
-    f["memberships"].add(other.id, _household(2, "1102", "A"))
+    f["memberships"].add(other.id, _unit(2, "1102", "A"))
     item = f["book_approved"](
         other,
         reservation_date=d,
@@ -349,20 +349,20 @@ def test_invalid_slot_start_after_end(fixtures):
         )
 
 
-def test_30_day_window_is_per_household(fixtures):
+def test_30_day_window_is_per_unit(fixtures):
     f = fixtures
     f["book_approved"](f["holder"], reservation_date=_future(5))
     roommate = _user(2)
-    f["memberships"].add(roommate.id, f["house"])
+    f["memberships"].add(roommate.id, f["unit"])
     with pytest.raises(BusinessRuleError):
         f["service"].create(roommate, {"reservation_date": _future(15)})
 
 
-def test_30_day_window_does_not_cross_households(fixtures):
+def test_30_day_window_does_not_cross_units(fixtures):
     f = fixtures
     f["book_approved"](f["holder"], reservation_date=_future(5))
     other = _user(2)
-    f["memberships"].add(other.id, _household(2, "1102", "A"))
+    f["memberships"].add(other.id, _unit(2, "1102", "A"))
     item = f["service"].create(other, {"reservation_date": _future(15)})
     assert item is not None
 
@@ -371,7 +371,7 @@ def test_pending_does_not_count_toward_cooldown(fixtures):
     f = fixtures
     f["service"].create(f["holder"], {"reservation_date": _future(5)})
     roommate = _user(2)
-    f["memberships"].add(roommate.id, f["house"])
+    f["memberships"].add(roommate.id, f["unit"])
     item = f["service"].create(roommate, {"reservation_date": _future(15)})
     assert item is not None
 
@@ -424,7 +424,7 @@ class TestApproveReject:
     def test_approve_skips_email_when_user_has_no_email(self, fixtures):
         f = fixtures
         holder = _user(1, email="")
-        f["memberships"].add(holder.id, f["house"])
+        f["memberships"].add(holder.id, f["unit"])
         item = f["service"].create(
             holder, {"reservation_date": _future()}
         )
@@ -446,7 +446,7 @@ class TestApproveReject:
     def test_reject_skips_email_when_user_has_no_email(self, fixtures):
         f = fixtures
         holder = _user(1, email="")
-        f["memberships"].add(holder.id, f["house"])
+        f["memberships"].add(holder.id, f["unit"])
         item = f["service"].create(
             holder, {"reservation_date": _future()}
         )
@@ -474,7 +474,7 @@ class TestApproveReject:
             },
         )
         other = _user(2)
-        f["memberships"].add(other.id, _household(2, "1102", "A"))
+        f["memberships"].add(other.id, _unit(2, "1102", "A"))
         b = f["service"].create(
             other,
             {
@@ -493,6 +493,6 @@ class TestApproveReject:
         a = f["book_approved"](f["holder"], reservation_date=d)
         f["service"].reject(f["admin"], a.id, reason="unavailable")
         other = _user(2)
-        f["memberships"].add(other.id, _household(2, "1102", "A"))
+        f["memberships"].add(other.id, _unit(2, "1102", "A"))
         item = f["book_approved"](other, reservation_date=d)
         assert item is not None

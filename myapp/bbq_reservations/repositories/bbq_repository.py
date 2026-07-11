@@ -17,7 +17,7 @@ class IBBQRepository(ABC):
     def list_for_date(self, reservation_date: date, *, condominium_id: int): ...
 
     @abstractmethod
-    def latest_date_for_household(self, household_id: int) -> date | None: ...
+    def latest_date_for_unit(self, unit_id: int) -> date | None: ...
 
     @abstractmethod
     def create(self, data: dict) -> BBQReservationModel: ...
@@ -35,8 +35,8 @@ class IBBQRepository(ABC):
 class DjangoBBQRepository(IBBQRepository):
     def list_all(self, status=None, *, condominium_id):
         qs = (
-            BBQReservationModel.objects.filter(household__condominium_id=condominium_id)
-            .select_related("reservation_user", "household")
+            BBQReservationModel.objects.filter(unit__condominium_id=condominium_id)
+            .select_related("reservation_user", "unit")
             .order_by("-reservation_date")
         )
         if status:
@@ -46,7 +46,7 @@ class DjangoBBQRepository(IBBQRepository):
     def get_by_id(self, pk):
         return (
             BBQReservationModel.objects
-            .select_related("reservation_user", "household")
+            .select_related("reservation_user", "unit")
             .filter(pk=pk)
             .first()
         )
@@ -56,14 +56,14 @@ class DjangoBBQRepository(IBBQRepository):
         return BBQReservationModel.objects.filter(
             reservation_date=reservation_date,
             status=BBQReservationModel.Status.APPROVED,
-            household__condominium_id=condominium_id,
+            unit__condominium_id=condominium_id,
         ).only("id", "start_time", "end_time", "reservation_date")
 
-    def latest_date_for_household(self, household_id):
+    def latest_date_for_unit(self, unit_id):
         """Only APPROVED bookings count toward the 30-day cool-down."""
         last = (
             BBQReservationModel.objects.filter(
-                household_id=household_id,
+                unit_id=unit_id,
                 status=BBQReservationModel.Status.APPROVED,
             )
             .order_by("-reservation_date")
@@ -85,7 +85,7 @@ class DjangoBBQRepository(IBBQRepository):
 
     def count_by_status(self, status=None, *, condominium_id):
         qs = BBQReservationModel.objects.filter(
-            household__condominium_id=condominium_id
+            unit__condominium_id=condominium_id
         )
         if status:
             qs = qs.filter(status=status)

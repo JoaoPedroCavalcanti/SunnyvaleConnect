@@ -2,19 +2,17 @@
 
 import pytest
 
-from households.tests.unit._fakes import (
+from units.models import Unit, UnitMembership
+from units.tests.unit._fakes import (
     FakeCondominiumRepository,
-    FakeHouseholdRepository,
-    FakeMembershipRepository,
+    FakeUnitMembershipRepository,
+    FakeUnitRepository,
     FakeUserRepository,
     TEST_CONDOMINIUM_CODE,
+    make_unit,
     make_user,
 )
-from households.models import HouseholdMembership
-from households.services.household_service import HouseholdService
-from shared.infrastructure.transactions import NullTransactionRunner
 from shared.tenant import build_tenant_username
-from shared.test_doubles.fakes import FakeEmailSender
 from users.services.auth_service import (
     AuthService,
     KIND_DISABLED,
@@ -30,28 +28,17 @@ pytestmark = pytest.mark.unit
 @pytest.fixture
 def env():
     users = FakeUserRepository()
-    memberships = FakeMembershipRepository()
-    households = FakeHouseholdRepository()
-    email = FakeEmailSender()
-    condominiums = FakeCondominiumRepository()
+    memberships = FakeUnitMembershipRepository()
+    units = FakeUnitRepository()
     auth = AuthService(
         user_repository=users,
         membership_repository=memberships,
-    )
-    household_service = HouseholdService(
-        household_repository=households,
-        membership_repository=memberships,
-        user_repository=users,
-        email_sender=email,
-        transaction_runner=NullTransactionRunner(),
-        condominium_repository=condominiums,
     )
     return {
         "auth": auth,
         "users": users,
         "memberships": memberships,
-        "households": households,
-        "household_service": household_service,
+        "units": units,
     }
 
 
@@ -82,18 +69,31 @@ class TestAuthenticate:
         _add(env["users"], 1, "right", email="alice@example.com")
         assert env["auth"].authenticate("alice@example.com", "wrong")["kind"] == KIND_INVALID
 
-    def test_pending_when_inactive_with_pending_household(self, env):
+    def test_pending_when_inactive_with_pending_unit(self, env):
         user = _add(
             env["users"], 1, "secret", email="alice@example.com", is_active=False
         )
-        household = env["household_service"].request_create(user, "501", "A")
+        unit = make_unit(
+            1,
+            kind=Unit.Kind.APARTMENT_BLOCK,
+            apartment="501",
+            block="A",
+        )
+        env["memberships"].create(
+            {
+                "unit": unit,
+                "user": user,
+                "role": UnitMembership.Role.OWNER,
+                "status": UnitMembership.Status.PENDING_ADMIN,
+            }
+        )
 
         result = env["auth"].authenticate("alice@example.com", "secret")
         assert result["kind"] == KIND_PENDING
-        assert result["household"]["apartment"] == "501"
+        assert result["unit"]["display_name"] == "Apt 501 / Block A"
         assert (
-            result["household"]["membership_status"]
-            == HouseholdMembership.Status.PENDING_ADMIN
+            result["unit"]["membership_status"]
+            == UnitMembership.Status.PENDING_ADMIN
         )
 
     def test_disabled_when_inactive_without_pending(self, env):

@@ -206,38 +206,19 @@ class Container:
         )
 
     @property
-    def household_repository(self):
-        from households.repositories.household_repository import (
-            DjangoHouseholdRepository,
-        )
+    def unit_repository(self):
+        from units.repositories.unit_repository import DjangoUnitRepository
 
-        return self._resolve("household_repository", DjangoHouseholdRepository)
+        return self._resolve("unit_repository", DjangoUnitRepository)
 
     @property
-    def membership_repository(self):
-        from households.repositories.membership_repository import (
-            DjangoMembershipRepository,
-        )
-
-        return self._resolve("membership_repository", DjangoMembershipRepository)
-
-    @property
-    def dependent_repository(self):
-        from households.repositories.dependent_repository import (
-            DjangoDependentRepository,
-        )
-
-        return self._resolve("dependent_repository", DjangoDependentRepository)
-
-    @property
-    def membership_decision_repository(self):
-        from households.repositories.membership_decision_repository import (
-            DjangoMembershipDecisionRepository,
+    def unit_membership_repository(self):
+        from units.repositories.unit_membership_repository import (
+            DjangoUnitMembershipRepository,
         )
 
         return self._resolve(
-            "membership_decision_repository",
-            DjangoMembershipDecisionRepository,
+            "unit_membership_repository", DjangoUnitMembershipRepository
         )
 
     # ------------------------------------------------------------------ #
@@ -277,7 +258,7 @@ class Container:
             "bbq_service",
             lambda: BBQReservationService(
                 repository=self.bbq_repository,
-                membership_repository=self.membership_repository,
+                membership_repository=self.unit_membership_repository,
                 email_sender=self.email_sender,
             ),
         )
@@ -290,7 +271,7 @@ class Container:
             "hall_service",
             lambda: HallReservationService(
                 repository=self.hall_repository,
-                membership_repository=self.membership_repository,
+                membership_repository=self.unit_membership_repository,
                 email_sender=self.email_sender,
             ),
         )
@@ -314,8 +295,8 @@ class Container:
             "delivery_notification_service",
             lambda: DeliveryNotificationService(
                 repository=self.delivery_notification_repository,
-                household_repository=self.household_repository,
-                membership_repository=self.membership_repository,
+                unit_repository=self.unit_repository,
+                membership_repository=self.unit_membership_repository,
                 email_sender=self.email_sender,
             ),
         )
@@ -373,80 +354,49 @@ class Container:
         )
 
     @property
-    def household_service(self):
-        from households.services.household_service import HouseholdService
+    def unit_service(self):
+        from units.services.unit_service import UnitService
 
         return self._resolve(
-            "household_service",
-            lambda: HouseholdService(
-                household_repository=self.household_repository,
-                membership_repository=self.membership_repository,
-                user_repository=self.user_repository,
-                email_sender=self.email_sender,
-                transaction_runner=self.transaction_runner,
+            "unit_service",
+            lambda: UnitService(
+                unit_repository=self.unit_repository,
+                membership_repository=self.unit_membership_repository,
                 condominium_repository=self.condominium_repository,
             ),
         )
 
     @property
-    def membership_service(self):
-        from households.services.membership_service import MembershipService
+    def unit_membership_service(self):
+        from units.services.unit_membership_service import UnitMembershipService
 
         return self._resolve(
-            "membership_service",
-            lambda: MembershipService(
-                membership_repository=self.membership_repository,
-                household_repository=self.household_repository,
+            "unit_membership_service",
+            lambda: UnitMembershipService(
+                membership_repository=self.unit_membership_repository,
+                unit_repository=self.unit_repository,
                 user_repository=self.user_repository,
                 email_sender=self.email_sender,
-                decision_repository=self.membership_decision_repository,
                 transaction_runner=self.transaction_runner,
             ),
         )
 
     @property
-    def membership_decision_service(self):
-        from households.services.membership_decision_service import (
-            MembershipDecisionService,
-        )
-
-        return self._resolve(
-            "membership_decision_service",
-            lambda: MembershipDecisionService(
-                decision_repository=self.membership_decision_repository,
-                membership_repository=self.membership_repository,
-                household_repository=self.household_repository,
-            ),
-        )
-
-    @property
-    def dependent_service(self):
-        from households.services.dependent_service import DependentService
-
-        return self._resolve(
-            "dependent_service",
-            lambda: DependentService(
-                dependent_repository=self.dependent_repository,
-                membership_repository=self.membership_repository,
-                household_repository=self.household_repository,
-                user_repository=self.user_repository,
-                cpf_validator=self.cpf_validator,
-            ),
-        )
-
-    @property
     def signup_service(self):
-        from households.services.signup_service import SignupService
+        from units.services.signup_service import SignupService
 
         return self._resolve(
             "signup_service",
             lambda: SignupService(
                 user_service=self.user_service,
-                household_service=self.household_service,
-                membership_service=self.membership_service,
+                membership_service=self.unit_membership_service,
                 condominium_service=self.condominium_service,
             ),
         )
+
+    @property
+    def unit_signup_service(self):
+        return self.signup_service
 
     @property
     def auth_service(self):
@@ -456,7 +406,7 @@ class Container:
             "auth_service",
             lambda: AuthService(
                 user_repository=self.user_repository,
-                membership_repository=self.membership_repository,
+                membership_repository=self.unit_membership_repository,
             ),
         )
 

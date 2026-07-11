@@ -7,9 +7,9 @@ from delivery_notification.models import DeliveryNotificationModel
 from delivery_notification.repositories.delivery_notification_repository import (
     IDeliveryNotificationRepository,
 )
-from households.models import Household
-from households.repositories.household_repository import IHouseholdRepository
-from households.repositories.membership_repository import IMembershipRepository
+from units.models import Unit, UnitMembership
+from units.repositories.unit_membership_repository import IUnitMembershipRepository
+from units.repositories.unit_repository import IUnitRepository
 from shared.exceptions import BusinessRuleError, NotFoundError, PermissionDeniedError
 from shared.infrastructure.email_sender import IEmailSender
 from shared.roles import can_doorman_ops
@@ -17,17 +17,16 @@ from shared.tenant import assert_same_condominium, require_condominium_id
 
 
 @dataclass(frozen=True)
-class DeliveryApartmentItem:
+class DeliveryUnitItem:
     id: int
-    apartment: str
-    block: str
+    display_name: str
     holder_name: str
     status: str
 
 
 class IDeliveryNotificationService(ABC):
     @abstractmethod
-    def list_apartments(self, user) -> list[DeliveryApartmentItem]: ...
+    def list_apartments(self, user) -> list[DeliveryUnitItem]: ...
 
     @abstractmethod
     def list(self, user): ...
@@ -43,51 +42,52 @@ class DeliveryNotificationService(IDeliveryNotificationService):
     def __init__(
         self,
         repository: IDeliveryNotificationRepository,
-        household_repository: IHouseholdRepository,
-        membership_repository: IMembershipRepository,
+        unit_repository: IUnitRepository,
+        membership_repository: IUnitMembershipRepository,
         email_sender: IEmailSender,
     ):
         self._repo = repository
-        self._households = household_repository
+        self._units = unit_repository
         self._memberships = membership_repository
         self._email = email_sender
 
-    def list_apartments(self, user) -> list[DeliveryApartmentItem]:
+    def list_apartments(self, user) -> list[DeliveryUnitItem]:
         if not can_doorman_ops(user):
             raise PermissionDeniedError(
                 "Only admins or doorman staff can list delivery apartments."
             )
 
-        households = [
-            h
-            for h in self._households.list_all(
+        units = [
+            u
+            for u in self._units.list_all(
                 condominium_id=require_condominium_id(user)
             )
-            if h.status != Household.Status.ARCHIVED
+            if u.status != Unit.Status.ARCHIVED
         ]
-        if not households:
+        if not units:
             return []
 
-        household_ids = [h.id for h in households]
-        holders = self._memberships.list_active_holders_for_households(
-            household_ids
-        )
-        holder_by_household = {m.household_id: m for m in holders}
+        unit_ids = [u.id for u in units]
+        owners = self._memberships.list_active_for_units(unit_ids)
+        owner_by_unit = {
+            m.unit_id: m
+            for m in owners
+            if m.role == UnitMembership.Role.OWNER
+        }
 
-        items: list[DeliveryApartmentItem] = []
-        for household in households:
-            holder_membership = holder_by_household.get(household.id)
+        items: list[DeliveryUnitItem] = []
+        for unit in units:
+            owner_membership = owner_by_unit.get(unit.id)
             holder_name = ""
-            if holder_membership and holder_membership.user:
-                user = holder_membership.user
-                holder_name = user.full_name or user.username
+            if owner_membership and owner_membership.user:
+                owner_user = owner_membership.user
+                holder_name = owner_user.full_name or owner_user.username
             items.append(
-                DeliveryApartmentItem(
-                    id=household.id,
-                    apartment=household.apartment,
-                    block=household.block,
+                DeliveryUnitItem(
+                    id=unit.id,
+                    display_name=unit.display_name(),
                     holder_name=holder_name,
-                    status=household.status,
+                    status=unit.status,
                 )
             )
         return items
@@ -101,63 +101,58 @@ class DeliveryNotificationService(IDeliveryNotificationService):
         instance = self._repo.get_by_id(pk)
         if not instance:
             raise NotFoundError("No delivery notification matches the given query.")
-        assert_same_condominium(user, instance.household.condominium_id)
+        assert_same_condominium(user, instance.unit.condominium_id)
         return instance
 
     def send(self, user, payload: dict) -> DeliveryNotificationModel:
-        apartment = payload["apartment"]
-        block = payload.get("block") or ""
-
-        household = self._households.get_by_apartment_block(
-            apartment,
-            block,
-            condominium_id=require_condominium_id(user),
-        )
-        if not household:
-            raise NotFoundError("No household matches the given apartment and block.")
-        if household.status != Household.Status.ACTIVE:
+        unit_id = payload["unit_id"]
+        unit = self._units.get_by_id(unit_id)
+        if not unit:
+            raise NotFoundError("No unit matches the given unit_id.")
+        assert_same_condominium(user, unit.condominium_id)
+        if unit.status != Unit.Status.ACTIVE:
             raise BusinessRuleError(
-                "This household is not active; cannot register a delivery.",
-                field="apartment",
+                "This unit is not active; cannot register a delivery.",
+                field="unit_id",
             )
 
-        holder_membership = self._memberships.get_active_holder(household.id)
-        if not holder_membership:
+        owner_membership = self._memberships.get_active_owner(unit.id)
+        if not owner_membership:
             raise BusinessRuleError(
-                "This household has no active holder; cannot notify delivery.",
-                field="apartment",
+                "This unit has no active owner; cannot notify delivery.",
+                field="unit_id",
             )
 
-        extra_holders = list(self._memberships.list_active_holders(household.id))
-        if len(extra_holders) > 1:
+        extra_owners = list(self._memberships.list_active_owners(unit.id))
+        if len(extra_owners) > 1:
             raise BusinessRuleError(
-                "This household has more than one active holder.",
-                field="apartment",
+                "This unit has more than one active owner.",
+                field="unit_id",
             )
 
-        holder = holder_membership.user
-        if not holder.email:
+        owner = owner_membership.user
+        if not owner.email:
             raise BusinessRuleError(
-                "The household holder has no email registered; cannot notify delivery.",
-                field="apartment",
+                "The unit owner has no email registered; cannot notify delivery.",
+                field="unit_id",
             )
 
         create_data = {
             key: value
             for key, value in payload.items()
-            if key not in {"apartment", "block"}
+            if key != "unit_id"
         }
-        create_data["household"] = household
-        create_data["notified_holder_name"] = holder.full_name or holder.username
-        create_data["notified_holder_email"] = holder.email
+        create_data["unit"] = unit
+        create_data["notified_holder_name"] = owner.full_name or owner.username
+        create_data["notified_holder_email"] = owner.email
         instance = self._repo.create(create_data)
 
         self._email.send_delivery_notification(
-            to_email=holder.email,
-            user_name=holder.full_name or holder.username,
+            to_email=owner.email,
+            user_name=owner.full_name or owner.username,
             delivery_platform=payload.get("delivery_platform"),
             delivery_from=payload.get("delivery_from"),
-            apartment=household.apartment,
-            block=household.block,
+            apartment=unit.apartment,
+            block=unit.block,
         )
         return instance

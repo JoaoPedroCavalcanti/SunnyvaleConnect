@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from condominiums.serializers import CondominiumLookupOutputSerializer
-from households.serializers import HouseholdRequestSerializer
+from units.serializers import UnitRequestSerializer
 from users.models import EmployeeType, UserRole
 
 
@@ -26,7 +26,7 @@ class UserInputSerializer(serializers.Serializer):
         allow_empty=False,
     )
     condominium_code = serializers.CharField(required=False, max_length=8)
-    household_request = HouseholdRequestSerializer(required=False, allow_null=True)
+    unit_request = UnitRequestSerializer(required=False, allow_null=True)
 
 
 class UserPatchSerializer(serializers.Serializer):

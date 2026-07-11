@@ -99,7 +99,7 @@ class _CountBBQRepo(IBBQRepository):
     def list_for_date(self, reservation_date, *, condominium_id):  # pragma: no cover
         raise NotImplementedError
 
-    def latest_date_for_household(self, household_id):  # pragma: no cover
+    def latest_date_for_unit(self, unit_id):  # pragma: no cover
         raise NotImplementedError
 
     def create(self, data):  # pragma: no cover
@@ -130,7 +130,7 @@ class _CountHallRepo(IHallRepository):
     def list_for_date(self, reservation_date, *, condominium_id):  # pragma: no cover
         raise NotImplementedError
 
-    def latest_date_for_household(self, household_id):  # pragma: no cover
+    def latest_date_for_unit(self, unit_id):  # pragma: no cover
         raise NotImplementedError
 
     def create(self, data):  # pragma: no cover

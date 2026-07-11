@@ -5,7 +5,7 @@ from django.db import models
 class BBQReservationModel(models.Model):
     """A booking for the shared barbecue area.
 
-    The booking belongs to a ``household`` (the apartment) so the 30-day
+    The booking belongs to a ``unit`` (the apartment) so the 30-day
     cool-down rule and the ownership are scoped per apartment, not per
     user. ``reservation_user`` keeps a pointer to the person who actually
     created the entry (informational, for the front to render "booked
@@ -22,8 +22,8 @@ class BBQReservationModel(models.Model):
         APPROVED = "APPROVED", "Approved"
         REJECTED = "REJECTED", "Rejected"
 
-    household = models.ForeignKey(
-        "households.Household",
+    unit = models.ForeignKey(
+        "units.Unit",
         on_delete=models.SET_NULL,
         blank=True,
         null=True,

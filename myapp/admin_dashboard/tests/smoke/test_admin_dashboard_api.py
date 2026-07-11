@@ -10,7 +10,7 @@ from model_bakery import baker
 from bbq_reservations.models import BBQReservationModel
 from hall_reservations.models import HallReservationModel
 from sunny_vale_news.models import SunnyValeNewsModel
-from households.models import Household, HouseholdMembership
+from units.models import Unit, UnitMembership
 from tests_base.base_tests_user import BaseTestsUsers
 
 
@@ -38,23 +38,24 @@ class AdminDashboardOverviewSmoke(BaseTestsUsers):
         self.assertEqual(self.client.get(URL).status_code, 403)
 
     def test_admin_gets_aggregated_counts(self):
-        household = Household.objects.create(
+        unit = Unit.objects.create(
+            kind=Unit.Kind.APARTMENT_BLOCK,
             apartment="900",
             block="Z",
-            status=Household.Status.ACTIVE,
+            status=Unit.Status.ACTIVE,
             condominium=self.condominium,
         )
-        HouseholdMembership.objects.create(
-            household=household,
+        UnitMembership.objects.create(
+            unit=unit,
             user=self.user_a,
-            role=HouseholdMembership.Role.HOLDER,
-            status=HouseholdMembership.Status.ACTIVE,
+            role=UnitMembership.Role.OWNER,
+            status=UnitMembership.Status.ACTIVE,
         )
         # 1 approved + 1 pending + 1 rejected BBQ
         tomorrow = date.today() + timedelta(days=1)
         baker.make(
             BBQReservationModel,
-            household=household,
+            unit=unit,
             reservation_date=tomorrow,
             start_time=time(10, 0),
             end_time=time(11, 0),
@@ -62,7 +63,7 @@ class AdminDashboardOverviewSmoke(BaseTestsUsers):
         )
         baker.make(
             BBQReservationModel,
-            household=household,
+            unit=unit,
             reservation_date=tomorrow,
             start_time=time(12, 0),
             end_time=time(13, 0),
@@ -70,7 +71,7 @@ class AdminDashboardOverviewSmoke(BaseTestsUsers):
         )
         baker.make(
             BBQReservationModel,
-            household=household,
+            unit=unit,
             reservation_date=tomorrow,
             start_time=time(14, 0),
             end_time=time(15, 0),
@@ -79,7 +80,7 @@ class AdminDashboardOverviewSmoke(BaseTestsUsers):
         # 1 approved Hall + 2 pending Hall
         baker.make(
             HallReservationModel,
-            household=household,
+            unit=unit,
             reservation_date=tomorrow,
             start_time=time(10, 0),
             end_time=time(11, 0),
@@ -87,7 +88,7 @@ class AdminDashboardOverviewSmoke(BaseTestsUsers):
         )
         baker.make(
             HallReservationModel,
-            household=household,
+            unit=unit,
             reservation_date=tomorrow,
             start_time=time(12, 0),
             end_time=time(13, 0),
@@ -95,7 +96,7 @@ class AdminDashboardOverviewSmoke(BaseTestsUsers):
         )
         baker.make(
             HallReservationModel,
-            household=household,
+            unit=unit,
             reservation_date=tomorrow,
             start_time=time(14, 0),
             end_time=time(15, 0),

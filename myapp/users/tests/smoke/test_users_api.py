@@ -108,6 +108,59 @@ class UsersAPISmoke(BaseTestsUsers):
         self.assertEqual(response.status_code, 201, response.data)
         self.assertEqual(response.data["role"], "ADMIN")
 
+    def test_admin_creates_resident_joining_vacant_unit_is_active(self):
+        from units.models import Unit, UnitMembership
+
+        vacant = Unit.objects.create(
+            kind=Unit.Kind.APARTMENT_BLOCK,
+            apartment="901",
+            block="X",
+            status=Unit.Status.ACTIVE,
+            condominium=self.condominium,
+        )
+
+        self.authenticate(self.admin)
+        payload = self.create_random_user_from_faker()
+        payload["unit_request"] = {"unit_id": vacant.id}
+        response = self.client.post(LIST_URL, data=payload, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+
+        user = self.User.objects.get(pk=response.data["id"])
+        self.assertTrue(user.is_active)
+
+        membership = vacant.memberships.get(user=user)
+        self.assertEqual(membership.status, UnitMembership.Status.ACTIVE)
+        self.assertEqual(membership.role, UnitMembership.Role.OWNER)
+
+    def test_admin_creates_resident_joining_existing_unit_is_active(self):
+        from units.models import Unit, UnitMembership
+
+        unit = Unit.objects.create(
+            kind=Unit.Kind.APARTMENT_BLOCK,
+            apartment="1201",
+            block="F",
+            status=Unit.Status.ACTIVE,
+            condominium=self.condominium,
+        )
+        UnitMembership.objects.create(
+            unit=unit,
+            user=self.user_a,
+            role=UnitMembership.Role.OWNER,
+            status=UnitMembership.Status.ACTIVE,
+        )
+
+        self.authenticate(self.admin)
+        payload = self.create_random_user_from_faker()
+        payload["unit_request"] = {"unit_id": unit.id}
+        response = self.client.post(LIST_URL, data=payload, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+
+        user = self.User.objects.get(pk=response.data["id"])
+        self.assertTrue(user.is_active)
+        membership = unit.memberships.get(user=user)
+        self.assertEqual(membership.status, UnitMembership.Status.ACTIVE)
+        self.assertEqual(membership.role, UnitMembership.Role.RESIDENT)
+
     def test_resident_cannot_create_employee(self):
         self.authenticate(self.user_a)
         payload = self.create_random_user_from_faker()
@@ -215,22 +268,23 @@ class LoginAPISmoke(BaseTestsUsers):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.data["code"], "invalid_credentials")
 
-    def test_pending_user_returns_403_with_household_info(self):
-        from households.models import Household, HouseholdMembership
+    def test_pending_user_returns_403_with_unit_info(self):
+        from units.models import Unit, UnitMembership
 
         self.user_a.is_active = False
         self.user_a.save()
-        household = Household.objects.create(
+        unit = Unit.objects.create(
+            kind=Unit.Kind.APARTMENT_BLOCK,
             apartment="701",
             block="C",
-            status=Household.Status.PENDING_ADMIN,
+            status=Unit.Status.ACTIVE,
             condominium=self.condominium,
         )
-        HouseholdMembership.objects.create(
-            household=household,
+        UnitMembership.objects.create(
+            unit=unit,
             user=self.user_a,
-            role=HouseholdMembership.Role.HOLDER,
-            status=HouseholdMembership.Status.PENDING_ADMIN,
+            role=UnitMembership.Role.OWNER,
+            status=UnitMembership.Status.PENDING_ADMIN,
         )
 
         response = self.client.post(
@@ -239,5 +293,5 @@ class LoginAPISmoke(BaseTestsUsers):
             format="json",
         )
         self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.data["code"], "pending_household_approval")
-        self.assertEqual(response.data["household"]["apartment"], "701")
+        self.assertEqual(response.data["code"], "pending_unit_approval")
+        self.assertEqual(response.data["unit"]["display_name"], "Apt 701 / Block C")

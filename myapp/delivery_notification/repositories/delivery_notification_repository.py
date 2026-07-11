@@ -23,14 +23,14 @@ class IDeliveryNotificationRepository(ABC):
 class DjangoDeliveryNotificationRepository(IDeliveryNotificationRepository):
     def list_all(self, *, condominium_id):
         return (
-            DeliveryNotificationModel.objects.select_related("household")
-            .filter(household__condominium_id=condominium_id)
+            DeliveryNotificationModel.objects.select_related("unit")
+            .filter(unit__condominium_id=condominium_id)
             .order_by("-created_at")
         )
 
     def get_by_id(self, pk):
         return (
-            DeliveryNotificationModel.objects.select_related("household")
+            DeliveryNotificationModel.objects.select_related("unit")
             .filter(pk=pk)
             .first()
         )
@@ -40,7 +40,7 @@ class DjangoDeliveryNotificationRepository(IDeliveryNotificationRepository):
 
     def count_created_between(self, start, end, *, condominium_id):
         return DeliveryNotificationModel.objects.filter(
-            household__condominium_id=condominium_id,
+            unit__condominium_id=condominium_id,
             created_at__gte=start,
             created_at__lt=end,
         ).count()

@@ -2,14 +2,14 @@
 
 from abc import ABC, abstractmethod
 
-from households.repositories.membership_repository import IMembershipRepository
+from units.repositories.unit_membership_repository import IUnitMembershipRepository
 from users.repositories.user_repository import IUserRepository
 
 
 KIND_OK = "ok"
 KIND_INVALID = "invalid_credentials"
 KIND_DISABLED = "account_disabled"
-KIND_PENDING = "pending_household_approval"
+KIND_PENDING = "pending_unit_approval"
 
 
 class IAuthService(ABC):
@@ -21,7 +21,7 @@ class AuthService(IAuthService):
     def __init__(
         self,
         user_repository: IUserRepository,
-        membership_repository: IMembershipRepository,
+        membership_repository: IUnitMembershipRepository,
     ):
         self._users = user_repository
         self._memberships = membership_repository
@@ -46,16 +46,15 @@ class AuthService(IAuthService):
         pending = list(self._memberships.list_pending_for_user(user.id))
         if pending:
             membership = pending[0]
-            household = membership.household
+            unit = membership.unit
             return {
                 "kind": KIND_PENDING,
                 "user": user,
                 "condominium": condominium,
-                "household": {
-                    "id": household.id,
-                    "apartment": household.apartment,
-                    "block": household.block,
-                    "household_status": household.status,
+                "unit": {
+                    "id": unit.id,
+                    "display_name": unit.display_name(),
+                    "unit_status": unit.status,
                     "membership_status": membership.status,
                     "membership_role": membership.role,
                 },

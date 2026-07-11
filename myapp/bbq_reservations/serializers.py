@@ -46,15 +46,9 @@ class BBQReservationRejectSerializer(serializers.Serializer):
 
 
 class BBQReservationOutputSerializer(serializers.ModelSerializer):
-    """Output payload.
+    """Output payload with the unit (apartment) inlined."""
 
-    ``household`` is exposed inline so the front can show "Booked by
-    apt 1101/A" without an extra request. ``reservation_user`` keeps
-    the snapshot of who created the entry (useful for the front to
-    render the morador name).
-    """
-
-    household = serializers.SerializerMethodField()
+    unit = serializers.SerializerMethodField()
     reservation_user = serializers.SerializerMethodField()
 
     class Meta:
@@ -66,19 +60,18 @@ class BBQReservationOutputSerializer(serializers.ModelSerializer):
             "end_time",
             "guest_count",
             "status",
-            "household",
+            "unit",
             "reservation_user",
             "created_at",
         ]
 
-    def get_household(self, obj) -> dict | None:
-        if not obj.household_id:
+    def get_unit(self, obj) -> dict | None:
+        if not obj.unit_id:
             return None
-        h = obj.household
+        u = obj.unit
         return {
-            "id": h.id,
-            "apartment": h.apartment,
-            "block": h.block,
+            "id": u.id,
+            "display_name": u.display_name(),
         }
 
     def get_reservation_user(self, obj) -> dict | None:

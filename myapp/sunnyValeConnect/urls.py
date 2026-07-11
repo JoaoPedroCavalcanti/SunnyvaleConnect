@@ -22,7 +22,7 @@ urlpatterns = [
     path("condo_payments/", include("condo_payments.urls")),
     path("delivery_notification/", include("delivery_notification.urls")),
     path("sunny_vale_news/", include("sunny_vale_news.urls")),
-    path("households/", include(("households.urls"), namespace="households")),
+    path("units/", include(("units.urls"), namespace="units")),
     path("condominiums/", include(("condominiums.urls"), namespace="condominiums")),
     path(
         "admin_dashboard/",

@@ -6,7 +6,7 @@ import pytest
 from django.core import mail
 from django.urls import reverse
 
-from households.models import Household, HouseholdMembership
+from units.models import Unit, UnitMembership
 from tests_base.base_tests_user import BaseTestsUsers
 
 
@@ -20,26 +20,28 @@ class HallAPISmoke(BaseTestsUsers):
     def _future(self, days=10):
         return (date.today() + timedelta(days=days)).isoformat()
 
-    def _seed_household_with(self, user, apartment="1101", block="A"):
-        household = Household.objects.create(
+    def _seed_unit_with(self, user, apartment="1101", block="A"):
+        kind = Unit.Kind.APARTMENT_BLOCK if block else Unit.Kind.APARTMENT
+        unit = Unit.objects.create(
+            kind=kind,
             apartment=apartment,
-            block=block,
-            status=Household.Status.ACTIVE,
+            block=block or "",
+            status=Unit.Status.ACTIVE,
             condominium=self.condominium,
         )
-        HouseholdMembership.objects.create(
-            household=household,
+        UnitMembership.objects.create(
+            unit=unit,
             user=user,
-            role=HouseholdMembership.Role.HOLDER,
-            status=HouseholdMembership.Status.ACTIVE,
+            role=UnitMembership.Role.OWNER,
+            status=UnitMembership.Status.ACTIVE,
         )
-        return household
+        return unit
 
     def test_anonymous_blocked(self):
         self.assertEqual(self.client.get(LIST_URL).status_code, 401)
 
     def test_regular_user_creates_for_self(self):
-        house = self._seed_household_with(self.user_a)
+        house = self._seed_unit_with(self.user_a)
         self.authenticate(self.user_a)
         response = self.client.post(
             LIST_URL, data={"reservation_date": self._future()}
@@ -48,11 +50,11 @@ class HallAPISmoke(BaseTestsUsers):
         self.assertEqual(
             response.data["reservation_user"]["id"], self.user_a.id
         )
-        self.assertEqual(response.data["household"]["id"], house.id)
+        self.assertEqual(response.data["unit"]["id"], house.id)
         self.assertEqual(response.data["status"], "PENDING")
 
     def test_admin_creation_is_auto_approved(self):
-        self._seed_household_with(self.user_a)
+        self._seed_unit_with(self.user_a)
         self.authenticate(self.admin)
         response = self.client.post(
             LIST_URL,
@@ -65,7 +67,7 @@ class HallAPISmoke(BaseTestsUsers):
         self.assertEqual(response.data["status"], "APPROVED")
 
     def test_tolerates_passing_own_id(self):
-        self._seed_household_with(self.user_a)
+        self._seed_unit_with(self.user_a)
         self.authenticate(self.user_a)
         response = self.client.post(
             LIST_URL,
@@ -76,7 +78,7 @@ class HallAPISmoke(BaseTestsUsers):
         )
         self.assertEqual(response.status_code, 201, response.data)
 
-    def test_user_without_household_rejected(self):
+    def test_user_without_unit_rejected(self):
         self.authenticate(self.user_a)
         response = self.client.post(
             LIST_URL, data={"reservation_date": self._future()}
@@ -84,12 +86,12 @@ class HallAPISmoke(BaseTestsUsers):
         self.assertEqual(response.status_code, 400)
 
     def test_30_day_window_is_per_apartment(self):
-        house = self._seed_household_with(self.user_a, "1101", "A")
-        HouseholdMembership.objects.create(
-            household=house,
+        house = self._seed_unit_with(self.user_a, "1101", "A")
+        UnitMembership.objects.create(
+            unit=house,
             user=self.user_b,
-            role=HouseholdMembership.Role.RESIDENT,
-            status=HouseholdMembership.Status.ACTIVE,
+            role=UnitMembership.Role.RESIDENT,
+            status=UnitMembership.Status.ACTIVE,
         )
         self.authenticate(self.admin)
         r1 = self.client.post(
@@ -114,8 +116,8 @@ class HallAPISmoke(BaseTestsUsers):
         self.assertEqual(response.status_code, 400)
 
     def test_two_non_overlapping_slots_same_day(self):
-        self._seed_household_with(self.user_a, "1101", "A")
-        self._seed_household_with(self.user_b, "1102", "A")
+        self._seed_unit_with(self.user_a, "1101", "A")
+        self._seed_unit_with(self.user_b, "1102", "A")
         self.authenticate(self.admin)
 
         r1 = self.client.post(
@@ -143,7 +145,7 @@ class HallAPISmoke(BaseTestsUsers):
         self.assertEqual(r2.status_code, 201, r2.data)
 
     def test_admin_approves_pending_booking(self):
-        self._seed_household_with(self.user_a)
+        self._seed_unit_with(self.user_a)
         self.authenticate(self.user_a)
         r = self.client.post(
             LIST_URL, data={"reservation_date": self._future()}
@@ -163,7 +165,7 @@ class HallAPISmoke(BaseTestsUsers):
         self.assertIn("party hall", mail.outbox[0].subject)
 
     def test_admin_rejects_pending_booking(self):
-        self._seed_household_with(self.user_a)
+        self._seed_unit_with(self.user_a)
         self.authenticate(self.user_a)
         r = self.client.post(
             LIST_URL, data={"reservation_date": self._future()}
@@ -183,7 +185,7 @@ class HallAPISmoke(BaseTestsUsers):
         self.assertIn("private event", mail.outbox[0].body)
 
     def test_admin_reject_without_reason_returns_400(self):
-        self._seed_household_with(self.user_a)
+        self._seed_unit_with(self.user_a)
         self.authenticate(self.user_a)
         r = self.client.post(
             LIST_URL, data={"reservation_date": self._future()}
@@ -203,7 +205,7 @@ class HallAPISmoke(BaseTestsUsers):
         )
 
     def test_regular_user_cannot_approve(self):
-        self._seed_household_with(self.user_a)
+        self._seed_unit_with(self.user_a)
         self.authenticate(self.user_a)
         r = self.client.post(
             LIST_URL, data={"reservation_date": self._future()}
@@ -215,8 +217,8 @@ class HallAPISmoke(BaseTestsUsers):
         self.assertEqual(self.client.post(approve_url).status_code, 403)
 
     def test_list_filtered_by_status(self):
-        self._seed_household_with(self.user_a, "1101", "A")
-        self._seed_household_with(self.user_b, "1102", "A")
+        self._seed_unit_with(self.user_a, "1101", "A")
+        self._seed_unit_with(self.user_b, "1102", "A")
         self.authenticate(self.user_a)
         self.client.post(
             LIST_URL, data={"reservation_date": self._future(5)}

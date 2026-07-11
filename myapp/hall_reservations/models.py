@@ -5,7 +5,7 @@ from django.db import models
 class HallReservationModel(models.Model):
     """A booking for the shared party hall.
 
-    Same shape as ``BBQReservationModel``: ownership is per household
+    Same shape as ``BBQReservationModel``: ownership is per unit
     (apartment), so the 30-day cool-down is enforced across all members
     of the same apartment. ``reservation_user`` keeps a snapshot of who
     created the entry (informational). ``status`` drives the approval
@@ -18,8 +18,8 @@ class HallReservationModel(models.Model):
         APPROVED = "APPROVED", "Approved"
         REJECTED = "REJECTED", "Rejected"
 
-    household = models.ForeignKey(
-        "households.Household",
+    unit = models.ForeignKey(
+        "units.Unit",
         on_delete=models.SET_NULL,
         blank=True,
         null=True,
@@ -40,4 +40,4 @@ class HallReservationModel(models.Model):
         max_length=20, choices=Status.choices, default=Status.PENDING
     )
     created_at = models.DateTimeField(auto_now_add=True)
-    updated = models.DateTimeField(auto_now=True)
+    updated_at = models.DateTimeField(auto_now=True)

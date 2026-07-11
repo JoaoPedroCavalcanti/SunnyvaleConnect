@@ -39,9 +39,9 @@ class HallReservationRejectSerializer(serializers.Serializer):
 
 
 class HallReservationOutputSerializer(serializers.ModelSerializer):
-    """Output payload with the household (apartment) inlined."""
+    """Output payload with the unit (apartment) inlined."""
 
-    household = serializers.SerializerMethodField()
+    unit = serializers.SerializerMethodField()
     reservation_user = serializers.SerializerMethodField()
 
     class Meta:
@@ -53,16 +53,16 @@ class HallReservationOutputSerializer(serializers.ModelSerializer):
             "end_time",
             "guest_count",
             "status",
-            "household",
+            "unit",
             "reservation_user",
             "created_at",
         ]
 
-    def get_household(self, obj) -> dict | None:
-        if not obj.household_id:
+    def get_unit(self, obj) -> dict | None:
+        if not obj.unit_id:
             return None
-        h = obj.household
-        return {"id": h.id, "apartment": h.apartment, "block": h.block}
+        u = obj.unit
+        return {"id": u.id, "display_name": u.display_name()}
 
     def get_reservation_user(self, obj) -> dict | None:
         if not obj.reservation_user_id:

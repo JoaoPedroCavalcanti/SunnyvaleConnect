@@ -3,15 +3,14 @@
 from rest_framework import serializers
 
 from delivery_notification.models import DeliveryNotificationModel
-from households.models import Household
+from units.models import Unit
 
 
 class DeliveryApartmentListItemSerializer(serializers.Serializer):
     id = serializers.IntegerField(read_only=True)
-    apartment = serializers.CharField(read_only=True)
-    block = serializers.CharField(read_only=True)
+    display_name = serializers.CharField(read_only=True)
     holder_name = serializers.CharField(read_only=True)
-    status = serializers.ChoiceField(choices=Household.Status.choices, read_only=True)
+    status = serializers.ChoiceField(choices=Unit.Status.choices, read_only=True)
 
 
 class NotifiedToOutputSerializer(serializers.Serializer):
@@ -20,10 +19,7 @@ class NotifiedToOutputSerializer(serializers.Serializer):
 
 
 class DeliveryNotificationInputSerializer(serializers.Serializer):
-    apartment = serializers.CharField(max_length=10, required=True)
-    block = serializers.CharField(
-        max_length=10, required=False, allow_blank=True, default=""
-    )
+    unit_id = serializers.IntegerField(required=True)
     title = serializers.CharField(max_length=100, required=True)
     description = serializers.CharField(
         max_length=300, required=False, allow_blank=True, default=""
@@ -41,17 +37,15 @@ class DeliveryNotificationInputSerializer(serializers.Serializer):
 
 
 class DeliveryNotificationOutputSerializer(serializers.ModelSerializer):
-    apartment = serializers.CharField(source="household.apartment", read_only=True)
-    block = serializers.CharField(source="household.block", read_only=True)
+    display_name = serializers.CharField(source="unit.display_name", read_only=True)
     notified_to = NotifiedToOutputSerializer(read_only=True)
 
     class Meta:
         model = DeliveryNotificationModel
         fields = [
             "id",
-            "household",
-            "apartment",
-            "block",
+            "unit",
+            "display_name",
             "notified_to",
             "title",
             "description",
@@ -64,6 +58,7 @@ class DeliveryNotificationOutputSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
+        data["display_name"] = instance.unit.display_name()
         data["notified_to"] = {
             "name": instance.notified_holder_name,
             "email": instance.notified_holder_email,

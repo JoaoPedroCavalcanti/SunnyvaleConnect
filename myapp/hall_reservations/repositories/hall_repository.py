@@ -17,7 +17,7 @@ class IHallRepository(ABC):
     def list_for_date(self, reservation_date: date, *, condominium_id: int): ...
 
     @abstractmethod
-    def latest_date_for_household(self, household_id: int) -> date | None: ...
+    def latest_date_for_unit(self, unit_id: int) -> date | None: ...
 
     @abstractmethod
     def create(self, data: dict) -> HallReservationModel: ...
@@ -35,8 +35,8 @@ class IHallRepository(ABC):
 class DjangoHallRepository(IHallRepository):
     def list_all(self, status=None, *, condominium_id):
         qs = (
-            HallReservationModel.objects.filter(household__condominium_id=condominium_id)
-            .select_related("reservation_user", "household")
+            HallReservationModel.objects.filter(unit__condominium_id=condominium_id)
+            .select_related("reservation_user", "unit")
             .order_by("-reservation_date")
         )
         if status:
@@ -46,7 +46,7 @@ class DjangoHallRepository(IHallRepository):
     def get_by_id(self, pk):
         return (
             HallReservationModel.objects
-            .select_related("reservation_user", "household")
+            .select_related("reservation_user", "unit")
             .filter(pk=pk)
             .first()
         )
@@ -56,14 +56,14 @@ class DjangoHallRepository(IHallRepository):
         return HallReservationModel.objects.filter(
             reservation_date=reservation_date,
             status=HallReservationModel.Status.APPROVED,
-            household__condominium_id=condominium_id,
+            unit__condominium_id=condominium_id,
         ).only("id", "start_time", "end_time", "reservation_date")
 
-    def latest_date_for_household(self, household_id):
+    def latest_date_for_unit(self, unit_id):
         """Only APPROVED bookings count toward the 30-day cool-down."""
         last = (
             HallReservationModel.objects.filter(
-                household_id=household_id,
+                unit_id=unit_id,
                 status=HallReservationModel.Status.APPROVED,
             )
             .order_by("-reservation_date")
@@ -85,7 +85,7 @@ class DjangoHallRepository(IHallRepository):
 
     def count_by_status(self, status=None, *, condominium_id):
         qs = HallReservationModel.objects.filter(
-            household__condominium_id=condominium_id
+            unit__condominium_id=condominium_id
         )
         if status:
             qs = qs.filter(status=status)

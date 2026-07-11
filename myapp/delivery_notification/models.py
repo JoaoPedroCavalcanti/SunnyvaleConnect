@@ -1,7 +1,5 @@
 from django.db import models
 
-from households.models import Household
-
 
 class DeliveryNotificationModel(models.Model):
     PLATFORMS = [
@@ -16,7 +14,7 @@ class DeliveryNotificationModel(models.Model):
     ]
     PRIORITY = [("low", "Low"), ("medium", "Medium"), ("high", "High")]
 
-    household = models.ForeignKey(Household, on_delete=models.CASCADE)
+    unit = models.ForeignKey("units.Unit", on_delete=models.CASCADE)
     notified_holder_name = models.CharField(max_length=150, blank=True, default="")
     notified_holder_email = models.EmailField(blank=True, default="")
     title = models.CharField(max_length=100, blank=True, null=True, default="")
