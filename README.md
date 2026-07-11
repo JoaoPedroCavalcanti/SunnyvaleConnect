@@ -3,6 +3,7 @@ This documentation describes the API of a condominium system. The API is organiz
 
 ## Apps
 - Users
+- Units
 - Barbecue Reservations
 - Hall Reservations
 - Visitor Management
@@ -627,6 +628,98 @@ make schema
 ```
 
 </details>
+
+---
+
+## Units — bulk provision (platform superuser)
+
+Cria várias units de uma vez a partir de uma “receita” JSON.  
+**Só `is_superuser`** (admin de condomínio / staff comum → 403).  
+CRUD pontual continua no Django Admin.
+
+### Rota
+
+```
+POST {{base_url}}/units/bulk-provision/
+```
+
+Header: `Authorization: Bearer {{access_token}}`  
+(`{{access_token}}` vem de `POST {{base_url}}/api/token/`)
+
+Body: `application/json`. Informe **`condominium_code`** ou **`condominium_id`** (não os dois).  
+`skip_existing` default `true` (idempotente).
+
+Números de andar viram `{floor}{unit}` — ex.: andar `15` + `"01"` → `"1501"`.
+
+<details>
+ <summary><code>POST</code> <code><b>/</b></code> <code>units/bulk-provision/</code></summary>
+
+##### Auth
+> Platform superuser only (`is_superuser=True`).
+
+##### Body fields
+> | name | required | description |
+> |------|----------|-------------|
+> | `condominium_code` **ou** `condominium_id` | one of | Target condominium |
+> | `skip_existing` | no (default `true`) | Skip duplicates instead of 400 |
+> | `blocks` | no | Named towers/wings → `APARTMENT_BLOCK` |
+> | `towers` | no | Single building, no block → `APARTMENT` |
+> | `number_range` | no | Sequential houses/apts (`start`/`end`/`pad`/`as_named`) |
+> | `apartments` | no | Explicit apartment number list → `APARTMENT` |
+> | `named_units` | no | Explicit named units → `NAMED` |
+
+##### Responses
+> | http code | content-type | response |
+> |-----------|--------------|----------|
+> | `201` | `JSON` | `created_count`, `skipped_count`, `created[]` |
+> | `403` | `JSON` | Not a platform superuser |
+
+</details>
+
+#### Exemplos de body
+
+**Chacon (blocos A/B/C):**
+```json
+{
+  "condominium_code": "CHACON",
+  "blocks": [
+    { "block": "A", "floors": 15, "units": ["01", "02"] },
+    { "block": "B", "floors": 18, "units": ["01", "02"] },
+    { "block": "C", "floors": 15, "units": ["01", "02"] }
+  ]
+}
+```
+
+**Prédio único sem bloco (17 andares, 2 por andar):**
+```json
+{
+  "condominium_code": "FOO",
+  "towers": [{ "floors": 17, "units": ["01", "02"] }]
+}
+```
+
+**Condomínio de casas (1…90):**
+```json
+{
+  "condominium_code": "FOO",
+  "number_range": { "start": 1, "end": 90 }
+}
+```
+Com nome: `"as_named": true, "name_prefix": "Casa "` → `Casa 1`…
+
+**Blocos com nome (ex. Arabaiana, 14×7):**
+```json
+{
+  "condominium_code": "FOO",
+  "blocks": [
+    {
+      "block": "Arabaiana",
+      "floors": 14,
+      "units": ["01", "02", "03", "04", "05", "06", "07"]
+    }
+  ]
+}
+```
 
 ---
 

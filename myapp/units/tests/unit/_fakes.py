@@ -58,13 +58,22 @@ def make_user(
     full_name="",
     cpf="",
     is_staff=False,
+    is_superuser=False,
     is_active=True,
     is_authenticated=True,
     role="RESIDENT",
     condominium_id=TEST_CONDOMINIUM_ID,
     condominium=None,
 ):
-    condo = condominium or test_condominium()
+    if condominium_id is None and condominium is None:
+        condo = None
+        cid = None
+    elif condominium is not None:
+        condo = condominium
+        cid = condominium_id
+    else:
+        condo = test_condominium()
+        cid = condominium_id
     return SimpleNamespace(
         id=pk,
         pk=pk,
@@ -78,10 +87,11 @@ def make_user(
         block="",
         photo=None,
         is_staff=is_staff,
+        is_superuser=is_superuser,
         is_active=is_active,
         is_authenticated=is_authenticated,
         role="ADMIN" if is_staff else role,
-        condominium_id=condominium_id,
+        condominium_id=cid,
         condominium=condo,
     )
 
@@ -273,32 +283,36 @@ class FakeUnitRepository(IUnitRepository):
         return self._items.get(int(pk))
 
     def get_by_name(self, name, *, condominium_id):
+        needle = (name or "").casefold()
         for u in self._items.values():
             if (
                 getattr(u, "condominium_id", None) == condominium_id
                 and u.kind == Unit.Kind.NAMED
-                and u.name == name
+                and (u.name or "").casefold() == needle
             ):
                 return u
         return None
 
     def get_by_apartment(self, apartment, *, condominium_id):
+        needle = (apartment or "").casefold()
         for u in self._items.values():
             if (
                 getattr(u, "condominium_id", None) == condominium_id
                 and u.kind == Unit.Kind.APARTMENT
-                and u.apartment == apartment
+                and (u.apartment or "").casefold() == needle
             ):
                 return u
         return None
 
     def get_by_apartment_block(self, apartment, block, *, condominium_id):
+        apt = (apartment or "").casefold()
+        blk = (block or "").casefold()
         for u in self._items.values():
             if (
                 getattr(u, "condominium_id", None) == condominium_id
                 and u.kind == Unit.Kind.APARTMENT_BLOCK
-                and u.apartment == apartment
-                and u.block == block
+                and (u.apartment or "").casefold() == apt
+                and (u.block or "").casefold() == blk
             ):
                 return u
         return None
@@ -316,6 +330,9 @@ class FakeUnitRepository(IUnitRepository):
         self._items[self._next_id] = unit
         self._next_id += 1
         return unit
+
+    def bulk_create(self, rows):
+        return [self.create(row) for row in rows]
 
     def update(self, instance, data):
         for k, v in data.items():

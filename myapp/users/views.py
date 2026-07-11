@@ -172,7 +172,7 @@ class LoginView(APIView):
         )
         kind = result["kind"]
         condominium_payload = None
-        if "condominium" in result:
+        if result.get("condominium") is not None:
             condominium_payload = CondominiumLookupOutputSerializer(
                 result["condominium"], context={"request": request}
             ).data

@@ -9,6 +9,8 @@ from rest_framework.views import APIView
 
 from units.serializers import (
     PendingUnitApprovalSerializer,
+    UnitBulkProvisionInputSerializer,
+    UnitBulkProvisionOutputSerializer,
     UnitCreateInputSerializer,
     UnitMembershipOutputSerializer,
     UnitMembershipRejectSerializer,
@@ -17,6 +19,29 @@ from units.serializers import (
     UnitWithMembersOutputSerializer,
 )
 from shared.container import container
+from shared.permissions import IsPlatformSuperuser
+
+
+@extend_schema(tags=["units"])
+class UnitBulkProvisionView(APIView):
+    """Platform superuser only: expand block/floor recipes into units."""
+
+    permission_classes = [IsPlatformSuperuser]
+
+    @extend_schema(
+        request=UnitBulkProvisionInputSerializer,
+        responses={201: UnitBulkProvisionOutputSerializer},
+    )
+    def post(self, request):
+        serializer = UnitBulkProvisionInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = container.unit_service.bulk_provision(
+            request.user, serializer.validated_data
+        )
+        return Response(
+            UnitBulkProvisionOutputSerializer(result).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 @extend_schema(tags=["units"])

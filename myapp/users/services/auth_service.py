@@ -33,8 +33,11 @@ class AuthService(IAuthService):
             return {"kind": KIND_INVALID}
 
         condominium = getattr(user, "condominium", None)
-        if not condominium or not getattr(condominium, "is_active", True):
-            return {"kind": KIND_INVALID}
+        # Platform superusers are not tied to a condominium; condo accounts
+        # still require an active tenant.
+        if not getattr(user, "is_superuser", False):
+            if not condominium or not getattr(condominium, "is_active", True):
+                return {"kind": KIND_INVALID}
 
         if user.is_active:
             return {

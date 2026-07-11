@@ -246,3 +246,77 @@ class UnitMembershipFlowSmoke(BaseTestsUsers):
         self.assertEqual(response.status_code, 204)
         unit.refresh_from_db()
         self.assertEqual(unit.status, Unit.Status.ARCHIVED)
+
+
+BULK_URL = reverse("units:bulk-provision")
+
+
+class UnitBulkProvisionSmoke(BaseTestsUsers):
+    def test_superuser_provisions_chacon_style_blocks(self):
+        # BaseTestsUsers.admin is created via create_superuser.
+        self.authenticate(self.admin)
+        response = self.client.post(
+            BULK_URL,
+            data={
+                "condominium_code": self.condominium.code,
+                "blocks": [
+                    {"block": "A", "floors": 2, "units": ["01", "02"]},
+                    {"block": "B", "floors": 1, "units": ["01"]},
+                ],
+                "named_units": ["Salão de Festas"],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["created_count"], 6)
+        self.assertEqual(response.data["skipped_count"], 0)
+        apartments = {
+            (u["apartment"], u["block"]) for u in response.data["created"]
+        }
+        self.assertIn(("101", "A"), apartments)
+        self.assertIn(("202", "A"), apartments)
+        self.assertIn(("101", "B"), apartments)
+
+    def test_staff_without_superuser_forbidden(self):
+        from datetime import date
+
+        from tests_base.base_tests_user import _gen_cpf
+
+        staff = self.User.objects.create_user(
+            username=f"{self.condominium.code}:condoadmin",
+            email="condoadmin@example.com",
+            password="Abcd123!",
+            full_name="Condo Admin",
+            birth_date=date(1985, 1, 1),
+            cpf=_gen_cpf(),
+            phone="11988887777",
+            is_staff=True,
+            is_superuser=False,
+            role="ADMIN",
+            condominium=self.condominium,
+        )
+        self.authenticate(staff)
+        response = self.client.post(
+            BULK_URL,
+            data={
+                "condominium_code": self.condominium.code,
+                "blocks": [{"block": "A", "floors": 1, "units": ["01"]}],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_idempotent_skip_existing(self):
+        self.authenticate(self.admin)
+        payload = {
+            "condominium_id": self.condominium.id,
+            "blocks": [{"block": "Z", "floors": 1, "units": ["01", "02"]}],
+        }
+        first = self.client.post(BULK_URL, data=payload, format="json")
+        self.assertEqual(first.status_code, 201, first.data)
+        self.assertEqual(first.data["created_count"], 2)
+
+        second = self.client.post(BULK_URL, data=payload, format="json")
+        self.assertEqual(second.status_code, 201, second.data)
+        self.assertEqual(second.data["created_count"], 0)
+        self.assertEqual(second.data["skipped_count"], 2)

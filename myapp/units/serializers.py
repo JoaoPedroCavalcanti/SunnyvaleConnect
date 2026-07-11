@@ -102,6 +102,86 @@ class UnitMembershipRejectSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True, default="")
 
 
+class UnitBulkBlockSerializer(serializers.Serializer):
+    """Named tower/wing: APARTMENT_BLOCK units as ``{floor}{unit}`` + block."""
+
+    block = serializers.CharField(required=True, max_length=50)
+    floors = serializers.IntegerField(required=True, min_value=1, max_value=100)
+    units = serializers.ListField(
+        child=serializers.CharField(max_length=10),
+        allow_empty=False,
+        required=True,
+    )
+
+
+class UnitBulkTowerSerializer(serializers.Serializer):
+    """Single building without block: APARTMENT units as ``{floor}{unit}``."""
+
+    floors = serializers.IntegerField(required=True, min_value=1, max_value=100)
+    units = serializers.ListField(
+        child=serializers.CharField(max_length=10),
+        allow_empty=False,
+        required=True,
+    )
+
+
+class UnitBulkNumberRangeSerializer(serializers.Serializer):
+    """Sequential numbers — houses or flat apt numbers without floors.
+
+    ``pad=2`` → ``01``..``90``; ``pad=0`` → ``1``..``90``.
+    """
+
+    start = serializers.IntegerField(required=True, min_value=1)
+    end = serializers.IntegerField(required=True, min_value=1)
+    pad = serializers.IntegerField(required=False, min_value=0, max_value=6, default=0)
+    as_named = serializers.BooleanField(
+        required=False,
+        default=False,
+        help_text="If true, create NAMED units (Casa 1); else APARTMENT numbers.",
+    )
+    name_prefix = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=80,
+        default="Casa ",
+    )
+
+
+class UnitBulkProvisionInputSerializer(serializers.Serializer):
+    """Superuser-only recipe to generate many units at once.
+
+    Floor grids build numbers as ``{floor}{unit}`` — e.g. floor 15 +
+    ``"01"`` → ``"1501"``.
+    """
+
+    condominium_id = serializers.IntegerField(required=False)
+    condominium_code = serializers.CharField(
+        required=False, allow_blank=True, max_length=32
+    )
+    skip_existing = serializers.BooleanField(required=False, default=True)
+    blocks = UnitBulkBlockSerializer(many=True, required=False, default=list)
+    towers = UnitBulkTowerSerializer(many=True, required=False, default=list)
+    number_range = UnitBulkNumberRangeSerializer(required=False, allow_null=True)
+    apartments = serializers.ListField(
+        child=serializers.CharField(max_length=10),
+        required=False,
+        default=list,
+    )
+    named_units = serializers.ListField(
+        child=serializers.CharField(max_length=100),
+        required=False,
+        default=list,
+    )
+
+
+class UnitBulkProvisionOutputSerializer(serializers.Serializer):
+    condominium_id = serializers.IntegerField()
+    condominium_code = serializers.CharField()
+    created_count = serializers.IntegerField()
+    skipped_count = serializers.IntegerField()
+    created = UnitOutputSerializer(many=True)
+
+
 class UnitRequestSerializer(serializers.Serializer):
     """Embedded in signup payloads to declare unit join intent."""
 

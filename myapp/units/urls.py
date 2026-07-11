@@ -2,6 +2,7 @@ from django.urls import path
 
 from units.views import (
     PendingApprovalsView,
+    UnitBulkProvisionView,
     UnitDetailView,
     UnitLeaveView,
     UnitListCreateView,
@@ -18,6 +19,11 @@ urlpatterns = [
         "pending-approvals/",
         PendingApprovalsView.as_view(),
         name="pending-approvals",
+    ),
+    path(
+        "bulk-provision/",
+        UnitBulkProvisionView.as_view(),
+        name="bulk-provision",
     ),
     path("", UnitListCreateView.as_view(), name="list"),
     path("<int:pk>/", UnitDetailView.as_view(), name="detail"),

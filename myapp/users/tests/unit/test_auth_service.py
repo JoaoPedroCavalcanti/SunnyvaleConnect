@@ -100,3 +100,33 @@ class TestAuthenticate:
         _add(env["users"], 1, "secret", email="alice@example.com", is_active=False)
         result = env["auth"].authenticate("alice@example.com", "secret")
         assert result["kind"] == KIND_DISABLED
+
+    def test_platform_superuser_ok_without_condominium(self, env):
+        _add(
+            env["users"],
+            1,
+            "secret",
+            email="super@platform.com",
+            username="super",
+            is_staff=True,
+            is_superuser=True,
+            is_active=True,
+            condominium_id=None,
+            condominium=None,
+        )
+        result = env["auth"].authenticate("super@platform.com", "secret")
+        assert result["kind"] == KIND_OK
+        assert result["condominium"] is None
+
+    def test_non_superuser_without_condominium_invalid(self, env):
+        _add(
+            env["users"],
+            1,
+            "secret",
+            email="orphan@example.com",
+            is_active=True,
+            condominium_id=None,
+            condominium=None,
+        )
+        result = env["auth"].authenticate("orphan@example.com", "secret")
+        assert result["kind"] == KIND_INVALID

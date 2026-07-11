@@ -32,6 +32,9 @@ class IUnitRepository(ABC):
     def create(self, data: dict) -> Unit: ...
 
     @abstractmethod
+    def bulk_create(self, rows: list[dict]) -> list[Unit]: ...
+
+    @abstractmethod
     def update(self, instance: Unit, data: dict) -> Unit: ...
 
     @abstractmethod
@@ -54,26 +57,30 @@ class DjangoUnitRepository(IUnitRepository):
         return Unit.objects.filter(
             condominium_id=condominium_id,
             kind=Unit.Kind.NAMED,
-            name=name,
+            name__iexact=name,
         ).first()
 
     def get_by_apartment(self, apartment, *, condominium_id):
         return Unit.objects.filter(
             condominium_id=condominium_id,
             kind=Unit.Kind.APARTMENT,
-            apartment=apartment,
+            apartment__iexact=apartment,
         ).first()
 
     def get_by_apartment_block(self, apartment, block, *, condominium_id):
         return Unit.objects.filter(
             condominium_id=condominium_id,
             kind=Unit.Kind.APARTMENT_BLOCK,
-            apartment=apartment,
-            block=block,
+            apartment__iexact=apartment,
+            block__iexact=block,
         ).first()
 
     def create(self, data):
         return Unit.objects.create(**data)
+
+    def bulk_create(self, rows):
+        objs = [Unit(**row) for row in rows]
+        return Unit.objects.bulk_create(objs)
 
     def update(self, instance, data):
         for k, v in data.items():

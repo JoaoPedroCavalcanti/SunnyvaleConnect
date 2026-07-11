@@ -15,7 +15,8 @@ class Unit(models.Model):
     kind = models.CharField(max_length=20, choices=Kind.choices)
     name = models.CharField(max_length=100, blank=True, default="")
     apartment = models.CharField(max_length=10, blank=True, default="")
-    block = models.CharField(max_length=10, blank=True, default="")
+    block = models.CharField(max_length=50, blank=True, default="")
+
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.ACTIVE
     )
@@ -54,6 +55,16 @@ class Unit(models.Model):
         if self.block:
             return f"Apt {self.apartment} / Block {self.block}"
         return f"Apt {self.apartment}"
+
+    def normalize_identifiers(self) -> None:
+        """Canonical form for apt/block codes (case-insensitive uniqueness)."""
+        self.apartment = (self.apartment or "").strip().upper()
+        self.block = (self.block or "").strip().upper()
+        self.name = (self.name or "").strip()
+
+    def save(self, *args, **kwargs):
+        self.normalize_identifiers()
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return self.display_name()
