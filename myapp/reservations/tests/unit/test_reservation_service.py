@@ -341,6 +341,63 @@ def test_approved_patch_excludes_itself_and_revalidates(setup):
     assert updated.end_time == time(12, 30)
 
 
+def test_edit_permissions_follow_reservation_status(setup):
+    pending = setup.service.create(
+        setup.resident,
+        _payload(start_time=time(10), end_time=time(12)),
+    )
+    updated_pending = setup.service.update(
+        setup.resident,
+        pending.id,
+        {
+            "start_time": time(11),
+            "end_time": time(13),
+            "guest_count": 8,
+        },
+    )
+    assert updated_pending.start_time == time(11)
+    assert updated_pending.guest_count == 8
+
+    approved = setup.service.approve(setup.staff, pending.id)
+    with pytest.raises(PermissionDeniedError):
+        setup.service.update(
+            setup.resident,
+            approved.id,
+            {"guest_count": 10},
+        )
+
+    updated_approved = setup.service.update(
+        setup.staff,
+        approved.id,
+        {
+            "start_time": time(12),
+            "end_time": time(14),
+            "guest_count": 12,
+        },
+    )
+    assert updated_approved.start_time == time(12)
+    assert updated_approved.guest_count == 12
+    with pytest.raises(BusinessRuleError) as exc_info:
+        setup.service.update(
+            setup.staff,
+            approved.id,
+            {"location_id": setup.other_location.id},
+        )
+    assert exc_info.value.field == "location_id"
+
+    rejected = setup.service.create(
+        setup.other,
+        _payload(location_id=2),
+    )
+    setup.service.reject(setup.staff, rejected.id, reason="maintenance")
+    with pytest.raises(BusinessRuleError):
+        setup.service.update(
+            setup.staff,
+            rejected.id,
+            {"guest_count": 5},
+        )
+
+
 def test_regular_user_ownership_is_hidden_as_not_found(setup):
     item = setup.service.create(setup.other, _payload())
     with pytest.raises(NotFoundError):

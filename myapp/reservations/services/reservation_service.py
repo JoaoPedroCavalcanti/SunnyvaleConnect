@@ -199,17 +199,29 @@ class ReservationService(IReservationService):
     def update(self, user, pk, payload):
         ensure_not_employee(user, action="book reservations")
         instance = self.get(user, pk)
+        if instance.status == Reservation.Status.REJECTED:
+            raise BusinessRuleError(
+                "Rejected reservations cannot be edited."
+            )
+        if (
+            not is_admin(user)
+            and instance.status != Reservation.Status.PENDING
+        ):
+            raise PermissionDeniedError(
+                "Residents can only edit pending reservations."
+            )
         data = dict(payload)
+        if "location_id" in data:
+            raise BusinessRuleError(
+                "Reservation location cannot be changed.",
+                field="location_id",
+            )
         if "status" in data:
             raise BusinessRuleError(
                 "Reservation status cannot be changed directly.",
                 field="status",
             )
         location = instance.location
-        if "location_id" in data:
-            location = self._active_location_for_user(
-                user, data.pop("location_id")
-            )
         target_user = instance.reservation_user
         if "reservation_user_id" in data:
             target_user = self._resolve_reservation_user(

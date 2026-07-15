@@ -70,7 +70,6 @@ class ReservationInputSerializer(serializers.Serializer):
 
 
 class ReservationPatchSerializer(serializers.Serializer):
-    location_id = serializers.IntegerField(required=False)
     reservation_user_id = serializers.IntegerField(
         required=False, allow_null=True
     )
@@ -80,6 +79,13 @@ class ReservationPatchSerializer(serializers.Serializer):
     guest_count = serializers.IntegerField(
         required=False, allow_null=True, min_value=0
     )
+
+    def validate(self, attrs):
+        if "location_id" in self.initial_data:
+            raise serializers.ValidationError(
+                {"location_id": "Reservation location cannot be changed."}
+            )
+        return attrs
 
 
 class ReservationRejectSerializer(serializers.Serializer):

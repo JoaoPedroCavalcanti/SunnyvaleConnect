@@ -78,6 +78,76 @@ class ReservationsAPISmoke(BaseTestsUsers):
             response.data["reservation_user"]["id"], self.user_a.id
         )
 
+    def test_pending_resident_and_approved_admin_can_edit(self):
+        location = self._create_location()
+        self._seed_membership(self.user_a)
+        self.authenticate(self.user_a)
+        created = self.client.post(
+            reverse("reservations:reservation-list-create"),
+            {
+                "location_id": location["id"],
+                "reservation_date": (
+                    date.today() + timedelta(days=5)
+                ).isoformat(),
+                "start_time": "10:00:00",
+                "end_time": "12:00:00",
+                "guest_count": 4,
+            },
+            format="json",
+        )
+        detail_url = reverse(
+            "reservations:reservation-detail",
+            kwargs={"pk": created.data["id"]},
+        )
+
+        resident_patch = self.client.patch(
+            detail_url,
+            {"guest_count": 6},
+            format="json",
+        )
+        self.assertEqual(
+            resident_patch.status_code, 200, resident_patch.data
+        )
+
+        self.authenticate(self.admin)
+        approve_url = reverse(
+            "reservations:reservation-approve",
+            kwargs={"pk": created.data["id"]},
+        )
+        approved = self.client.post(approve_url, {}, format="json")
+        self.assertEqual(approved.status_code, 200, approved.data)
+        admin_patch = self.client.patch(
+            detail_url,
+            {
+                "start_time": "13:00:00",
+                "end_time": "15:00:00",
+                "guest_count": 10,
+            },
+            format="json",
+        )
+        self.assertEqual(admin_patch.status_code, 200, admin_patch.data)
+        self.assertEqual(admin_patch.data["start_time"], "13:00:00")
+        self.assertEqual(admin_patch.data["guest_count"], 10)
+        immutable_location = self.client.patch(
+            detail_url,
+            {"location_id": 999},
+            format="json",
+        )
+        self.assertEqual(
+            immutable_location.status_code,
+            400,
+            immutable_location.data,
+        )
+        self.assertIn("location_id", immutable_location.data)
+
+        self.authenticate(self.user_a)
+        forbidden = self.client.patch(
+            detail_url,
+            {"guest_count": 12},
+            format="json",
+        )
+        self.assertEqual(forbidden.status_code, 403, forbidden.data)
+
     def test_reservation_today_cannot_start_in_the_past(self):
         location = self._create_location()
         self._seed_membership(self.user_a)
