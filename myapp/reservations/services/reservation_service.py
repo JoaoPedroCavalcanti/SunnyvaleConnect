@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from datetime import date
+from datetime import date, time
+
+from django.utils import timezone
 
 from reservations.models import Reservation
 from reservations.repositories.reservable_location_repository import (
@@ -39,6 +41,7 @@ class IReservationService(ABC):
         user,
         *,
         status: str | None = None,
+        period: str | None = None,
         condominium_id: int | None = None,
     ): ...
 
@@ -88,16 +91,37 @@ class ReservationService(IReservationService):
         self._users = user_repository
         self._email = email_sender
 
-    def list(self, user, *, status=None, condominium_id=None):
+    def list(
+        self,
+        user,
+        *,
+        status=None,
+        period=None,
+        condominium_id=None,
+    ):
         ensure_not_employee(user, action="access reservations")
         normalized = self._normalize_status(status)
+        normalized_period = self._normalize_period(period)
         tenant_id = self._list_tenant_id(user, condominium_id)
+        reference = None
+        if normalized_period:
+            reference = (
+                timezone.localdate(),
+                timezone.localtime().time().replace(tzinfo=None),
+            )
         if is_admin(user):
             return self._repo.list_for_condominium(
-                tenant_id, status=normalized
+                tenant_id,
+                status=normalized,
+                period=normalized_period,
+                reference=reference,
             )
         return self._repo.list_for_user(
-            user.id, tenant_id, status=normalized
+            user.id,
+            tenant_id,
+            status=normalized,
+            period=normalized_period,
+            reference=reference,
         )
 
     def availability(
@@ -147,7 +171,10 @@ class ReservationService(IReservationService):
         unit = self._first_active_unit(
             target_user, location.condominium_id, requester=user
         )
-        self._validate_date(data["reservation_date"])
+        self._validate_start(
+            data["reservation_date"],
+            data.get("start_time"),
+        )
         self._validate_slot(
             location.id,
             data["reservation_date"],
@@ -203,7 +230,7 @@ class ReservationService(IReservationService):
         )
         start_time = data.get("start_time", instance.start_time)
         end_time = data.get("end_time", instance.end_time)
-        self._validate_date(reservation_date)
+        self._validate_start(reservation_date, start_time)
         self._validate_slot(
             location.id,
             reservation_date,
@@ -228,7 +255,10 @@ class ReservationService(IReservationService):
         instance = self.get(user, pk)
         if instance.status == Reservation.Status.APPROVED:
             return instance
-        self._validate_date(instance.reservation_date)
+        self._validate_start(
+            instance.reservation_date,
+            instance.start_time,
+        )
         self._validate_slot(
             instance.location_id,
             instance.reservation_date,
@@ -343,11 +373,18 @@ class ReservationService(IReservationService):
                 )
 
     @staticmethod
-    def _validate_date(reservation_date):
-        if reservation_date < date.today():
+    def _validate_start(reservation_date, start_time):
+        today = timezone.localdate()
+        if reservation_date < today:
             raise BusinessRuleError(
                 "Reservations cannot be made for a past date.",
                 field="reservation_date",
+            )
+        current_time = timezone.localtime().time().replace(tzinfo=None)
+        if reservation_date == today and (start_time or time.min) < current_time:
+            raise BusinessRuleError(
+                "Reservations cannot start in the past.",
+                field="start_time",
             )
 
     @staticmethod
@@ -371,6 +408,19 @@ class ReservationService(IReservationService):
             raise BusinessRuleError(
                 f"Invalid status filter: {status!r}.",
                 field="status",
+            )
+        return normalized
+
+    @staticmethod
+    def _normalize_period(period):
+        if not period:
+            return None
+        normalized = period.lower()
+        if normalized not in {"future", "past"}:
+            raise BusinessRuleError(
+                f"Invalid period filter: {period!r}. "
+                "Expected 'future' or 'past'.",
+                field="period",
             )
         return normalized
 

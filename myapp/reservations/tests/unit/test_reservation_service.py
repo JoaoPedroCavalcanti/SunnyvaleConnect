@@ -1,4 +1,4 @@
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -24,22 +24,63 @@ class FakeReservationRepository(IReservationRepository):
         self.items = []
 
     def list_for_condominium(
-        self, condominium_id, *, status=None
+        self,
+        condominium_id,
+        *,
+        status=None,
+        period=None,
+        reference=None,
     ):
-        return [
+        items = [
             item
             for item in self.items
             if item.condominium_id == condominium_id
             and (not status or item.status == status)
         ]
+        if period == "future" and reference:
+            today, current_time = reference
+            items = [
+                item
+                for item in items
+                if item.reservation_date > today
+                or (
+                    item.reservation_date == today
+                    and (
+                        item.end_time is None
+                        or item.end_time >= current_time
+                    )
+                )
+            ]
+        elif period == "past" and reference:
+            today, current_time = reference
+            items = [
+                item
+                for item in items
+                if item.reservation_date < today
+                or (
+                    item.reservation_date == today
+                    and item.end_time is not None
+                    and item.end_time < current_time
+                )
+            ]
+        return items
 
     def list_for_user(
-        self, user_id, condominium_id, *, status=None
+        self,
+        user_id,
+        condominium_id,
+        *,
+        status=None,
+        period=None,
+        reference=None,
     ):
         return [
             item
             for item in self.list_for_condominium(
-                condominium_id, status=status
+                condominium_id,
+                status=status,
+                period=period,
+                reference=reference,
             )
             if item.reservation_user_id == user_id
         ]
@@ -326,6 +367,109 @@ def test_inactive_location_and_past_date_are_rejected(setup):
                 reservation_date=date.today() - timedelta(days=1)
             ),
         )
+
+
+def test_today_reservation_cannot_start_before_current_time(
+    setup, monkeypatch
+):
+    from reservations.services import reservation_service
+
+    monkeypatch.setattr(
+        reservation_service.timezone,
+        "localdate",
+        lambda: date(2026, 7, 15),
+    )
+    monkeypatch.setattr(
+        reservation_service.timezone,
+        "localtime",
+        lambda: datetime(2026, 7, 15, 15, 43),
+    )
+
+    with pytest.raises(BusinessRuleError) as exc_info:
+        setup.service.create(
+            setup.resident,
+            _payload(
+                reservation_date=date(2026, 7, 15),
+                start_time=time(10),
+                end_time=time(11),
+            ),
+        )
+
+    assert exc_info.value.field == "start_time"
+    created = setup.service.create(
+        setup.resident,
+        _payload(
+            location_id=2,
+            reservation_date=date(2026, 7, 15),
+            start_time=time(16),
+            end_time=time(17),
+        ),
+    )
+    assert created.start_time == time(16)
+
+
+def test_list_can_filter_reservations_by_period(setup, monkeypatch):
+    from reservations.services import reservation_service
+
+    monkeypatch.setattr(
+        reservation_service.timezone,
+        "localdate",
+        lambda: date(2026, 7, 15),
+    )
+    monkeypatch.setattr(
+        reservation_service.timezone,
+        "localtime",
+        lambda: datetime(2026, 7, 15, 15, 43),
+    )
+    upcoming = setup.service.create(
+        setup.resident,
+        _payload(
+            reservation_date=date(2026, 7, 15),
+            start_time=time(16),
+            end_time=time(17),
+        ),
+    )
+    tomorrow = setup.service.create(
+        setup.resident,
+        _payload(
+            location_id=2,
+            reservation_date=date(2026, 7, 16),
+        ),
+    )
+    past = SimpleNamespace(**vars(upcoming))
+    past.id = 999
+    past.reservation_date = date(2026, 7, 14)
+    setup.repository.items.append(past)
+    expired_today = SimpleNamespace(**vars(upcoming))
+    expired_today.id = 998
+    expired_today.start_time = time(7)
+    expired_today.end_time = time(8)
+    setup.repository.items.append(expired_today)
+    ongoing = SimpleNamespace(**vars(upcoming))
+    ongoing.id = 997
+    ongoing.start_time = time(15)
+    ongoing.end_time = time(16)
+    setup.repository.items.append(ongoing)
+
+    future_result = setup.service.list(
+        setup.resident, period="future"
+    )
+    past_result = setup.service.list(setup.resident, period="past")
+
+    assert {item.id for item in future_result} == {
+        upcoming.id,
+        tomorrow.id,
+        ongoing.id,
+    }
+    assert {item.id for item in past_result} == {
+        past.id,
+        expired_today.id,
+    }
+    assert {
+        item.id for item in future_result
+    }.isdisjoint(item.id for item in past_result)
+    with pytest.raises(BusinessRuleError):
+        setup.service.list(setup.resident, period="invalid")
 
 
 def test_reject_requires_reason_and_email_uses_location_name(setup):

@@ -146,6 +146,13 @@ class ReservationListCreateView(APIView):
             OpenApiParameter(
                 "condominium_id", int, required=False, location="query"
             ),
+            OpenApiParameter(
+                "period",
+                str,
+                required=False,
+                location="query",
+                enum=["future", "past"],
+            ),
         ],
         responses={200: PaginatedReservationOutputSerializer},
     )
@@ -160,6 +167,7 @@ class ReservationListCreateView(APIView):
         result = container.reservation_service.list(
             request.user,
             status=request.query_params.get("status"),
+            period=request.query_params.get("period"),
             condominium_id=condominium_id,
         )
         paginator = PageNumberPagination()

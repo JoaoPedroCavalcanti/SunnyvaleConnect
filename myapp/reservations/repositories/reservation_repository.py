@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
-from datetime import date
+from datetime import date, time
+
+from django.db.models import Q
 
 from reservations.models import Reservation
 
@@ -7,7 +9,12 @@ from reservations.models import Reservation
 class IReservationRepository(ABC):
     @abstractmethod
     def list_for_condominium(
-        self, condominium_id: int, *, status: str | None = None
+        self,
+        condominium_id: int,
+        *,
+        status: str | None = None,
+        period: str | None = None,
+        reference: tuple[date, time] | None = None,
     ): ...
 
     @abstractmethod
@@ -17,6 +24,8 @@ class IReservationRepository(ABC):
         condominium_id: int,
         *,
         status: str | None = None,
+        period: str | None = None,
+        reference: tuple[date, time] | None = None,
     ): ...
 
     @abstractmethod
@@ -66,14 +75,49 @@ class DjangoReservationRepository(IReservationRepository):
             "condominium", "location", "unit", "reservation_user"
         )
 
-    def list_for_condominium(self, condominium_id, *, status=None):
+    def list_for_condominium(
+        self,
+        condominium_id,
+        *,
+        status=None,
+        period=None,
+        reference=None,
+    ):
         queryset = self._base().filter(condominium_id=condominium_id)
         if status:
             queryset = queryset.filter(status=status)
-        return queryset.order_by("-reservation_date", "start_time", "id")
+        if period == "future" and reference:
+            today, current_time = reference
+            queryset = queryset.filter(
+                Q(reservation_date__gt=today)
+                | Q(
+                    reservation_date=today,
+                    end_time__gte=current_time,
+                )
+                | Q(reservation_date=today, end_time__isnull=True)
+            )
+        elif period == "past" and reference:
+            today, current_time = reference
+            queryset = queryset.filter(
+                Q(reservation_date__lt=today)
+                | Q(reservation_date=today, end_time__lt=current_time)
+            )
+        if period == "future":
+            ordering = ("reservation_date", "start_time", "id")
+        elif period == "past":
+            ordering = ("-reservation_date", "-start_time", "-id")
+        else:
+            ordering = ("-reservation_date", "start_time", "id")
+        return queryset.order_by(*ordering)
 
     def list_for_user(
-        self, user_id, condominium_id, *, status=None
+        self,
+        user_id,
+        condominium_id,
+        *,
+        status=None,
+        period=None,
+        reference=None,
     ):
         queryset = self._base().filter(
             condominium_id=condominium_id,
@@ -81,7 +125,29 @@ class DjangoReservationRepository(IReservationRepository):
         )
         if status:
             queryset = queryset.filter(status=status)
-        return queryset.order_by("-reservation_date", "start_time", "id")
+        if period == "future" and reference:
+            today, current_time = reference
+            queryset = queryset.filter(
+                Q(reservation_date__gt=today)
+                | Q(
+                    reservation_date=today,
+                    end_time__gte=current_time,
+                )
+                | Q(reservation_date=today, end_time__isnull=True)
+            )
+        elif period == "past" and reference:
+            today, current_time = reference
+            queryset = queryset.filter(
+                Q(reservation_date__lt=today)
+                | Q(reservation_date=today, end_time__lt=current_time)
+            )
+        if period == "future":
+            ordering = ("reservation_date", "start_time", "id")
+        elif period == "past":
+            ordering = ("-reservation_date", "-start_time", "-id")
+        else:
+            ordering = ("-reservation_date", "start_time", "id")
+        return queryset.order_by(*ordering)
 
     def get_by_id(self, pk):
         return self._base().filter(pk=pk).first()

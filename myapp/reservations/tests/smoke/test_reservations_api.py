@@ -1,8 +1,10 @@
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
+from unittest.mock import patch
 
 import pytest
 from django.urls import reverse
 
+from reservations.models import ReservableLocation, Reservation
 from tests_base.base_tests_user import BaseTestsUsers
 from units.models import Unit, UnitMembership
 
@@ -37,6 +39,7 @@ class ReservationsAPISmoke(BaseTestsUsers):
             role=UnitMembership.Role.RESIDENT,
             status=UnitMembership.Status.ACTIVE,
         )
+        return unit
 
     def test_location_catalog_is_tenant_visible_and_archived(self):
         location = self._create_location()
@@ -74,6 +77,109 @@ class ReservationsAPISmoke(BaseTestsUsers):
         self.assertEqual(
             response.data["reservation_user"]["id"], self.user_a.id
         )
+
+    def test_reservation_today_cannot_start_in_the_past(self):
+        location = self._create_location()
+        self._seed_membership(self.user_a)
+        self.authenticate(self.user_a)
+
+        with (
+            patch(
+                "reservations.services.reservation_service.timezone.localdate",
+                return_value=date(2026, 7, 15),
+            ),
+            patch(
+                "reservations.services.reservation_service.timezone.localtime",
+                return_value=datetime(2026, 7, 15, 15, 43),
+            ),
+        ):
+            response = self.client.post(
+                reverse("reservations:reservation-list-create"),
+                {
+                    "location_id": location["id"],
+                    "reservation_date": "2026-07-15",
+                    "start_time": "07:00:00",
+                    "end_time": "08:00:00",
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn("start_time", response.data)
+
+    def test_reservations_can_be_filtered_by_period(self):
+        location_data = self._create_location()
+        unit = self._seed_membership(self.user_a)
+        location = ReservableLocation.objects.get(pk=location_data["id"])
+        today = date(2026, 7, 15)
+        past = Reservation.objects.create(
+            condominium=self.condominium,
+            location=location,
+            unit=unit,
+            reservation_user=self.user_a,
+            reservation_date=today - timedelta(days=1),
+        )
+        future = Reservation.objects.create(
+            condominium=self.condominium,
+            location=location,
+            unit=unit,
+            reservation_user=self.user_a,
+            reservation_date=today + timedelta(days=1),
+        )
+        expired_today = Reservation.objects.create(
+            condominium=self.condominium,
+            location=location,
+            unit=unit,
+            reservation_user=self.user_a,
+            reservation_date=today,
+            start_time=time(7),
+            end_time=time(8),
+        )
+        ongoing = Reservation.objects.create(
+            condominium=self.condominium,
+            location=location,
+            unit=unit,
+            reservation_user=self.user_a,
+            reservation_date=today,
+            start_time=time(15),
+            end_time=time(16),
+        )
+        self.authenticate(self.user_a)
+
+        with (
+            patch(
+                "reservations.services.reservation_service.timezone.localdate",
+                return_value=today,
+            ),
+            patch(
+                "reservations.services.reservation_service.timezone.localtime",
+                return_value=datetime(2026, 7, 15, 15, 43),
+            ),
+        ):
+            future_response = self.client.get(
+                reverse("reservations:reservation-list-create")
+                + "?period=future"
+            )
+            past_response = self.client.get(
+                reverse("reservations:reservation-list-create")
+                + "?period=past"
+            )
+
+        self.assertEqual(
+            future_response.status_code, 200, future_response.data
+        )
+        self.assertEqual(
+            past_response.status_code, 200, past_response.data
+        )
+        future_ids = {
+            item["id"] for item in future_response.data["results"]
+        }
+        past_ids = {
+            item["id"] for item in past_response.data["results"]
+        }
+        self.assertEqual(future_ids, {future.id, ongoing.id})
+        self.assertEqual(past_ids, {past.id, expired_today.id})
+        self.assertTrue(future_ids.isdisjoint(past_ids))
 
     def test_resident_cannot_create_location(self):
         self.authenticate(self.user_a)

@@ -288,10 +288,12 @@ All endpoints require authentication.
 
 ### Reservations
 - `GET/POST /reservations/` lists and creates reservations; `GET/PATCH/DELETE /reservations/{pk}/` handles one reservation.
+- `GET /reservations/?period=future` returns reservations whose end is still ahead; `period=past` returns reservations whose end has elapsed; omitting `period` returns the full history.
 - Condominium admins can approve or reject pending reservations through `POST /reservations/{pk}/approve/` and `POST /reservations/{pk}/reject/`.
 - Residents create reservations with `PENDING` status; condominium admins create them with `APPROVED` status and can approve or reject pending requests.
 - Conflicts and the 30-minute gap apply only to the same location and date. Different locations may be booked at the same time.
 - `null` `start_time` and `end_time` represent an all-day reservation. Approved reservations block availability slots.
+- Reservations for today must start after the current local time.
 
 Create payload:
 ```json
