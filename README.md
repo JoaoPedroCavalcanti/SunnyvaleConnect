@@ -285,7 +285,7 @@ All endpoints require authentication.
 - `PATCH /reservation-locations/{pk}/` updates a location; `DELETE` archives it instead of removing it permanently.
 - `GET /reservation-locations/{pk}/availability/` returns that location's available slots, up to 93 days ahead.
 - Only a platform superuser may create, update, or archive locations. Creation must identify the condominium with exactly one of `condominium_id` or `condominium_code`.
-- `icon` is an optional frontend icon identifier, such as `grill`, `sports_soccer`, or `pool`.
+- `icon` is optional and accepts only: `outdoor_grill`, `celebration`, `sports_court`, `sports_field`, `meeting_room`, or `fitness_center`. The frontend uses a calendar fallback when it is empty.
 
 ### Reservations
 - `GET/POST /reservations/` lists and creates reservations; `GET/PATCH/DELETE /reservations/{pk}/` handles one reservation.

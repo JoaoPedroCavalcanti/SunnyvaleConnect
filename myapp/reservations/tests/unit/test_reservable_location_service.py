@@ -124,13 +124,13 @@ def test_icon_is_saved_and_can_be_updated(service):
         {
             "condominium_id": 1,
             "name": "Sports Court",
-            "icon": " sports_soccer ",
+            "icon": " sports_court ",
         },
     )
 
-    assert item.icon == "sports_soccer"
-    service.update(admin, item.id, {"icon": "sports_basketball"})
-    assert item.icon == "sports_basketball"
+    assert item.icon == "sports_court"
+    service.update(admin, item.id, {"icon": "fitness_center"})
+    assert item.icon == "fitness_center"
 
 
 def test_tenant_user_lists_only_active_own_locations(service):

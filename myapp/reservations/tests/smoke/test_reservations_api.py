@@ -87,6 +87,21 @@ class ReservationsAPISmoke(BaseTestsUsers):
         )
         self.assertEqual(response.status_code, 403)
 
+    def test_location_rejects_unknown_icon(self):
+        self.authenticate(self.admin)
+        response = self.client.post(
+            reverse("reservations:location-list-create"),
+            {
+                "condominium_id": self.condominium.id,
+                "name": "Pool",
+                "icon": "pool",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("icon", response.data)
+
     def test_conflict_is_scoped_to_the_same_location(self):
         first_location = self._create_location("Barbecue A")
         second_location = self._create_location("Barbecue B")

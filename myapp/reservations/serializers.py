@@ -20,8 +20,10 @@ class ReservableLocationInputSerializer(serializers.Serializer):
     description = serializers.CharField(
         required=False, allow_blank=True
     )
-    icon = serializers.CharField(
-        required=False, allow_blank=True, max_length=100
+    icon = serializers.ChoiceField(
+        choices=ReservableLocation.Icon.choices,
+        required=False,
+        allow_blank=True,
     )
 
 
@@ -30,8 +32,10 @@ class ReservableLocationPatchSerializer(serializers.Serializer):
     description = serializers.CharField(
         required=False, allow_blank=True
     )
-    icon = serializers.CharField(
-        required=False, allow_blank=True, max_length=100
+    icon = serializers.ChoiceField(
+        choices=ReservableLocation.Icon.choices,
+        required=False,
+        allow_blank=True,
     )
 
 

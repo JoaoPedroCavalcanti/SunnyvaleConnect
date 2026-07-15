@@ -4,6 +4,14 @@ from django.db.models.functions import Lower
 
 
 class ReservableLocation(models.Model):
+    class Icon(models.TextChoices):
+        OUTDOOR_GRILL = "outdoor_grill", "Barbecue"
+        CELEBRATION = "celebration", "Party"
+        SPORTS_COURT = "sports_court", "Sports court"
+        SPORTS_FIELD = "sports_field", "Sports field"
+        MEETING_ROOM = "meeting_room", "Meeting room"
+        FITNESS_CENTER = "fitness_center", "Fitness center"
+
     condominium = models.ForeignKey(
         "condominiums.Condominium",
         on_delete=models.PROTECT,
@@ -11,7 +19,12 @@ class ReservableLocation(models.Model):
     )
     name = models.CharField(max_length=150)
     description = models.TextField(blank=True, default="")
-    icon = models.CharField(max_length=100, blank=True, default="")
+    icon = models.CharField(
+        max_length=100,
+        choices=Icon.choices,
+        blank=True,
+        default="",
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
