@@ -130,3 +130,12 @@ class TestSignup:
         assert user.is_active is True
         ms = env["memberships"].list_for_unit(env["unit"].id)
         assert ms[0].status == UnitMembership.Status.ACTIVE
+
+    def test_admin_cannot_create_resident_without_unit(self, env):
+        admin = make_user(99, is_staff=True)
+
+        with pytest.raises(BusinessRuleError) as exc:
+            env["signup"].signup(admin, _user_payload(), None)
+
+        assert exc.value.field == "unit_request"
+        assert list(env["users"].list_all()) == []

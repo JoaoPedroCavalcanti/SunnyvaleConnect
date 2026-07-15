@@ -123,6 +123,16 @@ class UsersAPISmoke(BaseTestsUsers):
         self.assertEqual(response.status_code, 201, response.data)
         self.assertEqual(response.data["role"], "ADMIN")
 
+    def test_admin_cannot_create_resident_without_unit(self):
+        self.authenticate(self.admin)
+        payload = self.create_random_user_from_faker()
+        payload["role"] = "RESIDENT"
+
+        response = self.client.post(LIST_URL, data=payload, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("unit_request", response.data)
+
     def test_admin_creates_resident_joining_vacant_unit_is_active(self):
         from units.models import Unit, UnitMembership
 

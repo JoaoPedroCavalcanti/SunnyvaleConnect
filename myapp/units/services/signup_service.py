@@ -44,6 +44,17 @@ class SignupService(ISignupService):
         is_anonymous = requester is None or not getattr(
             requester, "is_authenticated", False
         )
+        if (
+            not is_anonymous
+            and getattr(requester, "is_staff", False)
+            and role == UserRole.RESIDENT
+            and unit_request is None
+        ):
+            raise BusinessRuleError(
+                "unit_request is required when an admin creates a resident.",
+                field="unit_request",
+            )
+
         if is_anonymous:
             condominium_code = data.pop("condominium_code", None)
             if not condominium_code:
