@@ -4,8 +4,7 @@ This documentation describes the API of a condominium system. The API is organiz
 ## Apps
 - Users
 - Units
-- Barbecue Reservations
-- Hall Reservations
+- Reservations
 - Visitor Management
 - Services Request
 - Payment of the Condominium
@@ -278,341 +277,34 @@ If you are not staff you can delete **just your** user.
 
 ------------------------------------------------------------------------------------------
 
-## Barbecue(BBQ) Reservations
-For all endpoints of this app, you need to be ***Authenticated***. 
-In some endpoints, there are two diferent responses, if you are **staff user or not**.
+## Reservations
+All endpoints require authentication.
 
-- #### List BBQ
-List all of **user logged** in BBQ Reservations
-<details>
- <summary><code>GET</code> <code><b>/</b></code> <code>bbq/</code></summary>
+### Reservable locations
+- `GET /reservation-locations/` lists the catalog; `POST /reservation-locations/` creates a location.
+- `PATCH /reservation-locations/{pk}/` updates a location; `DELETE` archives it instead of removing it permanently.
+- `GET /reservation-locations/{pk}/availability/` returns that location's available slots, up to 93 days ahead.
+- Only a platform superuser may create, update, or archive locations. Creation must identify the condominium with exactly one of `condominium_id` or `condominium_code`.
+- `icon` is an optional frontend icon identifier, such as `grill`, `sports_soccer`, or `pool`.
 
-##### Parameters
+### Reservations
+- `GET/POST /reservations/` lists and creates reservations; `GET/PATCH/DELETE /reservations/{pk}/` handles one reservation.
+- Condominium admins can approve or reject pending reservations through `POST /reservations/{pk}/approve/` and `POST /reservations/{pk}/reject/`.
+- Residents create reservations with `PENDING` status; condominium admins create them with `APPROVED` status and can approve or reject pending requests.
+- Conflicts and the 30-minute gap apply only to the same location and date. Different locations may be booked at the same time.
+- `null` `start_time` and `end_time` represent an all-day reservation. Approved reservations block availability slots.
 
-> None
-
-##### Responses
-
-> | staff user    | http code     | content-type                      | response                                                            |
-> |---------------|---------------|-----------------------------------|---------------------------------------------------------------------|
-> | `True`         | `200`         | `JSON`        | List of all BBQ Reservations                                                         |
-> | `False`         | `200`         | `JSON`        | **Yours** BBQ Reservations                                                         |
-
-##### JSON Response example:
-```json
-[
-	{
-		"id": 5,
-		"reservation_user": 34,
-		"reservation_date": "2025-03-08",
-		"guest_count": null
-	},
-	{
-		"id": 4,
-		"reservation_user": 34,
-		"reservation_date": "2025-02-06",
-		"guest_count": null
-	},
-	.
-	.
-	.
-	
-```
-</details>
-
-- #### Detail BBQ Reservation
-If not a staff, you can access **just one of yours bbq reservations**.
-
-<details>
- <summary><code>GET</code> <code><b>/</b></code> <code>bbq/{id}</code></summary>
-
-##### Parameters
-
-> None
-
-##### Responses
-
-> | staff user    | http code     | content-type                      | response                                                            |
-> |---------------|---------------|-----------------------------------|---------------------------------------------------------------------|
-> | `True`         | `200`         | `JSON`        | Detail of any BBQ Reservation                                                        |
-> | `False`         | `200`         | `JSON`        | Detail of one of yours BBQ Reservation                                                        |
-
-##### JSON Response example:
+Create payload:
 ```json
 {
-	"id": 5,
-	"reservation_user": 34,
-	"reservation_date": "2025-03-08",
-	"guest_count": null
+  "location_id": 1,
+  "reservation_date": "2026-07-20",
+  "start_time": "14:00:00",
+  "end_time": "16:00:00",
+  "guest_count": 12
 }
 ```
-</details>
 
-</details>
-
-- #### Create BBQ Reservation
-- The reservations_user field is automatically filled with your user if you are not a staff member. If you are staff, you must fill it manually.
-- Reservations cannot be created for past dates.
-- The reservation date must be unique.
-- There must be at least 30 days between each reservation.
-
-<details>
- <summary><code>POST</code> <code><b>/</b></code> <code>bbq/</code></summary>
-
-##### Parameters
-
-> | name      |  type     | data type               | description                                                           |
-> |-----------|-----------|-------------------------|-----------------------------------------------------------------------|
-> | reservation_date      |  required | object (JSON)   | Reservation date  |
-> | guest_count      |  optional | object (JSON)   | Number of guests  |
-> | reservation_user      |  required(if staff) | object (JSON)   | Id of the user that will reservate  |
-
-
-
-##### Responses
-
-> | staff user    | http code     | content-type                      | response                                                            |
-> |---------------|---------------|-----------------------------------|---------------------------------------------------------------------|
-> | `True`         | `201`         | `JSON`        | BBQ Reservation you created                                                       |
-> | `False`         | `200`         | `JSON`        | BBQ Reservation you created                                                       |
-
-##### JSON Response example:
-```json
-{
-	"id": 8,
-	"reservation_user": 25,
-	"reservation_date": "2025-04-09",
-	"guest_count": 3
-}
-```
-</details>
-
-
-
-- #### Update BBQ Reservation
-If you are not staff you can update **just one of yours** BBQ Reservations.
-
-<details>
- <summary><code>POST</code> <code><b>/</b></code> <code>bbq/{id}</code></summary>
-
-##### Parameters
-
-> | name      |  type     | data type               | description                                                           |
-> |-----------|-----------|-------------------------|-----------------------------------------------------------------------|
-> | reservation_date      |  optional | object (JSON)   | Reservation date  |
-> | guest_count      |  optional | object (JSON)   | Number of guests  |
-> | reservation_user      |  optional(if staff) | object (JSON)   | Id of the user that will reservate  |
-
-
-##### Responses
-
-> | staff user    | http code     | content-type                      | response                                                            |
-> |---------------|---------------|-----------------------------------|---------------------------------------------------------------------|
-> | `True`         | `200`         | `JSON`        | `User updated `                                                     |
-> | `False`         | `200`         | `JSON`        | `User updated`                                                      |
-
-##### JSON Response example:
-```json
-{
-	"id": 1,
-	"reservation_user": 1,
-	"reservation_date": "2024-12-12",
-	"guest_count": 33
-}
-```
-</details>
-
-
-
-- #### Delete User
-If you are not staff you can delete **just one of yours** BBQ Reservations.
-
-<details>
- <summary><code>POST</code> <code><b>/</b></code> <code>bbq/{id}</code></summary>
-
-##### Parameters
-
-`None`
-
-
-##### Responses
-
-> | staff user    | http code     | content-type                      | response                                                            |
-> |---------------|---------------|-----------------------------------|---------------------------------------------------------------------|
-> | `True`         | `200`         | `None`        | `None`                                                      |
-> | `False`         | `200`         | `None`        | `None`                                                     |
-> | `True` / `False`         | `404`         | `JSON`        | `Detail of Not found `                                                     |
-
-
-
-</details>
-
-------------------------------------------------------------------------------------------
-
-## Barbecue(BBQ) Reservations
-For all endpoints of this app, you need to be ***Authenticated***. 
-In some endpoints, there are two diferent responses, if you are **staff user or not**.
-
-- #### List BBQ
-List all of **user logged** in BBQ Reservations
-<details>
- <summary><code>GET</code> <code><b>/</b></code> <code>bbq/</code></summary>
-
-##### Parameters
-
-> None
-
-##### Responses
-
-> | staff user    | http code     | content-type                      | response                                                            |
-> |---------------|---------------|-----------------------------------|---------------------------------------------------------------------|
-> | `True`         | `200`         | `JSON`        | List of all BBQ Reservations                                                         |
-> | `False`         | `200`         | `JSON`        | **Yours** BBQ Reservations                                                         |
-
-##### JSON Response example:
-```json
-[
-	{
-		"id": 5,
-		"reservation_user": 34,
-		"reservation_date": "2025-03-08",
-		"guest_count": null
-	},
-	{
-		"id": 4,
-		"reservation_user": 34,
-		"reservation_date": "2025-02-06",
-		"guest_count": null
-	},
-	.
-	.
-	.
-	
-```
-</details>
-
-- #### Detail BBQ Reservation
-If not a staff, you can access **just one of yours bbq reservations**.
-
-<details>
- <summary><code>GET</code> <code><b>/</b></code> <code>bbq/{id}</code></summary>
-
-##### Parameters
-
-> None
-
-##### Responses
-
-> | staff user    | http code     | content-type                      | response                                                            |
-> |---------------|---------------|-----------------------------------|---------------------------------------------------------------------|
-> | `True`         | `200`         | `JSON`        | Detail of any BBQ Reservation                                                        |
-> | `False`         | `200`         | `JSON`        | Detail of one of yours BBQ Reservation                                                        |
-
-##### JSON Response example:
-```json
-{
-	"id": 5,
-	"reservation_user": 34,
-	"reservation_date": "2025-03-08",
-	"guest_count": null
-}
-```
-</details>
-
-</details>
-
-- #### Create BBQ Reservation
-- The reservations_user field is automatically filled with your user if you are not a staff member. If you are staff, you must fill it manually.
-- Reservations cannot be created for past dates.
-- The reservation date must be unique.
-- There must be at least 30 days between each reservation.
-
-<details>
- <summary><code>POST</code> <code><b>/</b></code> <code>bbq/</code></summary>
-
-##### Parameters
-
-> | name      |  type     | data type               | description                                                           |
-> |-----------|-----------|-------------------------|-----------------------------------------------------------------------|
-> | reservation_date      |  required | object (JSON)   | Reservation date  |
-> | guest_count      |  optional | object (JSON)   | Number of guests  |
-> | reservation_user      |  required(if staff) | object (JSON)   | Id of the user that will reservate  |
-
-
-
-##### Responses
-
-> | staff user    | http code     | content-type                      | response                                                            |
-> |---------------|---------------|-----------------------------------|---------------------------------------------------------------------|
-> | `True`         | `201`         | `JSON`        | BBQ Reservation you created                                                       |
-> | `False`         | `200`         | `JSON`        | BBQ Reservation you created                                                       |
-
-##### JSON Response example:
-```json
-{
-	"id": 8,
-	"reservation_user": 25,
-	"reservation_date": "2025-04-09",
-	"guest_count": 3
-}
-```
-</details>
-
-
-
-- #### Update BBQ Reservation
-If you are not staff you can update **just one of yours** BBQ Reservations.
-
-<details>
- <summary><code>POST</code> <code><b>/</b></code> <code>bbq/{id}</code></summary>
-
-##### Parameters
-
-> | name      |  type     | data type               | description                                                           |
-> |-----------|-----------|-------------------------|-----------------------------------------------------------------------|
-> | reservation_date      |  optional | object (JSON)   | Reservation date  |
-> | guest_count      |  optional | object (JSON)   | Number of guests  |
-> | reservation_user      |  optional(if staff) | object (JSON)   | Id of the user that will reservate  |
-
-
-##### Responses
-
-> | staff user    | http code     | content-type                      | response                                                            |
-> |---------------|---------------|-----------------------------------|---------------------------------------------------------------------|
-> | `True`         | `200`         | `JSON`        | `User updated `                                                     |
-> | `False`         | `200`         | `JSON`        | `User updated`                                                      |
-
-##### JSON Response example:
-```json
-{
-	"id": 1,
-	"reservation_user": 1,
-	"reservation_date": "2024-12-12",
-	"guest_count": 33
-}
-```
-</details>
-
-
-
-- #### Delete User
-If you are not staff you can delete **just one of yours** BBQ Reservations.
-
-<details>
- <summary><code>POST</code> <code><b>/</b></code> <code>bbq/{id}</code></summary>
-
-##### Parameters
-
-`None`
-
-
-##### Responses
-
-> | staff user    | http code     | content-type                      | response                                                            |
-> |---------------|---------------|-----------------------------------|---------------------------------------------------------------------|
-> | `True`         | `200`         | `None`        | `None`                                                      |
-> | `False`         | `200`         | `None`        | `None`                                                     |
-> | `True` / `False`         | `404`         | `JSON`        | `Detail of Not found `                                                     |
 
 Para rodar:
 ```
@@ -627,7 +319,6 @@ Pra gerar documentacao de rotas para o front:
 make schema
 ```
 
-</details>
 
 ---
 
@@ -770,15 +461,13 @@ Todos os e-mails do sistema passam por `shared/infrastructure/email_sender.py` (
 | 6 | `New household creation request` | Todos os admins (`is_staff=True`, ativos, com e-mail) | `POST /user/` (signup com `household_request` → `create_new`) | Novo morador pede criação de household nova (aguarda aprovação admin). |
 | 7 | `Your account is approved` | Morador aprovado | `POST /households/{pk}/approve/` **ou** `POST /households/{pk}/memberships/{mid}/approve/` | Admin aprova household nova → todos os memberships `PENDING_ADMIN` com e-mail. Titular aprova entrada → requester com e-mail. |
 | 8 | `Your request was rejected` | Morador rejeitado | `POST /households/{pk}/reject/` **ou** `POST /households/{pk}/memberships/{mid}/reject/` | Admin rejeita household → todos os membros com e-mail (motivo opcional no body). Titular rejeita entrada → requester com e-mail (motivo opcional). |
-| 9 | `Your barbecue area reservation is approved` | `reservation_user` da reserva | `POST /bbq/{pk}/approve/` | Admin aprova reserva `PENDING`. Se sem e-mail, **não envia** (aprovação segue). Idempotente: re-aprovar não reenvia. |
-| 10 | `Your party hall reservation is approved` | `reservation_user` da reserva | `POST /hall/{pk}/approve/` | Mesmas regras da churrasqueira. |
-| 11 | `Your barbecue area reservation was rejected` | `reservation_user` da reserva | `POST /bbq/{pk}/reject/` | Admin rejeita reserva `PENDING`. Motivo opcional no body (`reason`). Idempotente: re-rejeitar não reenvia. |
-| 12 | `Your party hall reservation was rejected` | `reservation_user` da reserva | `POST /hall/{pk}/reject/` | Mesmas regras da churrasqueira. |
+| 9 | `Your reservation is approved` | `reservation_user` da reserva | `POST /reservations/{pk}/approve/` | Admin aprova reserva `PENDING`. Se sem e-mail, **não envia** (aprovação segue). Idempotente: re-aprovar não reenvia. |
+| 10 | `Your reservation was rejected` | `reservation_user` da reserva | `POST /reservations/{pk}/reject/` | Admin rejeita reserva `PENDING`. Motivo obrigatório no body (`reason`). Idempotente: re-rejeitar não reenvia. |
 
 ### O que **não** envia e-mail
 
 - Login, refresh/verify de token, CRUD de usuário (exceto signup com `household_request`)
-- Criação de reservas (churrasqueira/salão), pagamentos, notícias, solicitações de serviço
+- Criação de reservas em locais configuráveis, pagamentos, notícias, solicitações de serviço
 - Cancelamento de visita (`DELETE /visitor_access/{id}/`)
 - Promover/rebaixar/remover membro, sair da household, transferir titularidade
 - Cadastro de dependentes

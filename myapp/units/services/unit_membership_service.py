@@ -2,7 +2,10 @@
 
 from abc import ABC, abstractmethod
 
-from units.models import Unit, UnitMembership
+from units.models import Unit, UnitMembership, UnitMembershipDecision
+from units.repositories.unit_membership_decision_repository import (
+    IUnitMembershipDecisionRepository,
+)
 from units.repositories.unit_membership_repository import IUnitMembershipRepository
 from units.repositories.unit_repository import IUnitRepository
 from shared.exceptions import (
@@ -53,12 +56,14 @@ class UnitMembershipService(IUnitMembershipService):
         unit_repository: IUnitRepository,
         user_repository: IUserRepository,
         email_sender: IEmailSender,
+        decision_repository: IUnitMembershipDecisionRepository,
         transaction_runner: ITransactionRunner,
     ):
         self._repo = membership_repository
         self._units = unit_repository
         self._users = user_repository
         self._email = email_sender
+        self._decisions = decision_repository
         self._tx = transaction_runner
 
     def list_for_unit(self, user, unit_id):
@@ -218,6 +223,14 @@ class UnitMembershipService(IUnitMembershipService):
                 membership, {"status": UnitMembership.Status.ACTIVE}
             )
             self._users.set_active(membership.user, True)
+            self._decisions.record(
+                self._build_decision_payload(
+                    membership,
+                    actor=actor,
+                    action=UnitMembershipDecision.Action.APPROVED,
+                    reason="",
+                )
+            )
 
         if membership.user.email:
             self._email.send_household_request_approved(
@@ -254,6 +267,14 @@ class UnitMembershipService(IUnitMembershipService):
         unit_label = unit.display_name()
 
         with self._tx.atomic():
+            self._decisions.record(
+                self._build_decision_payload(
+                    membership,
+                    actor=actor,
+                    action=UnitMembershipDecision.Action.REJECTED,
+                    reason=reason,
+                )
+            )
             self._repo.delete(membership)
             if (
                 not user.is_active
@@ -347,3 +368,26 @@ class UnitMembershipService(IUnitMembershipService):
     def _require_active(self, membership) -> None:
         if membership.status != UnitMembership.Status.ACTIVE:
             raise BusinessRuleError("Membership is not active.")
+
+    def _build_decision_payload(
+        self, membership, actor, action, reason
+    ) -> dict:
+        user = membership.user
+        unit = membership.unit
+        return {
+            "unit": unit,
+            "unit_kind": unit.kind,
+            "unit_name": unit.name,
+            "unit_apartment": unit.apartment,
+            "unit_block": unit.block,
+            "unit_display_name": unit.display_name(),
+            "actor": actor,
+            "actor_username": getattr(actor, "username", "") or "",
+            "actor_full_name": getattr(actor, "full_name", "") or "",
+            "target": user,
+            "target_username": getattr(user, "username", "") or "",
+            "target_full_name": getattr(user, "full_name", "") or "",
+            "target_email": getattr(user, "email", "") or "",
+            "action": action,
+            "reason": reason or "",
+        }

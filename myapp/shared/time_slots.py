@@ -1,11 +1,11 @@
 """Tiny helpers for day time intervals.
 
-Used by ``bbq_reservations`` and ``hall_reservations`` to detect
-overlapping or too-close bookings on the same day. The conventions are:
+Used by ``reservations`` to detect overlapping or too-close bookings
+for the same location and day. The conventions are:
 
 - ``start_time`` missing  → 00:00:00 (beginning of the day).
 - ``end_time``   missing  → 23:59:59 (end of the day).
-- Same-type bookings must not overlap and must leave a minimum gap
+- Bookings for the same location must not overlap and must leave a minimum gap
   (default 30 minutes) between one ending and the next starting.
 """
 

@@ -4,6 +4,9 @@ from types import SimpleNamespace
 
 from condominiums.repositories.condominium_repository import ICondominiumRepository
 from units.models import Unit, UnitMembership
+from units.repositories.unit_membership_decision_repository import (
+    IUnitMembershipDecisionRepository,
+)
 from units.repositories.unit_membership_repository import IUnitMembershipRepository
 from units.repositories.unit_repository import IUnitRepository
 from users.repositories.user_repository import IUserRepository
@@ -466,3 +469,32 @@ class FakeUnitMembershipRepository(IUnitMembershipRepository):
 
     def delete(self, instance):
         self._items.pop(instance.id, None)
+
+
+class FakeUnitMembershipDecisionRepository(
+    IUnitMembershipDecisionRepository
+):
+    def __init__(self):
+        self._items: list[object] = []
+        self._next_id = 1
+
+    def record(self, data):
+        item = SimpleNamespace(
+            id=self._next_id,
+            pk=self._next_id,
+            created_at=None,
+            unit_id=data["unit"].id,
+            actor_id=data["actor"].id,
+            target_id=data["target"].id,
+            **data,
+        )
+        self._items.append(item)
+        self._next_id += 1
+        return item
+
+    def list_for_unit(self, unit_id):
+        return [
+            decision
+            for decision in reversed(self._items)
+            if decision.unit_id == unit_id
+        ]

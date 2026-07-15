@@ -2,11 +2,12 @@
 
 import pytest
 
-from units.models import Unit, UnitMembership
+from units.models import Unit, UnitMembership, UnitMembershipDecision
 from units.services.unit_membership_service import UnitMembershipService
 from units.services.unit_service import UnitService
 from units.tests.unit._fakes import (
     FakeCondominiumRepository,
+    FakeUnitMembershipDecisionRepository,
     FakeUnitMembershipRepository,
     FakeUnitRepository,
     FakeUserRepository,
@@ -29,6 +30,7 @@ pytestmark = pytest.mark.unit
 def fixtures():
     units = FakeUnitRepository()
     memberships = FakeUnitMembershipRepository()
+    decisions = FakeUnitMembershipDecisionRepository()
     users = FakeUserRepository()
     email = FakeEmailSender()
     tx = NullTransactionRunner()
@@ -43,6 +45,7 @@ def fixtures():
         unit_repository=units,
         user_repository=users,
         email_sender=email,
+        decision_repository=decisions,
         transaction_runner=tx,
     )
 
@@ -75,6 +78,7 @@ def fixtures():
     return {
         "units": units,
         "memberships": memberships,
+        "decisions": decisions,
         "users": users,
         "email": email,
         "unit_service": unit_service,
@@ -132,6 +136,12 @@ class TestApproveReject:
 
         assert result.status == UnitMembership.Status.ACTIVE
         assert new_user.is_active is True
+        decision = fixtures["decisions"].list_for_unit(
+            fixtures["vacant_unit"].id
+        )[0]
+        assert decision.action == UnitMembershipDecision.Action.APPROVED
+        assert decision.actor_id == fixtures["admin"].id
+        assert decision.target_id == new_user.id
 
     def test_owner_approves_resident_request(self, fixtures):
         service = fixtures["service"]
@@ -161,6 +171,12 @@ class TestApproveReject:
 
         assert fixtures["memberships"].get_by_id(membership.id) is None
         assert users.get_by_id(new_user.id) is None
+        decision = fixtures["decisions"].list_for_unit(
+            fixtures["occupied_unit"].id
+        )[0]
+        assert decision.action == UnitMembershipDecision.Action.REJECTED
+        assert decision.reason == "nope"
+        assert decision.target_email == "r@x.com"
 
 
 class TestProvisionJoin:

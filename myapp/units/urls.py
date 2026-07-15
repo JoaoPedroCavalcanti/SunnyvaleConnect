@@ -4,6 +4,7 @@ from units.views import (
     PendingApprovalsView,
     UnitBulkProvisionView,
     UnitCatalogFiltersView,
+    UnitDecisionListView,
     UnitDetailView,
     UnitLeaveView,
     UnitListCreateView,
@@ -34,6 +35,11 @@ urlpatterns = [
     path("", UnitListCreateView.as_view(), name="list"),
     path("<int:pk>/", UnitDetailView.as_view(), name="detail"),
     path("<int:pk>/leave/", UnitLeaveView.as_view(), name="leave"),
+    path(
+        "<int:pk>/decisions/",
+        UnitDecisionListView.as_view(),
+        name="decisions-list",
+    ),
     path(
         "<int:pk>/memberships/",
         UnitMembershipListView.as_view(),

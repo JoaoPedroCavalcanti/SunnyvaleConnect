@@ -15,8 +15,7 @@ from users.views import LoginView
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("user/", include(("users.urls"), namespace="users")),
-    path("bbq/", include("bbq_reservations.urls")),
-    path("hall/", include("hall_reservations.urls")),
+    path("", include(("reservations.urls"), namespace="reservations")),
     path("visitor_access/", include("visitor_access.urls")),
     path("service_requests/", include("service_requests.urls")),
     path("condo_payments/", include("condo_payments.urls")),

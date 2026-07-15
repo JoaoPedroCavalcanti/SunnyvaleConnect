@@ -243,7 +243,7 @@ Olhe estes arquivos como referência ao criar coisa nova:
 
 - **App simples (sem regra)**: `myapp/sunny_vale_news/`
 - **App com regras + permissões**: `myapp/condo_payments/`
-- **App com regra de data + ownership**: `myapp/bbq_reservations/`
+- **App com regra de data + ownership**: `myapp/reservations/`
 - **App com side-effect (email)**: `myapp/delivery_notification/`
 - **App complexa (links, codes, multi-action)**: `myapp/visitor_access/`
 

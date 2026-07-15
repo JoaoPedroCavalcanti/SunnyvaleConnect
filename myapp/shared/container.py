@@ -133,16 +133,25 @@ class Container:
         return self._resolve("condominium_repository", DjangoCondominiumRepository)
 
     @property
-    def bbq_repository(self):
-        from bbq_reservations.repositories.bbq_repository import DjangoBBQRepository
+    def reservable_location_repository(self):
+        from reservations.repositories.reservable_location_repository import (
+            DjangoReservableLocationRepository,
+        )
 
-        return self._resolve("bbq_repository", DjangoBBQRepository)
+        return self._resolve(
+            "reservable_location_repository",
+            DjangoReservableLocationRepository,
+        )
 
     @property
-    def hall_repository(self):
-        from hall_reservations.repositories.hall_repository import DjangoHallRepository
+    def reservation_repository(self):
+        from reservations.repositories.reservation_repository import (
+            DjangoReservationRepository,
+        )
 
-        return self._resolve("hall_repository", DjangoHallRepository)
+        return self._resolve(
+            "reservation_repository", DjangoReservationRepository
+        )
 
     @property
     def condo_payment_repository(self):
@@ -221,6 +230,17 @@ class Container:
             "unit_membership_repository", DjangoUnitMembershipRepository
         )
 
+    @property
+    def unit_membership_decision_repository(self):
+        from units.repositories.unit_membership_decision_repository import (
+            DjangoUnitMembershipDecisionRepository,
+        )
+
+        return self._resolve(
+            "unit_membership_decision_repository",
+            DjangoUnitMembershipDecisionRepository,
+        )
+
     # ------------------------------------------------------------------ #
     # services                                                           #
     # ------------------------------------------------------------------ #
@@ -251,27 +271,30 @@ class Container:
         )
 
     @property
-    def bbq_service(self):
-        from bbq_reservations.services.bbq_service import BBQReservationService
+    def reservable_location_service(self):
+        from reservations.services.reservable_location_service import (
+            ReservableLocationService,
+        )
 
         return self._resolve(
-            "bbq_service",
-            lambda: BBQReservationService(
-                repository=self.bbq_repository,
-                membership_repository=self.unit_membership_repository,
-                email_sender=self.email_sender,
+            "reservable_location_service",
+            lambda: ReservableLocationService(
+                repository=self.reservable_location_repository,
+                condominium_repository=self.condominium_repository,
             ),
         )
 
     @property
-    def hall_service(self):
-        from hall_reservations.services.hall_service import HallReservationService
+    def reservation_service(self):
+        from reservations.services.reservation_service import ReservationService
 
         return self._resolve(
-            "hall_service",
-            lambda: HallReservationService(
-                repository=self.hall_repository,
+            "reservation_service",
+            lambda: ReservationService(
+                repository=self.reservation_repository,
+                location_repository=self.reservable_location_repository,
                 membership_repository=self.unit_membership_repository,
+                user_repository=self.user_repository,
                 email_sender=self.email_sender,
             ),
         )
@@ -377,7 +400,23 @@ class Container:
                 unit_repository=self.unit_repository,
                 user_repository=self.user_repository,
                 email_sender=self.email_sender,
+                decision_repository=self.unit_membership_decision_repository,
                 transaction_runner=self.transaction_runner,
+            ),
+        )
+
+    @property
+    def unit_membership_decision_service(self):
+        from units.services.unit_membership_decision_service import (
+            UnitMembershipDecisionService,
+        )
+
+        return self._resolve(
+            "unit_membership_decision_service",
+            lambda: UnitMembershipDecisionService(
+                decision_repository=self.unit_membership_decision_repository,
+                membership_repository=self.unit_membership_repository,
+                unit_repository=self.unit_repository,
             ),
         )
 
@@ -420,8 +459,7 @@ class Container:
             "admin_dashboard_service",
             lambda: AdminDashboardService(
                 user_repository=self.user_repository,
-                bbq_repository=self.bbq_repository,
-                hall_repository=self.hall_repository,
+                reservation_repository=self.reservation_repository,
                 news_repository=self.sunny_vale_news_repository,
                 cache=self.cache,
             ),

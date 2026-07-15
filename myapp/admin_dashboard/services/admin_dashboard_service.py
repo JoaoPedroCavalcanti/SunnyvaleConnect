@@ -9,10 +9,10 @@ near-instant response and we save five COUNT(*) per request.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from bbq_reservations.models import BBQReservationModel
-from bbq_reservations.repositories.bbq_repository import IBBQRepository
-from hall_reservations.models import HallReservationModel
-from hall_reservations.repositories.hall_repository import IHallRepository
+from reservations.models import Reservation
+from reservations.repositories.reservation_repository import (
+    IReservationRepository,
+)
 from shared.exceptions import PermissionDeniedError
 from shared.infrastructure.cache import ICache
 from shared.tenant import require_condominium_id
@@ -31,8 +31,6 @@ class AdminDashboardOverview:
     active_residents: int
     total_reservations: int
     pending_reservations: int
-    pending_bbq_reservations: int
-    pending_hall_reservations: int
     published_news: int
 
 
@@ -48,14 +46,12 @@ class AdminDashboardService(IAdminDashboardService):
     def __init__(
         self,
         user_repository: IUserRepository,
-        bbq_repository: IBBQRepository,
-        hall_repository: IHallRepository,
+        reservation_repository: IReservationRepository,
         news_repository: ISunnyValeNewsRepository,
         cache: ICache,
     ):
         self._users = user_repository
-        self._bbq = bbq_repository
-        self._hall = hall_repository
+        self._reservations = reservation_repository
         self._news = news_repository
         self._cache = cache
 
@@ -83,22 +79,12 @@ class AdminDashboardService(IAdminDashboardService):
         return result
 
     def _compute(self, condominium_id: int) -> AdminDashboardOverview:
-        approved = (
-            self._bbq.count_by_status(
-                BBQReservationModel.Status.APPROVED,
-                condominium_id=condominium_id,
-            )
-            + self._hall.count_by_status(
-                HallReservationModel.Status.APPROVED,
-                condominium_id=condominium_id,
-            )
-        )
-        pending_bbq = self._bbq.count_by_status(
-            BBQReservationModel.Status.PENDING,
+        approved = self._reservations.count_by_status(
+            Reservation.Status.APPROVED,
             condominium_id=condominium_id,
         )
-        pending_hall = self._hall.count_by_status(
-            HallReservationModel.Status.PENDING,
+        pending = self._reservations.count_by_status(
+            Reservation.Status.PENDING,
             condominium_id=condominium_id,
         )
         return AdminDashboardOverview(
@@ -106,8 +92,6 @@ class AdminDashboardService(IAdminDashboardService):
                 condominium_id=condominium_id
             ),
             total_reservations=approved,
-            pending_reservations=pending_bbq + pending_hall,
-            pending_bbq_reservations=pending_bbq,
-            pending_hall_reservations=pending_hall,
+            pending_reservations=pending,
             published_news=self._news.count_all(condominium_id=condominium_id),
         )

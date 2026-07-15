@@ -105,3 +105,61 @@ class UnitMembership(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user_id}@{self.unit_id} ({self.role}/{self.status})"
+
+
+class UnitMembershipDecision(models.Model):
+    """Immutable audit row for membership approvals and rejections."""
+
+    class Action(models.TextChoices):
+        APPROVED = "APPROVED", "Approved"
+        REJECTED = "REJECTED", "Rejected"
+
+    unit = models.ForeignKey(
+        Unit,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="membership_decisions",
+    )
+    unit_kind = models.CharField(max_length=20)
+    unit_name = models.CharField(max_length=100, blank=True, default="")
+    unit_apartment = models.CharField(max_length=10, blank=True, default="")
+    unit_block = models.CharField(max_length=50, blank=True, default="")
+    unit_display_name = models.CharField(max_length=160)
+
+    actor = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    actor_username = models.CharField(max_length=150, blank=True, default="")
+    actor_full_name = models.CharField(max_length=150, blank=True, default="")
+
+    target = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    target_username = models.CharField(max_length=150, blank=True, default="")
+    target_full_name = models.CharField(max_length=150, blank=True, default="")
+    target_email = models.EmailField(blank=True, default="")
+
+    action = models.CharField(max_length=20, choices=Action.choices)
+    reason = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["unit", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.action} {self.target_username or '?'} "
+            f"@{self.unit_display_name}"
+        )

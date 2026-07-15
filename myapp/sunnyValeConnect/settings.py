@@ -42,8 +42,7 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "users",
     "rest_framework_simplejwt",
-    "bbq_reservations",
-    "hall_reservations",
+    "reservations",
     "visitor_access",
     "service_requests",
     "condo_payments",
@@ -193,9 +192,8 @@ SPECTACULAR_SETTINGS = {
     "ENUM_NAME_OVERRIDES": {
         "CondoPaymentStatusEnum": "condo_payments.models.CondoPaymentModel.STATUS",
         "ServiceRequestStatusEnum": "service_requests.models.ServiceRequestModel.Status",
-        # BBQ + hall share PENDING / APPROVED / REJECTED — one name only.
         "ReservationApprovalStatusEnum": (
-            "bbq_reservations.models.BBQReservationModel.Status"
+            "reservations.models.Reservation.Status"
         ),
         "VisitorAccessStatusEnum": "visitor_access.models.VisitorAccessModel.Status",
         "UnitKindEnum": "units.models.Unit.Kind",

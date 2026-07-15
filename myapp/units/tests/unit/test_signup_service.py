@@ -9,6 +9,7 @@ from units.services.unit_membership_service import UnitMembershipService
 from units.services.unit_service import UnitService
 from units.tests.unit._fakes import (
     FakeCondominiumRepository,
+    FakeUnitMembershipDecisionRepository,
     FakeUnitMembershipRepository,
     FakeUnitRepository,
     FakeUserRepository,
@@ -37,6 +38,7 @@ VALID_CPF_B = "12345678909"
 def env():
     units = FakeUnitRepository()
     memberships = FakeUnitMembershipRepository()
+    decisions = FakeUnitMembershipDecisionRepository()
     users = FakeUserRepository()
     email = FakeEmailSender()
     user_service = UserService(
@@ -57,6 +59,7 @@ def env():
         unit_repository=units,
         user_repository=users,
         email_sender=email,
+        decision_repository=decisions,
         transaction_runner=tx,
     )
     condominium_service = CondominiumService(

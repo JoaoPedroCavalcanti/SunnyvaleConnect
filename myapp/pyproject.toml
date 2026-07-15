@@ -57,15 +57,13 @@ filterwarnings = [
 [tool.coverage.run]
 branch = true
 source = [
-    "bbq_reservations",
-    "hall_reservations",
+    "reservations",
     "visitor_access",
     "service_requests",
     "condo_payments",
     "delivery_notification",
     "sunny_vale_news",
     "users",
-    "units",
     "units",
     "condominiums",
     "admin_dashboard",

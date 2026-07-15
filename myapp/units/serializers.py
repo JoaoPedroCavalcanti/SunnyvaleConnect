@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from units.models import Unit, UnitMembership
+from units.models import Unit, UnitMembership, UnitMembershipDecision
 
 
 class UnitCreateInputSerializer(serializers.Serializer):
@@ -158,6 +158,56 @@ class PendingUnitApprovalSerializer(serializers.ModelSerializer):
 
 class UnitMembershipRejectSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class UnitDecisionUnitSerializer(serializers.Serializer):
+    id = serializers.IntegerField(source="unit_id", allow_null=True)
+    kind = serializers.CharField(source="unit_kind")
+    name = serializers.CharField(source="unit_name", allow_blank=True)
+    apartment = serializers.CharField(
+        source="unit_apartment", allow_blank=True
+    )
+    block = serializers.CharField(source="unit_block", allow_blank=True)
+    display_name = serializers.CharField(source="unit_display_name")
+
+
+class UnitDecisionActorSerializer(serializers.Serializer):
+    id = serializers.IntegerField(source="actor_id", allow_null=True)
+    username = serializers.CharField(
+        source="actor_username", allow_blank=True
+    )
+    full_name = serializers.CharField(
+        source="actor_full_name", allow_blank=True
+    )
+
+
+class UnitDecisionTargetSerializer(serializers.Serializer):
+    id = serializers.IntegerField(source="target_id", allow_null=True)
+    username = serializers.CharField(
+        source="target_username", allow_blank=True
+    )
+    full_name = serializers.CharField(
+        source="target_full_name", allow_blank=True
+    )
+    email = serializers.EmailField(source="target_email", allow_blank=True)
+
+
+class UnitMembershipDecisionOutputSerializer(serializers.ModelSerializer):
+    unit = UnitDecisionUnitSerializer(source="*", read_only=True)
+    actor = UnitDecisionActorSerializer(source="*", read_only=True)
+    target = UnitDecisionTargetSerializer(source="*", read_only=True)
+
+    class Meta:
+        model = UnitMembershipDecision
+        fields = [
+            "id",
+            "unit",
+            "actor",
+            "target",
+            "action",
+            "reason",
+            "created_at",
+        ]
 
 
 class UnitBulkBlockSerializer(serializers.Serializer):

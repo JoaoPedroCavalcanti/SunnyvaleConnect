@@ -21,6 +21,10 @@ def _memberships_list_url(pk):
     return reverse("units:memberships-list", kwargs={"pk": pk})
 
 
+def _decisions_url(pk):
+    return reverse("units:decisions-list", kwargs={"pk": pk})
+
+
 def _membership_approve_url(pk, mid):
     return reverse("units:membership-approve", kwargs={"pk": pk, "mid": mid})
 
@@ -175,6 +179,14 @@ class UnitMembershipFlowSmoke(BaseTestsUsers):
         membership.refresh_from_db()
         self.assertEqual(membership.status, UnitMembership.Status.ACTIVE)
 
+        decisions = self.client.get(_decisions_url(unit.id))
+        self.assertEqual(decisions.status_code, 200)
+        self.assertEqual(len(decisions.data), 1)
+        self.assertEqual(decisions.data[0]["action"], "APPROVED")
+        self.assertEqual(decisions.data[0]["unit"]["id"], unit.id)
+        self.assertEqual(decisions.data[0]["actor"]["id"], self.admin.id)
+        self.assertEqual(decisions.data[0]["target"]["id"], self.user_a.id)
+
     def test_join_occupied_unit_and_owner_approve(self):
         unit = Unit.objects.create(
             kind=Unit.Kind.APARTMENT,
@@ -236,6 +248,15 @@ class UnitMembershipFlowSmoke(BaseTestsUsers):
         self.assertFalse(
             UnitMembership.objects.filter(pk=membership.id).exists()
         )
+        decisions = self.client.get(_decisions_url(unit.id))
+        self.assertEqual(decisions.status_code, 200)
+        self.assertEqual(decisions.data[0]["action"], "REJECTED")
+        self.assertEqual(decisions.data[0]["reason"], "no")
+        self.assertEqual(decisions.data[0]["target"]["id"], self.user_b.id)
+
+        self.authenticate(self.user_b)
+        forbidden = self.client.get(_decisions_url(unit.id))
+        self.assertEqual(forbidden.status_code, 403)
 
     def test_detail_and_memberships_list(self):
         unit = Unit.objects.create(

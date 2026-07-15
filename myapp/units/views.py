@@ -14,6 +14,7 @@ from units.serializers import (
     UnitCatalogFiltersOutputSerializer,
     UnitCatalogOutputSerializer,
     UnitCreateInputSerializer,
+    UnitMembershipDecisionOutputSerializer,
     UnitMembershipOutputSerializer,
     UnitMembershipRejectSerializer,
     UnitOutputSerializer,
@@ -195,6 +196,22 @@ class UnitMembershipListView(APIView):
         )
         serializer = UnitMembershipOutputSerializer(memberships, many=True)
         return Response(serializer.data)
+
+
+@extend_schema(tags=["units"])
+class UnitDecisionListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        responses={200: UnitMembershipDecisionOutputSerializer(many=True)}
+    )
+    def get(self, request, pk: int):
+        items = container.unit_membership_decision_service.list_for_unit(
+            request.user, pk
+        )
+        return Response(
+            UnitMembershipDecisionOutputSerializer(items, many=True).data
+        )
 
 
 @extend_schema(tags=["units"])
