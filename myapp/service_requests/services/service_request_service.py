@@ -40,6 +40,16 @@ class IServiceRequestService(ABC):
     ): ...
 
     @abstractmethod
+    def list_mine(
+        self,
+        user,
+        status: str | None = None,
+        priority: str | None = None,
+        service_type: str | None = None,
+        period: str | None = None,
+    ): ...
+
+    @abstractmethod
     def get(self, user, pk: int) -> ServiceRequestModel: ...
 
     @abstractmethod
@@ -100,6 +110,34 @@ class ServiceRequestService(IServiceRequestService):
             priority=priority,
             service_type=service_type,
             responded_by_id=responded_by_id,
+            condominium_id=require_condominium_id(user),
+        )
+
+    def list_mine(
+        self,
+        user,
+        status=None,
+        priority=None,
+        service_type=None,
+        period=None,
+    ):
+        status = self._normalize_choice(
+            status, ServiceRequestModel.Status, "status"
+        )
+        priority = self._normalize_choice(
+            priority, ServiceRequestModel.Priority, "priority"
+        )
+        service_type = self._normalize_choice(
+            service_type, ServiceRequestModel.ServiceType, "service_type"
+        )
+        normalized_period = self._normalize_period(period)
+        return self._repo.list_for_user(
+            user.id,
+            status=status,
+            priority=priority,
+            service_type=service_type,
+            period=normalized_period,
+            reference=timezone.now() if normalized_period else None,
             condominium_id=require_condominium_id(user),
         )
 
@@ -249,3 +287,15 @@ class ServiceRequestService(IServiceRequestService):
                 field=field_name,
             )
         return upper
+
+    @staticmethod
+    def _normalize_period(value: str | None) -> str | None:
+        if not value:
+            return None
+        normalized = value.lower()
+        if normalized not in {"future", "past"}:
+            raise BusinessRuleError(
+                f"Invalid period: {value!r}. Expected 'future' or 'past'.",
+                field="period",
+            )
+        return normalized

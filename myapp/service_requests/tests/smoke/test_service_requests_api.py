@@ -25,6 +25,7 @@ pytestmark = pytest.mark.api
 
 
 LIST_URL = reverse("service_requests:list-create")
+MY_REQUESTS_URL = reverse("service_requests:my-requests")
 
 
 def detail_url(pk):
@@ -109,6 +110,42 @@ class ServiceRequestsAPISmoke(BaseTestsUsers):
         self.authenticate(self.admin)
         response = self.client.get(LIST_URL, {"priority": "URGENT"})
         self.assertEqual(response.data["count"], 1)
+
+    def test_user_lists_own_pending_requests_with_filters(self):
+        now = timezone.now()
+        expected = _make_request(
+            self.user_a,
+            priority=ServiceRequestModel.Priority.HIGH,
+            service_type=ServiceRequestModel.ServiceType.PLUMBING,
+            request_scheduled_date=now + timedelta(days=1),
+        )
+        _make_request(
+            self.user_a,
+            priority=ServiceRequestModel.Priority.HIGH,
+            service_type=ServiceRequestModel.ServiceType.PLUMBING,
+            request_scheduled_date=now - timedelta(days=1),
+        )
+        _make_request(
+            self.user_b,
+            priority=ServiceRequestModel.Priority.HIGH,
+            service_type=ServiceRequestModel.ServiceType.PLUMBING,
+            request_scheduled_date=now + timedelta(days=1),
+        )
+        self.authenticate(self.user_a)
+
+        response = self.client.get(
+            MY_REQUESTS_URL,
+            {
+                "period": "future",
+                "status": "PENDING",
+                "priority": "HIGH",
+                "service_type": "PLUMBING",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], expected.id)
 
     # --- detail / 404 --------------------------------------------- #
     def test_any_user_can_read_others(self):

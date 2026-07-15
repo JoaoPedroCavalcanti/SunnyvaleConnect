@@ -14,8 +14,10 @@ in-memory fake and verify the business rules:
 """
 
 from types import SimpleNamespace
+from datetime import timedelta
 
 import pytest
+from django.utils import timezone
 
 from users.models import EmployeeType, UserRole
 from service_requests.models import ServiceRequestModel
@@ -78,10 +80,12 @@ class FakeRepo(IServiceRequestRepository):
         status=None,
         priority=None,
         service_type=None,
+        period=None,
+        reference=None,
         *,
         condominium_id,
     ):
-        return [
+        items = [
             i
             for i in self._items.values()
             if i.requester_id == user_id
@@ -89,6 +93,21 @@ class FakeRepo(IServiceRequestRepository):
             == condominium_id
             and self._matches(i, status, priority, service_type)
         ]
+        if period == "future":
+            items = [
+                item
+                for item in items
+                if item.request_scheduled_date
+                and item.request_scheduled_date >= reference
+            ]
+        elif period == "past":
+            items = [
+                item
+                for item in items
+                if item.request_scheduled_date
+                and item.request_scheduled_date < reference
+            ]
+        return items
 
     def get_by_id(self, pk):
         return self._items.get(int(pk))
@@ -215,6 +234,51 @@ def test_admin_sees_all(service):
     service.create(_user(1), {"title": "a"})
     service.create(_user(2), {"title": "b"})
     assert len(list(service.list(_admin()))) == 2
+
+
+def test_my_requests_filters_requester_period_and_existing_fields(
+    service,
+):
+    now = timezone.now()
+    expected = service.create(
+        _user(1),
+        {
+            "title": "future plumbing",
+            "priority": "HIGH",
+            "service_type": "PLUMBING",
+            "request_scheduled_date": now + timedelta(days=1),
+        },
+    )
+    service.create(
+        _user(1),
+        {
+            "title": "past plumbing",
+            "priority": "HIGH",
+            "service_type": "PLUMBING",
+            "request_scheduled_date": now - timedelta(days=1),
+        },
+    )
+    service.create(
+        _user(2),
+        {
+            "title": "another resident",
+            "priority": "HIGH",
+            "service_type": "PLUMBING",
+            "request_scheduled_date": now + timedelta(days=1),
+        },
+    )
+
+    result = service.list_mine(
+        _user(1),
+        period="future",
+        status="PENDING",
+        priority="HIGH",
+        service_type="PLUMBING",
+    )
+
+    assert [item.id for item in result] == [expected.id]
+    with pytest.raises(BusinessRuleError):
+        service.list_mine(_user(1), period="invalid")
 
 
 def test_list_filters_validated(service):

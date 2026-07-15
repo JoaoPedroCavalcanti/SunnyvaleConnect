@@ -309,6 +309,10 @@ Create payload:
 }
 ```
 
+## My service requests
+- `GET /service_requests/` continues to list every request in the caller's condominium.
+- `GET /service_requests/my-requests/` lists only requests created by the authenticated user.
+- The personal endpoint accepts `status`, `priority`, `service_type`, and `period=future|past`. Period compares `request_scheduled_date` with the current time.
 
 Para rodar:
 ```

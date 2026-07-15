@@ -4,6 +4,7 @@ from service_requests.views import (
     ServiceRequestCompleteView,
     ServiceRequestDetailView,
     ServiceRequestListCreateView,
+    ServiceRequestMyListView,
     ServiceRequestRespondView,
 )
 
@@ -14,6 +15,11 @@ urlpatterns = [
         "",
         ServiceRequestListCreateView.as_view(),
         name="list-create",
+    ),
+    path(
+        "my-requests/",
+        ServiceRequestMyListView.as_view(),
+        name="my-requests",
     ),
     path(
         "<int:pk>/",

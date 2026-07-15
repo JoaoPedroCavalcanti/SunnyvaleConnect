@@ -1,6 +1,7 @@
 """Dumb repository for ServiceRequestModel."""
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 from service_requests.models import ServiceRequestModel
 
@@ -24,6 +25,8 @@ class IServiceRequestRepository(ABC):
         status: str | None = None,
         priority: str | None = None,
         service_type: str | None = None,
+        period: str | None = None,
+        reference: datetime | None = None,
         *,
         condominium_id: int,
     ): ...
@@ -64,7 +67,15 @@ class DjangoServiceRequestRepository(IServiceRequestRepository):
         )
 
     def list_for_user(
-        self, user_id, status=None, priority=None, service_type=None, *, condominium_id
+        self,
+        user_id,
+        status=None,
+        priority=None,
+        service_type=None,
+        period=None,
+        reference=None,
+        *,
+        condominium_id,
     ):
         qs = ServiceRequestModel.objects.select_related(
             "requester", "responded_by"
@@ -72,7 +83,12 @@ class DjangoServiceRequestRepository(IServiceRequestRepository):
             requester_id=user_id,
             requester__condominium_id=condominium_id,
         )
-        return self._apply_filters(qs, status, priority, service_type)
+        qs = self._apply_filters(qs, status, priority, service_type)
+        if period == "future":
+            qs = qs.filter(request_scheduled_date__gte=reference)
+        elif period == "past":
+            qs = qs.filter(request_scheduled_date__lt=reference)
+        return qs
 
     def get_by_id(self, pk):
         return (

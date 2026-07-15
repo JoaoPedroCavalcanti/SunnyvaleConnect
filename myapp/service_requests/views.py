@@ -107,6 +107,57 @@ class ServiceRequestListCreateView(APIView):
 
 
 @extend_schema(tags=["service_requests"])
+class ServiceRequestMyListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        operation_id="service_requests_my_requests_list",
+        parameters=[
+            OpenApiParameter(
+                name="status",
+                required=False,
+                type=str,
+                enum=_enum_values(ServiceRequestModel.Status),
+            ),
+            OpenApiParameter(
+                name="priority",
+                required=False,
+                type=str,
+                enum=_enum_values(ServiceRequestModel.Priority),
+            ),
+            OpenApiParameter(
+                name="service_type",
+                required=False,
+                type=str,
+                enum=_enum_values(ServiceRequestModel.ServiceType),
+            ),
+            OpenApiParameter(
+                name="period",
+                required=False,
+                type=str,
+                enum=["future", "past"],
+                description=(
+                    "Filters by request_scheduled_date relative to now."
+                ),
+            ),
+        ],
+        responses={200: ServiceRequestOutputSerializer(many=True)},
+    )
+    def get(self, request):
+        queryset = container.service_request_service.list_mine(
+            request.user,
+            status=request.query_params.get("status"),
+            priority=request.query_params.get("priority"),
+            service_type=request.query_params.get("service_type"),
+            period=request.query_params.get("period"),
+        )
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        serializer = ServiceRequestOutputSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+
+@extend_schema(tags=["service_requests"])
 class ServiceRequestDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
