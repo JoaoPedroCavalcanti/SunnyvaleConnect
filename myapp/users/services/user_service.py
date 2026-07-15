@@ -8,6 +8,7 @@ from shared.infrastructure.document_validators import (
     IPhoneValidator,
 )
 from shared.infrastructure.password_policy import IPasswordPolicy
+from shared.infrastructure.transactions import ITransactionRunner
 from shared.roles import ensure_not_employee, is_admin, is_employee
 from shared.tenant import (
     assert_same_condominium,
@@ -17,11 +18,16 @@ from shared.tenant import (
 )
 from users.models import EmployeeType, UserRole
 from users.repositories.user_repository import IUserRepository
+from units.models import UnitMembership
+from units.repositories.unit_membership_repository import (
+    IUnitMembershipRepository,
+)
 
 
-_IMMUTABLE_ON_PATCH = {"username", "cpf"}
+_ADMIN_ONLY_PATCH_FIELDS = {"username", "cpf"}
 _VALID_ROLES = {choice for choice, _ in UserRole.choices}
 _VALID_EMPLOYEE_TYPES = {choice for choice, _ in EmployeeType.choices}
+_UNSET = object()
 
 
 class IUserService(ABC):
@@ -64,11 +70,15 @@ class UserService(IUserService):
         password_policy: IPasswordPolicy,
         cpf_validator: ICPFValidator,
         phone_validator: IPhoneValidator,
+        membership_repository: IUnitMembershipRepository,
+        transaction_runner: ITransactionRunner,
     ):
         self._repo = user_repository
         self._policy = password_policy
         self._cpf = cpf_validator
         self._phone = phone_validator
+        self._memberships = membership_repository
+        self._transactions = transaction_runner
 
     def list_for(self, user, role=None, *, is_active=None, employee_type=None):
         if not is_admin(user):
@@ -227,15 +237,17 @@ class UserService(IUserService):
         return self._update(user, user, payload)
 
     def _update(self, requester, instance, payload):
-        for field in _IMMUTABLE_ON_PATCH & payload.keys():
-            payload.pop(field)
+        if not is_admin(requester):
+            for field in _ADMIN_ONLY_PATCH_FIELDS & payload.keys():
+                payload.pop(field)
 
-        if "is_active" in payload:
+        requested_is_active = payload.pop("is_active", _UNSET)
+        if requested_is_active is not _UNSET:
             if not getattr(requester, "is_staff", False):
                 raise PermissionDeniedError("Only admins can change account status.")
-            self._repo.set_active(instance, bool(payload.pop("is_active")))
-            if not payload:
-                return instance
+            new_is_active = bool(requested_is_active)
+            if requester.id == instance.id and not new_is_active:
+                raise PermissionDeniedError("Admins cannot deactivate themselves.")
 
         if "role" in payload:
             new_role = payload["role"]
@@ -274,11 +286,6 @@ class UserService(IUserService):
                 effective_role, payload["employee_types"]
             )
 
-        if "password" in payload:
-            errors = self._policy.validate(payload["password"])
-            if errors:
-                raise BusinessRuleError(message=errors, field="password")
-
         if "email" in payload and payload["email"]:
             payload["email"] = payload["email"].lower().strip()
             if (
@@ -289,6 +296,38 @@ class UserService(IUserService):
                     message="An account with this email address already exists.",
                     field="email",
                 )
+
+        if "username" in payload:
+            username = payload["username"].strip()
+            condominium_code = instance.condominium.code
+            if self._repo.exists_with_username(
+                username,
+                condominium_code=condominium_code,
+                exclude_id=instance.id,
+            ):
+                raise BusinessRuleError(
+                    message="A user with that username already exists.",
+                    field="username",
+                )
+            payload["username"] = build_tenant_username(
+                condominium_code, username
+            )
+
+        if "cpf" in payload:
+            cpf = self._cpf.normalize(payload["cpf"])
+            cpf_error = self._cpf.validate(cpf)
+            if cpf_error:
+                raise BusinessRuleError(message=cpf_error, field="cpf")
+            if self._repo.exists_with_cpf(
+                cpf,
+                condominium_id=instance.condominium_id,
+                exclude_id=instance.id,
+            ):
+                raise BusinessRuleError(
+                    message="An account with this CPF already exists.",
+                    field="cpf",
+                )
+            payload["cpf"] = cpf
 
         if "phone" in payload and payload["phone"]:
             phone = self._phone.normalize(payload["phone"])
@@ -301,20 +340,45 @@ class UserService(IUserService):
             payload.pop("apartment", None)
             payload.pop("block", None)
 
+        if requested_is_active is not _UNSET:
+            with self._transactions.atomic():
+                if new_is_active:
+                    self._repo.set_active(instance, True)
+                else:
+                    self._deactivate(instance)
+                if payload:
+                    return self._repo.update(instance, payload)
+                return instance
+
         return self._repo.update(instance, payload)
 
     def delete(self, user, pk):
+        if not is_admin(user):
+            raise PermissionDeniedError("Only admins can deactivate users.")
         instance = self.get_for(user, pk)
-        if (
-            user.id == instance.id
-            and getattr(instance, "role", None) == UserRole.ADMIN
-        ):
-            raise PermissionDeniedError("Admins cannot delete themselves.")
-        if getattr(instance, "role", None) == UserRole.EMPLOYEE:
-            raise PermissionDeniedError(
-                "Employees cannot be deleted. Deactivate the account instead."
+        if user.id == instance.id:
+            raise PermissionDeniedError("Admins cannot deactivate themselves.")
+        self._deactivate(instance)
+
+    def _deactivate(self, instance) -> None:
+        with self._transactions.atomic():
+            memberships = list(
+                self._memberships.list_active_for_user(instance.id)
             )
-        self._repo.delete(instance)
+            for membership in memberships:
+                if membership.role == UnitMembership.Role.OWNER:
+                    replacement = (
+                        self._memberships.get_oldest_active_replacement(
+                            membership.unit_id, instance.id
+                        )
+                    )
+                    if replacement:
+                        self._memberships.update(
+                            replacement,
+                            {"role": UnitMembership.Role.OWNER},
+                        )
+                self._memberships.soft_leave(membership)
+            self._repo.set_active(instance, False)
 
     @staticmethod
     def _normalize_employee_types(role: str, raw) -> list[str]:

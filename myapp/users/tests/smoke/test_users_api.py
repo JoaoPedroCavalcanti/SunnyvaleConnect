@@ -91,6 +91,61 @@ class UsersAPISmoke(BaseTestsUsers):
         self.assertEqual(
             self.client.delete(detail_url(self.user_a.id)).status_code, 204
         )
+        self.user_a.refresh_from_db()
+        self.assertFalse(self.user_a.is_active)
+
+    def test_resident_cannot_deactivate_self(self):
+        self.authenticate(self.user_a)
+        response = self.client.delete(detail_url(self.user_a.id))
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_can_edit_user_identifiers(self):
+        self.authenticate(self.admin)
+        new_cpf = self.create_random_user_from_faker()["cpf"]
+        response = self.client.patch(
+            detail_url(self.user_a.id),
+            data={
+                "username": "updated-user",
+                "cpf": new_cpf,
+                "email": "UPDATED@EXAMPLE.COM",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["username"], "updated-user")
+        self.assertEqual(response.data["cpf"], new_cpf)
+        self.assertEqual(response.data["email"], "updated@example.com")
+
+    def test_admin_deactivating_owner_transfers_ownership(self):
+        from units.models import Unit, UnitMembership
+
+        unit = Unit.objects.create(
+            kind=Unit.Kind.APARTMENT_BLOCK,
+            apartment="808",
+            block="T",
+            condominium=self.condominium,
+        )
+        owner = UnitMembership.objects.create(
+            unit=unit,
+            user=self.user_a,
+            role=UnitMembership.Role.OWNER,
+            status=UnitMembership.Status.ACTIVE,
+        )
+        replacement = UnitMembership.objects.create(
+            unit=unit,
+            user=self.user_b,
+            role=UnitMembership.Role.RESIDENT,
+            status=UnitMembership.Status.ACTIVE,
+        )
+        self.authenticate(self.admin)
+
+        response = self.client.delete(detail_url(self.user_a.id))
+
+        self.assertEqual(response.status_code, 204)
+        owner.refresh_from_db()
+        replacement.refresh_from_db()
+        self.assertEqual(owner.status, UnitMembership.Status.LEFT)
+        self.assertEqual(replacement.role, UnitMembership.Role.OWNER)
 
     def test_anonymous_signup_defaults_to_resident(self):
         payload = self.create_random_user_from_faker()
@@ -204,6 +259,13 @@ class UsersAPISmoke(BaseTestsUsers):
     def test_admin_cannot_delete_self(self):
         self.authenticate(self.admin)
         response = self.client.delete(detail_url(self.admin.id))
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_cannot_deactivate_self_via_patch(self):
+        self.authenticate(self.admin)
+        response = self.client.patch(
+            detail_url(self.admin.id), data={"is_active": False}
+        )
         self.assertEqual(response.status_code, 403)
 
     def test_resident_cannot_change_own_role(self):

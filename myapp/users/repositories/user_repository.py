@@ -33,11 +33,21 @@ class IUserRepository(ABC):
 
     @abstractmethod
     def exists_with_username(
-        self, username: str, *, condominium_code: str
+        self,
+        username: str,
+        *,
+        condominium_code: str,
+        exclude_id: int | None = None,
     ) -> bool: ...
 
     @abstractmethod
-    def exists_with_cpf(self, cpf: str, *, condominium_id: int) -> bool: ...
+    def exists_with_cpf(
+        self,
+        cpf: str,
+        *,
+        condominium_id: int,
+        exclude_id: int | None = None,
+    ) -> bool: ...
 
     @abstractmethod
     def create_user(self, **fields): ...
@@ -102,16 +112,22 @@ class DjangoUserRepository(IUserRepository):
     def exists_with_email(self, email):
         return self._model().objects.filter(email__iexact=email).exists()
 
-    def exists_with_username(self, username, *, condominium_code):
+    def exists_with_username(
+        self, username, *, condominium_code, exclude_id=None
+    ):
         storage_username = build_tenant_username(condominium_code, username)
-        return self._model().objects.filter(username=storage_username).exists()
+        qs = self._model().objects.filter(username=storage_username)
+        if exclude_id is not None:
+            qs = qs.exclude(pk=exclude_id)
+        return qs.exists()
 
-    def exists_with_cpf(self, cpf, *, condominium_id):
-        return (
-            self._model()
-            .objects.filter(condominium_id=condominium_id, cpf=cpf)
-            .exists()
+    def exists_with_cpf(self, cpf, *, condominium_id, exclude_id=None):
+        qs = self._model().objects.filter(
+            condominium_id=condominium_id, cpf=cpf
         )
+        if exclude_id is not None:
+            qs = qs.exclude(pk=exclude_id)
+        return qs.exists()
 
     def create_user(self, **fields):
         password = fields.pop("password")

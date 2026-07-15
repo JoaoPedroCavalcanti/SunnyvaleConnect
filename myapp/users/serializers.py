@@ -30,11 +30,12 @@ class UserInputSerializer(serializers.Serializer):
 
 
 class UserPatchSerializer(serializers.Serializer):
-    """CPF and username are immutable after creation."""
+    """Admins may edit identifiers; password changes use a separate flow."""
 
-    password = serializers.CharField(required=False, write_only=True)
+    username = serializers.CharField(required=False, max_length=150)
     full_name = serializers.CharField(required=False, max_length=150)
     birth_date = serializers.DateField(required=False)
+    cpf = serializers.CharField(required=False, max_length=14)
     phone = serializers.CharField(required=False, max_length=20)
     email = serializers.EmailField(required=False)
     apartment = serializers.CharField(required=False, max_length=10)

@@ -33,6 +33,11 @@ class IUnitMembershipRepository(ABC):
     def list_active_for_user(self, user_id: int) -> Iterable[UnitMembership]: ...
 
     @abstractmethod
+    def get_oldest_active_replacement(
+        self, unit_id: int, excluded_user_id: int
+    ) -> UnitMembership | None: ...
+
+    @abstractmethod
     def list_pending_for_user(self, user_id: int) -> Iterable[UnitMembership]: ...
 
     @abstractmethod
@@ -116,6 +121,18 @@ class DjangoUnitMembershipRepository(IUnitMembershipRepository):
         return UnitMembership.objects.filter(
             user_id=user_id, status=self._ACTIVE
         ).select_related("unit")
+
+    def get_oldest_active_replacement(self, unit_id, excluded_user_id):
+        return (
+            UnitMembership.objects.filter(
+                unit_id=unit_id,
+                status=self._ACTIVE,
+                user__is_active=True,
+            )
+            .exclude(user_id=excluded_user_id)
+            .order_by("joined_at", "id")
+            .first()
+        )
 
     def list_pending_for_user(self, user_id):
         return UnitMembership.objects.filter(

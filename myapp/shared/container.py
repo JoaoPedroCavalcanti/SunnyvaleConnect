@@ -255,6 +255,8 @@ class Container:
                 password_policy=self.password_policy,
                 cpf_validator=self.cpf_validator,
                 phone_validator=self.phone_validator,
+                membership_repository=self.unit_membership_repository,
+                transaction_runner=self.transaction_runner,
             ),
         )
 

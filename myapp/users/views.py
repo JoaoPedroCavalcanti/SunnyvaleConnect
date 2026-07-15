@@ -138,6 +138,11 @@ class UserDetailView(APIView):
     @extend_schema(
         request=UserPatchSerializer,
         responses={200: UserOutputSerializer},
+        description=(
+            "Condominium admins may edit any exposed field of a user in their "
+            "condominium except password. Username and CPF remain immutable "
+            "for self-service updates."
+        ),
     )
     def patch(self, request, pk: int):
         serializer = UserPatchSerializer(data=request.data)
@@ -147,7 +152,14 @@ class UserDetailView(APIView):
         )
         return Response(UserOutputSerializer(user).data)
 
-    @extend_schema(responses={204: None})
+    @extend_schema(
+        responses={204: None},
+        description=(
+            "Admin-only soft deletion. Deactivates the account, closes its "
+            "active unit memberships and transfers ownership to the oldest "
+            "active member when available. Admins cannot deactivate themselves."
+        ),
+    )
     def delete(self, request, pk: int):
         container.user_service.delete(request.user, pk)
         return Response(status=status.HTTP_204_NO_CONTENT)

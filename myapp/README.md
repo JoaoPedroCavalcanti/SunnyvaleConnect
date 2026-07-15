@@ -92,6 +92,15 @@ To verify an access token
 For all endpoints of this app, you need to be ***Authenticated***. 
 There are two diferent responses, if you are **staff user or not**.
 
+Condominium admins can manage users through `PATCH /user/{id}/` and
+`DELETE /user/{id}/`. PATCH supports every exposed account field except
+password, including username, CPF, email, role, employee types and active
+status. DELETE is a soft deletion (`is_active=false`), so the account and
+its history remain stored. An admin cannot deactivate or demote itself.
+When an owner is deactivated, ownership is transferred to the oldest active
+member of each unit; if there is no other active member, the unit remains
+without an owner.
+
 - #### List Users
 
 <details>

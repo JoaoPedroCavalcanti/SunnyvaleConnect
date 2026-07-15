@@ -187,15 +187,24 @@ class FakeUserRepository(IUserRepository):
             (u.email or "").lower().strip() == normalized for u in self._users.values()
         )
 
-    def exists_with_username(self, username, *, condominium_code):
+    def exists_with_username(
+        self, username, *, condominium_code, exclude_id=None
+    ):
         from shared.tenant import build_tenant_username
 
         storage_username = build_tenant_username(condominium_code, username)
-        return any(u.username == storage_username for u in self._users.values())
-
-    def exists_with_cpf(self, cpf, *, condominium_id):
         return any(
-            u.cpf == cpf and getattr(u, "condominium_id", None) == condominium_id
+            u.username == storage_username and u.id != exclude_id
+            for u in self._users.values()
+        )
+
+    def exists_with_cpf(
+        self, cpf, *, condominium_id, exclude_id=None
+    ):
+        return any(
+            u.cpf == cpf
+            and getattr(u, "condominium_id", None) == condominium_id
+            and u.id != exclude_id
             for u in self._users.values()
         )
 
@@ -392,6 +401,15 @@ class FakeUnitMembershipRepository(IUnitMembershipRepository):
             if m.user_id == user_id
             and m.status == UnitMembership.Status.ACTIVE
         ]
+
+    def get_oldest_active_replacement(self, unit_id, excluded_user_id):
+        candidates = [
+            m
+            for m in self.list_active_for_unit(unit_id)
+            if m.user_id != excluded_user_id
+            and getattr(m.user, "is_active", True)
+        ]
+        return min(candidates, key=lambda m: m.id, default=None)
 
     def list_pending_for_user(self, user_id):
         pending = {

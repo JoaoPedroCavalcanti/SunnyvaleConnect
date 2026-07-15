@@ -16,7 +16,10 @@ from shared.infrastructure.document_validators import (
     BrazilianPhoneValidator,
 )
 from shared.infrastructure.password_policy import DefaultPasswordPolicy
+from shared.infrastructure.transactions import NullTransactionRunner
 from shared.tenant import build_tenant_username
+from units.models import UnitMembership
+from units.tests.unit._fakes import FakeUnitMembershipRepository
 from users.models import EmployeeType, UserRole
 from users.repositories.user_repository import IUserRepository
 from users.services.user_service import UserService
@@ -115,13 +118,22 @@ class FakeUserRepository(IUserRepository):
         normalized = (email or "").lower().strip()
         return any(u.email.lower().strip() == normalized for u in self._users.values())
 
-    def exists_with_username(self, username, *, condominium_code):
+    def exists_with_username(
+        self, username, *, condominium_code, exclude_id=None
+    ):
         storage_username = build_tenant_username(condominium_code, username)
-        return any(u.username == storage_username for u in self._users.values())
-
-    def exists_with_cpf(self, cpf, *, condominium_id):
         return any(
-            u.cpf == cpf and u.condominium_id == condominium_id
+            u.username == storage_username and u.id != exclude_id
+            for u in self._users.values()
+        )
+
+    def exists_with_cpf(
+        self, cpf, *, condominium_id, exclude_id=None
+    ):
+        return any(
+            u.cpf == cpf
+            and u.condominium_id == condominium_id
+            and u.id != exclude_id
             for u in self._users.values()
         )
 
@@ -191,6 +203,8 @@ def service():
         password_policy=DefaultPasswordPolicy(),
         cpf_validator=BrazilianCPFValidator(),
         phone_validator=BrazilianPhoneValidator(),
+        membership_repository=FakeUnitMembershipRepository(),
+        transaction_runner=NullTransactionRunner(),
     )
 
 
@@ -315,6 +329,31 @@ class TestUpdateSelf:
         user = service.create(_anon(), _valid_payload())
         service.update_self(user, {"username": "hacked"})
         assert user.username == build_tenant_username(TEST_CONDOMINIUM_CODE, "joao")
+
+    def test_admin_can_edit_username_cpf_and_email(self, service):
+        user = service.create(_anon(), _valid_payload())
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+
+        updated = service.update(
+            admin,
+            user.id,
+            {
+                "username": "novo",
+                "cpf": VALID_CPF_B,
+                "email": "NEW@EXAMPLE.COM",
+            },
+        )
+
+        assert updated.username == build_tenant_username(
+            TEST_CONDOMINIUM_CODE, "novo"
+        )
+        assert updated.cpf == VALID_CPF_B
+        assert updated.email == "new@example.com"
+
+    def test_admin_cannot_deactivate_self_via_patch(self, service):
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        with pytest.raises(PermissionDeniedError):
+            service.update_self(admin, {"is_active": False})
 
 
 class TestEmployeeRestrictions:
@@ -447,6 +486,11 @@ class TestRoleOnUpdate:
 
 
 class TestRoleOnDelete:
+    def test_resident_cannot_deactivate_self(self, service):
+        resident = service.create(_anon(), _valid_payload())
+        with pytest.raises(PermissionDeniedError):
+            service.delete(resident, resident.id)
+
     def test_admin_cannot_delete_self(self, service):
         admin = service.create(
             _FakeUser(99, is_staff=True, role=UserRole.ADMIN),
@@ -459,6 +503,78 @@ class TestRoleOnDelete:
         boss = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
         other = service.create(boss, _valid_payload(role=UserRole.ADMIN))
         service.delete(boss, other.id)
+        assert other.is_active is False
+        assert service._repo.get_by_id(other.id) is other
+
+    def test_admin_can_deactivate_employee(self, service):
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        employee = service.create(
+            admin,
+            _valid_payload(
+                role=UserRole.EMPLOYEE,
+                employee_types=[EmployeeType.DOORMAN],
+                apartment="",
+                block="",
+            ),
+        )
+
+        service.delete(admin, employee.id)
+
+        assert employee.is_active is False
+
+    def test_deactivating_owner_transfers_to_oldest_active_member(self, service):
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        owner = service.create(_anon(), _valid_payload())
+        replacement = service.create(
+            _anon(),
+            _valid_payload(
+                username="replacement",
+                email="replacement@example.com",
+                cpf=VALID_CPF_B,
+            ),
+        )
+        unit = SimpleNamespace(id=10)
+        owner_membership = service._memberships.create(
+            {
+                "unit": unit,
+                "user": owner,
+                "role": UnitMembership.Role.OWNER,
+                "status": UnitMembership.Status.ACTIVE,
+            }
+        )
+        replacement_membership = service._memberships.create(
+            {
+                "unit": unit,
+                "user": replacement,
+                "role": UnitMembership.Role.RESIDENT,
+                "status": UnitMembership.Status.ACTIVE,
+            }
+        )
+
+        service.delete(admin, owner.id)
+
+        assert owner.is_active is False
+        assert owner_membership.status == UnitMembership.Status.LEFT
+        assert replacement_membership.status == UnitMembership.Status.ACTIVE
+        assert replacement_membership.role == UnitMembership.Role.OWNER
+
+    def test_deactivating_only_owner_leaves_unit_without_owner(self, service):
+        admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
+        owner = service.create(_anon(), _valid_payload())
+        unit = SimpleNamespace(id=10)
+        membership = service._memberships.create(
+            {
+                "unit": unit,
+                "user": owner,
+                "role": UnitMembership.Role.OWNER,
+                "status": UnitMembership.Status.ACTIVE,
+            }
+        )
+
+        service.delete(admin, owner.id)
+
+        assert owner.is_active is False
+        assert membership.status == UnitMembership.Status.LEFT
 
 
 class TestListByRole:

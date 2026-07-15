@@ -41,14 +41,16 @@ def env():
     decisions = FakeUnitMembershipDecisionRepository()
     users = FakeUserRepository()
     email = FakeEmailSender()
+    tx = NullTransactionRunner()
     user_service = UserService(
         user_repository=users,
         password_policy=DefaultPasswordPolicy(),
         cpf_validator=BrazilianCPFValidator(),
         phone_validator=BrazilianPhoneValidator(),
+        membership_repository=memberships,
+        transaction_runner=tx,
     )
     condominiums = FakeCondominiumRepository()
-    tx = NullTransactionRunner()
     unit_service = UnitService(
         unit_repository=units,
         membership_repository=memberships,
