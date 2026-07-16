@@ -285,6 +285,19 @@ If you are not staff you can delete **just your** user.
 
 ------------------------------------------------------------------------------------------
 
+## Unit ownership transfer
+- `POST /units/{unit_id}/memberships/{membership_id}/transfer-ownership/`
+  transfers ownership immediately.
+- Only the current active owner may call it.
+- The target must be another active user with an `ACTIVE` `RESIDENT`
+  membership in the same unit.
+- The target becomes `OWNER`; the previous owner remains active as
+  `RESIDENT`.
+- The response contains the updated `previous_owner` and `new_owner`
+  memberships.
+- Residents cannot leave a unit directly or deactivate their own account.
+  Those actions are reserved for a future email-code confirmation flow.
+
 ## Reservations
 All endpoints require authentication.
 

@@ -200,6 +200,22 @@ class TestProvisionJoin:
 
 
 class TestLeaveRemove:
+    def test_resident_cannot_leave_unit(self, fixtures):
+        resident = make_user(2)
+        fixtures["memberships"].create(
+            {
+                "unit": fixtures["occupied_unit"],
+                "user": resident,
+                "role": UnitMembership.Role.RESIDENT,
+                "status": UnitMembership.Status.ACTIVE,
+            }
+        )
+
+        with pytest.raises(PermissionDeniedError):
+            fixtures["service"].leave(
+                resident, fixtures["occupied_unit"].id
+            )
+
     def test_owner_cannot_leave_with_other_members(self, fixtures):
         service = fixtures["service"]
         resident = make_user(2)
@@ -243,3 +259,82 @@ class TestLeaveRemove:
         )
         service.remove(fixtures["owner"], membership.id)
         assert membership.status == UnitMembership.Status.LEFT
+
+
+class TestTransferOwnership:
+    def test_owner_transfers_to_active_resident(self, fixtures):
+        resident = make_user(2)
+        new_owner = fixtures["memberships"].create(
+            {
+                "unit": fixtures["occupied_unit"],
+                "user": resident,
+                "role": UnitMembership.Role.RESIDENT,
+                "status": UnitMembership.Status.ACTIVE,
+            }
+        )
+
+        result = fixtures["service"].transfer_ownership(
+            fixtures["owner"],
+            fixtures["occupied_unit"].id,
+            new_owner.id,
+        )
+
+        previous_owner = fixtures["memberships"].get_for_user_and_unit(
+            fixtures["owner"].id, fixtures["occupied_unit"].id
+        )
+        assert previous_owner.role == UnitMembership.Role.RESIDENT
+        assert new_owner.role == UnitMembership.Role.OWNER
+        assert result == {
+            "previous_owner": previous_owner,
+            "new_owner": new_owner,
+        }
+
+    def test_resident_cannot_transfer_ownership(self, fixtures):
+        resident = make_user(2)
+        membership = fixtures["memberships"].create(
+            {
+                "unit": fixtures["occupied_unit"],
+                "user": resident,
+                "role": UnitMembership.Role.RESIDENT,
+                "status": UnitMembership.Status.ACTIVE,
+            }
+        )
+
+        with pytest.raises(PermissionDeniedError):
+            fixtures["service"].transfer_ownership(
+                resident, fixtures["occupied_unit"].id, membership.id
+            )
+
+    def test_cannot_transfer_to_pending_member(self, fixtures):
+        pending = fixtures["memberships"].create(
+            {
+                "unit": fixtures["occupied_unit"],
+                "user": make_user(2),
+                "role": UnitMembership.Role.RESIDENT,
+                "status": UnitMembership.Status.PENDING_OWNER,
+            }
+        )
+
+        with pytest.raises(BusinessRuleError):
+            fixtures["service"].transfer_ownership(
+                fixtures["owner"],
+                fixtures["occupied_unit"].id,
+                pending.id,
+            )
+
+    def test_cannot_transfer_to_member_of_another_unit(self, fixtures):
+        membership = fixtures["memberships"].create(
+            {
+                "unit": fixtures["vacant_unit"],
+                "user": make_user(2),
+                "role": UnitMembership.Role.RESIDENT,
+                "status": UnitMembership.Status.ACTIVE,
+            }
+        )
+
+        with pytest.raises(NotFoundError):
+            fixtures["service"].transfer_ownership(
+                fixtures["owner"],
+                fixtures["occupied_unit"].id,
+                membership.id,
+            )

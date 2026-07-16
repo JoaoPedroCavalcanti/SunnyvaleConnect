@@ -12,6 +12,7 @@ from units.views import (
     UnitMembershipListView,
     UnitMembershipRejectView,
     UnitMembershipRemoveView,
+    UnitOwnershipTransferView,
 )
 
 app_name = "units"
@@ -59,5 +60,10 @@ urlpatterns = [
         "<int:pk>/memberships/<int:mid>/",
         UnitMembershipRemoveView.as_view(),
         name="membership-remove",
+    ),
+    path(
+        "<int:pk>/memberships/<int:mid>/transfer-ownership/",
+        UnitOwnershipTransferView.as_view(),
+        name="ownership-transfer",
     ),
 ]

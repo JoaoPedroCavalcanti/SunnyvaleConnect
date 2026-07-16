@@ -140,6 +140,11 @@ class UnitMembershipOutputSerializer(serializers.ModelSerializer):
         ]
 
 
+class UnitOwnershipTransferOutputSerializer(serializers.Serializer):
+    previous_owner = UnitMembershipOutputSerializer(read_only=True)
+    new_owner = UnitMembershipOutputSerializer(read_only=True)
+
+
 class PendingUnitApprovalSerializer(serializers.ModelSerializer):
     user = UnitMembershipUserSerializer(read_only=True)
     unit = UnitOutputSerializer(read_only=True)

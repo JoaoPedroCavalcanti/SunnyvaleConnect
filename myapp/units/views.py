@@ -17,6 +17,7 @@ from units.serializers import (
     UnitMembershipDecisionOutputSerializer,
     UnitMembershipOutputSerializer,
     UnitMembershipRejectSerializer,
+    UnitOwnershipTransferOutputSerializer,
     UnitOutputSerializer,
     UnitWithMembersOutputSerializer,
 )
@@ -252,10 +253,37 @@ class UnitMembershipRemoveView(APIView):
 
 
 @extend_schema(tags=["units"])
+class UnitOwnershipTransferView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=None,
+        responses={200: UnitOwnershipTransferOutputSerializer},
+        description=(
+            "Transfers ownership to an active resident of the same unit. "
+            "Only the current active owner can perform this action; the "
+            "previous owner remains an active resident."
+        ),
+    )
+    def post(self, request, pk: int, mid: int):
+        result = container.unit_membership_service.transfer_ownership(
+            request.user, pk, mid
+        )
+        return Response(UnitOwnershipTransferOutputSerializer(result).data)
+
+
+@extend_schema(tags=["units"])
 class UnitLeaveView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(request=None, responses={204: None})
+    @extend_schema(
+        request=None,
+        responses={204: None},
+        description=(
+            "Allows the sole active owner to leave and archives the empty "
+            "unit. Residents cannot leave directly."
+        ),
+    )
     def post(self, request, pk: int):
         container.unit_membership_service.leave(request.user, pk)
         return Response(status=status.HTTP_204_NO_CONTENT)

@@ -48,6 +48,11 @@ class IUnitMembershipService(ABC):
     @abstractmethod
     def leave(self, user, unit_id: int) -> None: ...
 
+    @abstractmethod
+    def transfer_ownership(
+        self, owner, unit_id: int, membership_id: int
+    ) -> dict: ...
+
 
 class UnitMembershipService(IUnitMembershipService):
     def __init__(
@@ -312,23 +317,69 @@ class UnitMembershipService(IUnitMembershipService):
         if not membership or membership.status != UnitMembership.Status.ACTIVE:
             raise NotFoundError("You are not a member of this unit.")
 
-        if membership.role == UnitMembership.Role.OWNER:
-            other_members = [
-                m
-                for m in self._repo.list_active_for_unit(unit.id)
-                if m.id != membership.id
-            ]
-            if other_members:
-                raise BusinessRuleError(
-                    "You are the owner but there are other members. "
-                    "Remove them first or contact an administrator."
-                )
+        if membership.role != UnitMembership.Role.OWNER:
+            raise PermissionDeniedError(
+                "Residents cannot leave a unit without owner action."
+            )
+
+        other_members = [
+            m
+            for m in self._repo.list_active_for_unit(unit.id)
+            if m.id != membership.id
+        ]
+        if other_members:
+            raise BusinessRuleError(
+                "You are the owner but there are other members. "
+                "Remove them first or contact an administrator."
+            )
 
         self._repo.soft_leave(membership)
 
         remaining = list(self._repo.list_active_for_unit(unit.id))
         if not remaining:
             self._units.update(unit, {"status": Unit.Status.ARCHIVED})
+
+    def transfer_ownership(self, owner, unit_id, membership_id):
+        unit = self._get_unit_or_404(unit_id)
+        owner_membership = self._repo.get_for_user_and_unit(owner.id, unit.id)
+        if (
+            not owner_membership
+            or owner_membership.status != UnitMembership.Status.ACTIVE
+            or owner_membership.role != UnitMembership.Role.OWNER
+        ):
+            raise PermissionDeniedError(
+                "Only the active owner can transfer ownership."
+            )
+
+        new_owner = self._get_membership_or_404(membership_id)
+        if new_owner.unit_id != unit.id:
+            raise NotFoundError("No membership matches the given query.")
+        if new_owner.user_id == owner.id:
+            raise BusinessRuleError(
+                "Ownership must be transferred to another member."
+            )
+        self._require_active(new_owner)
+        if new_owner.role != UnitMembership.Role.RESIDENT:
+            raise BusinessRuleError(
+                "Ownership can only be transferred to an active resident."
+            )
+        if not getattr(new_owner.user, "is_active", False):
+            raise BusinessRuleError(
+                "Ownership cannot be transferred to an inactive user."
+            )
+
+        with self._tx.atomic():
+            self._repo.update(
+                owner_membership, {"role": UnitMembership.Role.RESIDENT}
+            )
+            self._repo.update(
+                new_owner, {"role": UnitMembership.Role.OWNER}
+            )
+
+        return {
+            "previous_owner": owner_membership,
+            "new_owner": new_owner,
+        }
 
     def _get_unit_or_404(self, unit_id) -> Unit:
         unit = self._units.get_by_id(unit_id)

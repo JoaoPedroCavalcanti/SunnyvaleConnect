@@ -369,6 +369,25 @@ Shape:
 
 Cada item tem `id`, `label`, `apartment`, `block`, `floor`, `is_occupied`, `display_name`.
 
+### Transferência de owner
+
+```
+POST {{base_url}}/units/{unit_id}/memberships/{membership_id}/transfer-ownership/
+```
+
+Somente o owner ativo atual pode transferir. O `membership_id` deve pertencer
+a outro usuário ativo, com membership `ACTIVE` e role `RESIDENT`, na mesma
+unidade. A transferência é imediata: o destinatário vira `OWNER` e o owner
+anterior permanece na unidade como `RESIDENT`.
+
+A resposta `200` contém `previous_owner` e `new_owner` com os memberships
+atualizados.
+
+Residents não podem sair diretamente da unidade por `POST /units/{id}/leave/`
+nem inativar a própria conta. Esses fluxos ficam reservados para a futura
+confirmação por código de e-mail. O owner continua podendo remover residents
+da própria unidade.
+
 ---
 
 ## Units — bulk provision (platform superuser)

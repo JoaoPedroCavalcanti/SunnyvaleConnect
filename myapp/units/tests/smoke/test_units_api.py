@@ -33,6 +33,10 @@ def _membership_reject_url(pk, mid):
     return reverse("units:membership-reject", kwargs={"pk": pk, "mid": mid})
 
 
+def _ownership_transfer_url(pk, mid):
+    return reverse("units:ownership-transfer", kwargs={"pk": pk, "mid": mid})
+
+
 def _leave_url(pk):
     return reverse("units:leave", kwargs={"pk": pk})
 
@@ -279,6 +283,95 @@ class UnitMembershipFlowSmoke(BaseTestsUsers):
         members = self.client.get(_memberships_list_url(unit.id))
         self.assertEqual(members.status_code, 200)
         self.assertEqual(len(members.data), 1)
+
+    def test_owner_transfers_ownership_to_resident(self):
+        unit = Unit.objects.create(
+            kind=Unit.Kind.APARTMENT,
+            apartment="450",
+            condominium=self.condominium,
+            status=Unit.Status.ACTIVE,
+        )
+        previous_owner = UnitMembership.objects.create(
+            unit=unit,
+            user=self.user_a,
+            role=UnitMembership.Role.OWNER,
+            status=UnitMembership.Status.ACTIVE,
+        )
+        new_owner = UnitMembership.objects.create(
+            unit=unit,
+            user=self.user_b,
+            role=UnitMembership.Role.RESIDENT,
+            status=UnitMembership.Status.ACTIVE,
+        )
+        self.authenticate(self.user_a)
+
+        response = self.client.post(
+            _ownership_transfer_url(unit.id, new_owner.id)
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        previous_owner.refresh_from_db()
+        new_owner.refresh_from_db()
+        self.assertEqual(previous_owner.role, UnitMembership.Role.RESIDENT)
+        self.assertEqual(new_owner.role, UnitMembership.Role.OWNER)
+        self.assertEqual(
+            response.data["previous_owner"]["id"], previous_owner.id
+        )
+        self.assertEqual(response.data["new_owner"]["id"], new_owner.id)
+
+    def test_resident_cannot_transfer_ownership(self):
+        unit = Unit.objects.create(
+            kind=Unit.Kind.APARTMENT,
+            apartment="451",
+            condominium=self.condominium,
+            status=Unit.Status.ACTIVE,
+        )
+        UnitMembership.objects.create(
+            unit=unit,
+            user=self.user_a,
+            role=UnitMembership.Role.OWNER,
+            status=UnitMembership.Status.ACTIVE,
+        )
+        resident = UnitMembership.objects.create(
+            unit=unit,
+            user=self.user_b,
+            role=UnitMembership.Role.RESIDENT,
+            status=UnitMembership.Status.ACTIVE,
+        )
+        self.authenticate(self.user_b)
+
+        response = self.client.post(
+            _ownership_transfer_url(unit.id, resident.id)
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_resident_cannot_leave_unit(self):
+        unit = Unit.objects.create(
+            kind=Unit.Kind.APARTMENT,
+            apartment="452",
+            condominium=self.condominium,
+            status=Unit.Status.ACTIVE,
+        )
+        UnitMembership.objects.create(
+            unit=unit,
+            user=self.user_a,
+            role=UnitMembership.Role.OWNER,
+            status=UnitMembership.Status.ACTIVE,
+        )
+        membership = UnitMembership.objects.create(
+            unit=unit,
+            user=self.user_b,
+            role=UnitMembership.Role.RESIDENT,
+            status=UnitMembership.Status.ACTIVE,
+        )
+        self.authenticate(self.user_b)
+
+        response = self.client.post(_leave_url(unit.id))
+
+        self.assertEqual(response.status_code, 403)
+        membership.refresh_from_db()
+        self.assertEqual(membership.status, UnitMembership.Status.ACTIVE)
 
     def test_leave_archives_empty_unit(self):
         unit = Unit.objects.create(
