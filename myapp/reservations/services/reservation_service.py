@@ -130,21 +130,15 @@ class ReservationService(IReservationService):
         ensure_not_employee(user, action="access reservations")
         self._validate_availability_range(from_date, to_date)
         location = self._active_location_for_user(user, location_id)
-        approved_by_date = defaultdict(list)
-        for item in self._repo.list_approved_between(
+        blocking_by_date = defaultdict(list)
+        for item in self._repo.list_blocking_between(
             location.id, from_date, to_date
         ):
-            approved_by_date[item.reservation_date].append(item)
-        pending_by_date = defaultdict(list)
-        for item in self._repo.list_pending_for_user_between(
-            location.id, user.id, from_date, to_date
-        ):
-            pending_by_date[item.reservation_date].append(item)
+            blocking_by_date[item.reservation_date].append(item)
         return build_availability_range(
             from_date=from_date,
             to_date=to_date,
-            approved_by_date=approved_by_date,
-            pending_mine_by_date=pending_by_date,
+            blocking_by_date=blocking_by_date,
         )
 
     def get(self, user, pk):
@@ -357,7 +351,7 @@ class ReservationService(IReservationService):
                 "start_time must be earlier than end_time.",
                 field="start_time",
             )
-        existing_items = self._repo.list_approved_for_location_date(
+        existing_items = self._repo.list_blocking_for_location_date(
             location_id,
             reservation_date,
             exclude_id=exclude_id,

@@ -79,13 +79,13 @@ def booking_payload(instance, *, status: str) -> AvailabilityBooking:
 def day_status(
     day: date,
     *,
-    approved_count: int,
+    blocking_count: int,
     free_slots: list[FreeSlot],
     today: date,
 ) -> str:
     if day < today:
         return DAY_STATUS_PAST
-    if approved_count == 0:
+    if blocking_count == 0:
         return DAY_STATUS_FREE
     if free_slots:
         return DAY_STATUS_PARTIAL
@@ -96,34 +96,29 @@ def build_availability_range(
     *,
     from_date: date,
     to_date: date,
-    approved_by_date: dict[date, list],
-    pending_mine_by_date: dict[date, list],
+    blocking_by_date: dict[date, list],
     today: date | None = None,
     min_gap: timedelta = DEFAULT_MIN_GAP,
 ) -> AvailabilityRange:
     """Assemble one entry per day in ``[from_date, to_date]``.
 
-    ``approved_by_date`` drives occupied slots / free_slots.
-    ``pending_mine_by_date`` is appended to ``bookings`` for the caller
-    (does not occupy the calendar).
+    Pending and approved reservations both occupy slots. Rejected
+    reservations are not included.
     """
     today = today or date.today()
     days: list[DayAvailability] = []
     current = from_date
     while current <= to_date:
-        approved = approved_by_date.get(current, [])
-        pending_mine = pending_mine_by_date.get(current, [])
+        blocking = blocking_by_date.get(current, [])
         free = [
             FreeSlot(start_time=start, end_time=end)
             for start, end in compute_free_slots(
-                [(b.start_time, b.end_time) for b in approved],
+                [(b.start_time, b.end_time) for b in blocking],
                 min_gap=min_gap,
             )
         ]
         bookings = [
-            booking_payload(b, status="APPROVED") for b in approved
-        ] + [
-            booking_payload(b, status="PENDING") for b in pending_mine
+            booking_payload(b, status=b.status) for b in blocking
         ]
         bookings.sort(
             key=lambda b: (b.start_time or time(0, 0), b.id)
@@ -133,7 +128,7 @@ def build_availability_range(
                 date=current,
                 status=day_status(
                     current,
-                    approved_count=len(approved),
+                    blocking_count=len(blocking),
                     free_slots=free,
                     today=today,
                 ),

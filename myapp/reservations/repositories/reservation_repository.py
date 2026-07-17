@@ -32,7 +32,7 @@ class IReservationRepository(ABC):
     def get_by_id(self, pk: int) -> Reservation | None: ...
 
     @abstractmethod
-    def list_approved_for_location_date(
+    def list_blocking_for_location_date(
         self,
         location_id: int,
         reservation_date: date,
@@ -41,17 +41,8 @@ class IReservationRepository(ABC):
     ): ...
 
     @abstractmethod
-    def list_approved_between(
+    def list_blocking_between(
         self, location_id: int, from_date: date, to_date: date
-    ): ...
-
-    @abstractmethod
-    def list_pending_for_user_between(
-        self,
-        location_id: int,
-        user_id: int,
-        from_date: date,
-        to_date: date,
     ): ...
 
     @abstractmethod
@@ -152,39 +143,31 @@ class DjangoReservationRepository(IReservationRepository):
     def get_by_id(self, pk):
         return self._base().filter(pk=pk).first()
 
-    def list_approved_for_location_date(
+    def list_blocking_for_location_date(
         self, location_id, reservation_date, *, exclude_id=None
     ):
         queryset = Reservation.objects.filter(
             location_id=location_id,
             reservation_date=reservation_date,
-            status=Reservation.Status.APPROVED,
+            status__in=[
+                Reservation.Status.PENDING,
+                Reservation.Status.APPROVED,
+            ],
         )
         if exclude_id is not None:
             queryset = queryset.exclude(pk=exclude_id)
         return queryset.only("id", "start_time", "end_time")
 
-    def list_approved_between(self, location_id, from_date, to_date):
+    def list_blocking_between(self, location_id, from_date, to_date):
         return (
             self._base()
             .filter(
                 location_id=location_id,
                 reservation_date__range=(from_date, to_date),
-                status=Reservation.Status.APPROVED,
-            )
-            .order_by("reservation_date", "start_time", "id")
-        )
-
-    def list_pending_for_user_between(
-        self, location_id, user_id, from_date, to_date
-    ):
-        return (
-            self._base()
-            .filter(
-                location_id=location_id,
-                reservation_user_id=user_id,
-                reservation_date__range=(from_date, to_date),
-                status=Reservation.Status.PENDING,
+                status__in=[
+                    Reservation.Status.PENDING,
+                    Reservation.Status.APPROVED,
+                ],
             )
             .order_by("reservation_date", "start_time", "id")
         )

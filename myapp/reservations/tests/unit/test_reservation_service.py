@@ -88,7 +88,7 @@ class FakeReservationRepository(IReservationRepository):
     def get_by_id(self, pk):
         return next((item for item in self.items if item.id == pk), None)
 
-    def list_approved_for_location_date(
+    def list_blocking_for_location_date(
         self, location_id, reservation_date, *, exclude_id=None
     ):
         return [
@@ -96,29 +96,19 @@ class FakeReservationRepository(IReservationRepository):
             for item in self.items
             if item.location_id == location_id
             and item.reservation_date == reservation_date
-            and item.status == Reservation.Status.APPROVED
+            and item.status
+            in {Reservation.Status.PENDING, Reservation.Status.APPROVED}
             and item.id != exclude_id
         ]
 
-    def list_approved_between(self, location_id, from_date, to_date):
+    def list_blocking_between(self, location_id, from_date, to_date):
         return [
             item
             for item in self.items
             if item.location_id == location_id
             and from_date <= item.reservation_date <= to_date
-            and item.status == Reservation.Status.APPROVED
-        ]
-
-    def list_pending_for_user_between(
-        self, location_id, user_id, from_date, to_date
-    ):
-        return [
-            item
-            for item in self.items
-            if item.location_id == location_id
-            and item.reservation_user_id == user_id
-            and from_date <= item.reservation_date <= to_date
-            and item.status == Reservation.Status.PENDING
+            and item.status
+            in {Reservation.Status.PENDING, Reservation.Status.APPROVED}
         ]
 
     def count_by_status(self, status, *, condominium_id):
@@ -242,7 +232,11 @@ def setup():
     resident = _user(1)
     other = _user(2)
     staff = _user(3, staff=True)
-    unit = SimpleNamespace(id=1, condominium_id=1)
+    unit = SimpleNamespace(
+        id=1,
+        condominium_id=1,
+        display_name=lambda: "Apt 101",
+    )
     memberships = [
         SimpleNamespace(user_id=resident.id, unit=unit),
         SimpleNamespace(user_id=other.id, unit=unit),
@@ -297,16 +291,16 @@ def test_resident_pending_and_staff_approved(setup):
     assert approved.status == Reservation.Status.APPROVED
 
 
-def test_conflicts_are_location_specific_and_pending_does_not_block(setup):
+def test_pending_blocks_same_slot_but_other_location_is_allowed(setup):
     first = setup.service.create(
         setup.resident,
         _payload(start_time=time(10), end_time=time(12)),
     )
-    setup.service.create(
-        setup.other,
-        _payload(start_time=time(10), end_time=time(12)),
-    )
-    setup.service.approve(setup.staff, first.id)
+    with pytest.raises(BusinessRuleError):
+        setup.service.create(
+            setup.other,
+            _payload(start_time=time(10), end_time=time(12)),
+        )
     setup.service.create(
         setup.staff,
         _payload(
@@ -315,6 +309,7 @@ def test_conflicts_are_location_specific_and_pending_does_not_block(setup):
             end_time=time(12),
         ),
     )
+    setup.service.approve(setup.staff, first.id)
     with pytest.raises(BusinessRuleError):
         setup.service.create(
             setup.staff,
@@ -322,12 +317,10 @@ def test_conflicts_are_location_specific_and_pending_does_not_block(setup):
         )
 
 
-def test_approval_revalidates_current_conflicts(setup):
+def test_approval_excludes_the_pending_reservation_itself(setup):
     first = setup.service.create(setup.resident, _payload())
-    second = setup.service.create(setup.other, _payload())
-    setup.service.approve(setup.staff, first.id)
-    with pytest.raises(BusinessRuleError):
-        setup.service.approve(setup.staff, second.id)
+    approved = setup.service.approve(setup.staff, first.id)
+    assert approved.status == Reservation.Status.APPROVED
 
 
 def test_approved_patch_excludes_itself_and_revalidates(setup):
@@ -545,3 +538,31 @@ def test_availability_is_location_specific_and_limited(setup):
             from_date=_future(),
             to_date=_future(103),
         )
+
+
+def test_pending_reservation_marks_calendar_partial_for_other_users(setup):
+    pending = setup.service.create(
+        setup.resident,
+        _payload(start_time=time(10), end_time=time(12)),
+    )
+
+    result = setup.service.availability(
+        setup.other,
+        setup.location.id,
+        from_date=pending.reservation_date,
+        to_date=pending.reservation_date,
+    )
+
+    day = result.days[0]
+    assert day.status == "partial"
+    assert [booking.status for booking in day.bookings] == [
+        Reservation.Status.PENDING
+    ]
+    assert day.bookings[0].id == pending.id
+    assert all(
+        not (
+            slot.start_time < time(12, 30)
+            and slot.end_time > time(9, 30)
+        )
+        for slot in day.free_slots
+    )
