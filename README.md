@@ -482,6 +482,28 @@ Com nome: `"as_named": true, "name_prefix": "Casa "` → `Casa 1`…
 
 ---
 
+## Demo data local
+
+Popula todos os módulos de negócio sem apagar dados reais. A carga é
+idempotente: ao rodar novamente, substitui apenas registros marcados com
+`[DEMO]` e preserva usuários/senhas existentes.
+
+```bash
+docker exec myapp python manage.py seed_demo_data
+```
+
+Por padrão usa o condomínio de `adminchacon@email.com`. Para outro:
+
+```bash
+docker exec myapp python manage.py seed_demo_data \
+  --condominium-code SEEDTEST
+```
+
+Usuários demo novos usam `Sunnyvale123!`; os usuários já existentes não têm a
+senha alterada.
+
+---
+
 ## E-mails disparados
 
 Todos os e-mails do sistema passam por `shared/infrastructure/email_sender.py` (`DjangoEmailSender`). Falhas de SMTP são logadas e **não** quebram a request que disparou o envio. Destinatário vazio é ignorado (exceto entrega, que retorna erro antes de criar o registro).
