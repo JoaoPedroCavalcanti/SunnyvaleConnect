@@ -391,6 +391,41 @@ def test_edit_permissions_follow_reservation_status(setup):
         )
 
 
+def test_pending_and_approved_future_reservations_can_be_deleted(setup):
+    pending = setup.service.create(setup.resident, _payload())
+    setup.service.delete(setup.resident, pending.id)
+    assert setup.repository.get_by_id(pending.id) is None
+
+    approved = setup.service.create(
+        setup.staff,
+        _payload(reservation_user_id=setup.resident.id),
+    )
+    setup.service.delete(setup.staff, approved.id)
+    assert setup.repository.get_by_id(approved.id) is None
+
+
+def test_rejected_reservation_cannot_be_deleted(setup):
+    item = setup.service.create(setup.resident, _payload())
+    setup.service.reject(setup.staff, item.id, reason="maintenance")
+
+    with pytest.raises(BusinessRuleError) as exc:
+        setup.service.delete(setup.resident, item.id)
+
+    assert exc.value.field == "status"
+    assert setup.repository.get_by_id(item.id) is item
+
+
+def test_past_reservation_cannot_be_deleted(setup):
+    item = setup.service.create(setup.resident, _payload())
+    item.reservation_date = date.today() - timedelta(days=1)
+
+    with pytest.raises(BusinessRuleError) as exc:
+        setup.service.delete(setup.resident, item.id)
+
+    assert exc.value.field == "reservation_date"
+    assert setup.repository.get_by_id(item.id) is item
+
+
 def test_regular_user_ownership_is_hidden_as_not_found(setup):
     item = setup.service.create(setup.other, _payload())
     with pytest.raises(NotFoundError):

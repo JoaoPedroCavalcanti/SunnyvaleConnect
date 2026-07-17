@@ -254,7 +254,21 @@ class ReservationService(IReservationService):
 
     def delete(self, user, pk):
         ensure_not_employee(user, action="book reservations")
-        self._repo.delete(self.get(user, pk))
+        instance = self.get(user, pk)
+        if instance.status not in {
+            Reservation.Status.PENDING,
+            Reservation.Status.APPROVED,
+        }:
+            raise BusinessRuleError(
+                "Only pending or approved reservations can be deleted.",
+                field="status",
+            )
+        if self._is_past(instance):
+            raise BusinessRuleError(
+                "Past reservations cannot be deleted.",
+                field="reservation_date",
+            )
+        self._repo.delete(instance)
 
     def approve(self, user, pk):
         self._ensure_staff(user, "approve")
@@ -392,6 +406,16 @@ class ReservationService(IReservationService):
                 "Reservations cannot start in the past.",
                 field="start_time",
             )
+
+    @staticmethod
+    def _is_past(instance) -> bool:
+        today = timezone.localdate()
+        if instance.reservation_date < today:
+            return True
+        if instance.reservation_date > today or instance.end_time is None:
+            return False
+        current_time = timezone.localtime().time().replace(tzinfo=None)
+        return instance.end_time < current_time
 
     @staticmethod
     def _validate_availability_range(from_date, to_date):

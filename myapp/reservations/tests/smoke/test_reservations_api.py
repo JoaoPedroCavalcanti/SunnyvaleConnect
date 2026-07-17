@@ -251,6 +251,52 @@ class ReservationsAPISmoke(BaseTestsUsers):
         self.assertEqual(past_ids, {past.id, expired_today.id})
         self.assertTrue(future_ids.isdisjoint(past_ids))
 
+    def test_delete_rejects_rejected_and_past_reservations(self):
+        location_data = self._create_location()
+        unit = self._seed_membership(self.user_a)
+        location = ReservableLocation.objects.get(pk=location_data["id"])
+        rejected = Reservation.objects.create(
+            condominium=self.condominium,
+            location=location,
+            unit=unit,
+            reservation_user=self.user_a,
+            reservation_date=date.today() + timedelta(days=2),
+            start_time=time(10),
+            end_time=time(12),
+            status=Reservation.Status.REJECTED,
+        )
+        past = Reservation.objects.create(
+            condominium=self.condominium,
+            location=location,
+            unit=unit,
+            reservation_user=self.user_a,
+            reservation_date=date.today() - timedelta(days=1),
+            start_time=time(10),
+            end_time=time(12),
+            status=Reservation.Status.PENDING,
+        )
+        self.authenticate(self.user_a)
+
+        rejected_response = self.client.delete(
+            reverse(
+                "reservations:reservation-detail",
+                kwargs={"pk": rejected.id},
+            )
+        )
+        past_response = self.client.delete(
+            reverse(
+                "reservations:reservation-detail",
+                kwargs={"pk": past.id},
+            )
+        )
+
+        self.assertEqual(rejected_response.status_code, 400)
+        self.assertIn("status", rejected_response.data)
+        self.assertEqual(past_response.status_code, 400)
+        self.assertIn("reservation_date", past_response.data)
+        self.assertTrue(Reservation.objects.filter(pk=rejected.id).exists())
+        self.assertTrue(Reservation.objects.filter(pk=past.id).exists())
+
     def test_resident_cannot_create_location(self):
         self.authenticate(self.user_a)
         response = self.client.post(
