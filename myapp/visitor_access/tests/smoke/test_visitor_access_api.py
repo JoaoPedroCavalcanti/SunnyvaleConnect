@@ -176,6 +176,56 @@ class VisitorAccessAPISmoke(BaseTestsUsers):
         obj.refresh_from_db()
         self.assertEqual(obj.status, VisitorAccessModel.Status.CANCELLED)
 
+    def test_patch_updates_future_scheduled_visit(self):
+        obj = baker.make(
+            VisitorAccessModel,
+            host_user=self.user_a,
+            visitor_name="Original",
+            scheduled_date=timezone.now() + timedelta(days=2),
+            checkin_date_time=timezone.now() + timedelta(days=2),
+            checkout_date_time=timezone.now() + timedelta(days=2, hours=3),
+            status=VisitorAccessModel.Status.SCHEDULED,
+        )
+        new_date = timezone.now() + timedelta(days=4)
+        self.authenticate(self.user_a)
+
+        response = self.client.patch(
+            detail_url(obj.id),
+            {
+                "visitor_name": "Updated",
+                "scheduled_date": new_date.isoformat(),
+                "description": "New description",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["visitor_name"], "Updated")
+        obj.refresh_from_db()
+        self.assertEqual(obj.visitor_name, "Updated")
+        self.assertEqual(obj.description, "New description")
+
+    def test_patch_and_delete_reject_non_scheduled_visit(self):
+        obj = baker.make(
+            VisitorAccessModel,
+            host_user=self.user_a,
+            scheduled_date=timezone.now() + timedelta(days=2),
+            status=VisitorAccessModel.Status.CHECKED_IN,
+        )
+        self.authenticate(self.user_a)
+
+        patch_response = self.client.patch(
+            detail_url(obj.id),
+            {"visitor_name": "Updated"},
+            format="json",
+        )
+        delete_response = self.client.delete(detail_url(obj.id))
+
+        self.assertEqual(patch_response.status_code, 400)
+        self.assertIn("status", patch_response.data)
+        self.assertEqual(delete_response.status_code, 400)
+        self.assertIn("status", delete_response.data)
+
     def test_list_filters_by_period_future(self):
         future = baker.make(
             VisitorAccessModel,
@@ -194,6 +244,28 @@ class VisitorAccessAPISmoke(BaseTestsUsers):
         self.assertEqual(response.status_code, 200)
         ids = {row["id"] for row in response.data["results"]}
         self.assertEqual(ids, {future.id})
+
+    def test_list_filters_by_period_past(self):
+        past = baker.make(
+            VisitorAccessModel,
+            host_user=self.user_a,
+            scheduled_date=timezone.now() - timedelta(days=2),
+            checkout_date_time=timezone.now() - timedelta(days=1),
+            status=VisitorAccessModel.Status.CHECKED_OUT,
+        )
+        baker.make(
+            VisitorAccessModel,
+            host_user=self.user_a,
+            scheduled_date=timezone.now() + timedelta(days=2),
+            status=VisitorAccessModel.Status.SCHEDULED,
+        )
+        self.authenticate(self.user_a)
+
+        response = self.client.get(LIST_URL + "?period=past")
+
+        self.assertEqual(response.status_code, 200)
+        ids = {row["id"] for row in response.data["results"]}
+        self.assertEqual(ids, {past.id})
 
     def test_list_filters_by_status_no_show(self):
         no_show = baker.make(

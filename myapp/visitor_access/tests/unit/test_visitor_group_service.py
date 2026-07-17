@@ -144,6 +144,9 @@ class FakeAccessService(IVisitorAccessService):
         self._next += 1
         return item
 
+    def update(self, user, pk, payload):  # pragma: no cover - not used here
+        return None
+
     def create_group_visits(self, user, payload: dict):
         self.created.append({"user": user, "payload": payload})
         group = payload.get("visitor_group")

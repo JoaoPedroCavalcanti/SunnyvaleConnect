@@ -47,6 +47,11 @@ class IVisitorAccessService(ABC):
     def create(self, user, payload: dict) -> VisitorAccessModel: ...
 
     @abstractmethod
+    def update(
+        self, user, pk: int, payload: dict
+    ) -> VisitorAccessModel: ...
+
+    @abstractmethod
     def create_group_visits(self, user, payload: dict) -> list[VisitorAccessModel]: ...
 
     @abstractmethod
@@ -120,6 +125,65 @@ class VisitorAccessService(IVisitorAccessService):
         if not can_see_all_visits(user) and instance.host_user_id != user.id:
             raise NotFoundError("No visitor access matches the given query.")
         return instance
+
+    def update(self, user, pk, payload):
+        ensure_not_employee(user, action="edit visits")
+        instance = self.get_for(user, pk)
+        self._require_future_scheduled(instance, action="edited")
+
+        data = dict(payload)
+        scheduled_date = data.get(
+            "scheduled_date", instance.scheduled_date
+        )
+        all_day = data.get("all_day", instance.all_day)
+        validation_data = {
+            "host_user": instance.host_user,
+            "email": data.get("email", instance.email),
+            "scheduled_date": scheduled_date,
+            "all_day": all_day,
+        }
+        self._validate_create_payload(
+            user,
+            validation_data,
+            bool(instance.qr_access_enabled),
+        )
+
+        if "scheduled_date" in data or "all_day" in data:
+            if all_day:
+                local = timezone.localtime(scheduled_date)
+                day_start = local.replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+                day_end = local.replace(
+                    hour=23, minute=59, second=59, microsecond=0
+                )
+                data["scheduled_date"] = day_start
+                data["checkin_date_time"] = day_start
+                data["checkout_date_time"] = day_end
+            else:
+                data["scheduled_date"] = scheduled_date
+                data["checkin_date_time"] = scheduled_date
+                data.setdefault(
+                    "checkout_date_time",
+                    scheduled_date + self.DEFAULT_VISIT_DURATION,
+                )
+
+        effective_checkin = data.get(
+            "checkin_date_time", instance.checkin_date_time
+        )
+        effective_checkout = data.get(
+            "checkout_date_time", instance.checkout_date_time
+        )
+        if (
+            effective_checkout is not None
+            and effective_checkin is not None
+            and effective_checkout <= effective_checkin
+        ):
+            raise BusinessRuleError(
+                "checkout_date_time must be after scheduled_date.",
+                field="checkout_date_time",
+            )
+        return self._repo.update(instance, data)
 
     # ------------------------------------------------------------------ #
     # create                                                             #
@@ -269,16 +333,21 @@ class VisitorAccessService(IVisitorAccessService):
     def delete(self, user, pk):
         ensure_not_employee(user, action="cancel visits")
         instance = self.get_for(user, pk)
-        if instance.scheduled_date < timezone.now():
-            raise BusinessRuleError("You can not cancel a past visitor access.")
-        if instance.status == self.Status.CANCELLED:
-            raise BusinessRuleError("This visitor access is already cancelled.")
-        if instance.status == self.Status.CHECKED_OUT:
-            raise BusinessRuleError(
-                "You can not cancel a visit that is already concluded."
-            )
+        self._require_future_scheduled(instance, action="cancelled")
         instance.status = self.Status.CANCELLED
         return self._repo.save(instance)
+
+    def _require_future_scheduled(self, instance, *, action: str) -> None:
+        if instance.status != self.Status.SCHEDULED:
+            raise BusinessRuleError(
+                f"Only scheduled visits can be {action}.",
+                field="status",
+            )
+        if instance.scheduled_date <= timezone.now():
+            raise BusinessRuleError(
+                f"Past visits cannot be {action}.",
+                field="scheduled_date",
+            )
 
     # ------------------------------------------------------------------ #
     # doorman validation (QR or manual code)                             #

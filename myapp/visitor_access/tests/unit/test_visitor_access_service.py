@@ -116,6 +116,7 @@ class FakeVisitorAccessRepo(IVisitorAccessRepository):
             "checkin_code": "",
             "checkout_code": "",
             "status": Status.SCHEDULED,
+            "all_day": False,
             "visitor_group": None,
             "qr_access_enabled": False,
             "access_token": None,
@@ -525,6 +526,58 @@ class TestDelete:
         item.status = Status.CHECKED_OUT
         with pytest.raises(BusinessRuleError):
             service.delete(u, item.id)
+
+    def test_cannot_cancel_checked_in(self, service):
+        u = _user(1)
+        item = service.create(u, _payload())
+        item.status = Status.CHECKED_IN
+        with pytest.raises(BusinessRuleError) as exc:
+            service.delete(u, item.id)
+        assert exc.value.field == "status"
+
+
+class TestUpdate:
+    def test_host_updates_future_scheduled_visit(self, service):
+        u = _user(1)
+        item = service.create(u, _payload())
+        new_date = timezone.now() + timedelta(days=3)
+
+        updated = service.update(
+            u,
+            item.id,
+            {
+                "visitor_name": "Updated Guest",
+                "scheduled_date": new_date,
+                "description": "Updated description",
+            },
+        )
+
+        assert updated.visitor_name == "Updated Guest"
+        assert updated.scheduled_date == new_date
+        assert updated.checkin_date_time == new_date
+        assert updated.checkout_date_time == new_date + timedelta(hours=3)
+        assert updated.description == "Updated description"
+
+    def test_cannot_update_non_scheduled_or_past_visit(self, service):
+        u = _user(1)
+        checked_in = service.create(u, _payload())
+        checked_in.status = Status.CHECKED_IN
+        with pytest.raises(BusinessRuleError) as status_exc:
+            service.update(u, checked_in.id, {"visitor_name": "No"})
+        assert status_exc.value.field == "status"
+
+        past = service.create(u, _payload())
+        past.scheduled_date = timezone.now() - timedelta(hours=1)
+        with pytest.raises(BusinessRuleError) as date_exc:
+            service.update(u, past.id, {"visitor_name": "No"})
+        assert date_exc.value.field == "scheduled_date"
+
+    def test_employee_cannot_update_visit(self, service):
+        host = _user(1)
+        item = service.create(host, _payload())
+        employee = _user(2, role="EMPLOYEE", employee_types=["DOORMAN"])
+        with pytest.raises(PermissionDeniedError):
+            service.update(employee, item.id, {"visitor_name": "No"})
 
 
 class TestAllDay:

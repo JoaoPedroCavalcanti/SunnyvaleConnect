@@ -18,6 +18,7 @@ from visitor_access.serializers import (
     PaginatedVisitorGroupOutputSerializer,
     VisitorAccessInputSerializer,
     VisitorAccessOutputSerializer,
+    VisitorAccessPatchSerializer,
     VisitorAccessValidateInputSerializer,
     VisitorGroupInputSerializer,
     VisitorGroupOutputSerializer,
@@ -97,6 +98,18 @@ class VisitorAccessDetailView(APIView):
     @extend_schema(responses={200: VisitorAccessOutputSerializer})
     def get(self, request, pk: int):
         instance = container.visitor_access_service.get_for(request.user, pk)
+        return Response(VisitorAccessOutputSerializer(instance).data)
+
+    @extend_schema(
+        request=VisitorAccessPatchSerializer,
+        responses={200: VisitorAccessOutputSerializer},
+    )
+    def patch(self, request, pk: int):
+        serializer = VisitorAccessPatchSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instance = container.visitor_access_service.update(
+            request.user, pk, serializer.validated_data
+        )
         return Response(VisitorAccessOutputSerializer(instance).data)
 
     @extend_schema(responses={204: None})

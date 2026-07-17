@@ -64,6 +64,22 @@ class VisitorAccessInputSerializer(serializers.Serializer):
         return attrs
 
 
+class VisitorAccessPatchSerializer(serializers.Serializer):
+    visitor_name = serializers.CharField(max_length=100, required=False)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    scheduled_date = serializers.DateTimeField(required=False)
+    checkout_date_time = serializers.DateTimeField(
+        required=False, allow_null=True
+    )
+    all_day = serializers.BooleanField(required=False)
+    description = serializers.CharField(
+        max_length=150,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+    )
+
+
 class VisitorAccessOutputSerializer(serializers.ModelSerializer):
     # ``status`` exposes the *derived* state — NO_SHOW / EXPIRED show up
     # automatically once the visit window has passed, even though the
