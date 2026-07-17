@@ -76,3 +76,10 @@ class SunnyValeNewsOutputSerializer(serializers.ModelSerializer):
                 "role": obj.author_role,
             }
         ).data
+
+
+class PaginatedSunnyValeNewsOutputSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    next = serializers.URLField(allow_null=True)
+    previous = serializers.URLField(allow_null=True)
+    results = SunnyValeNewsOutputSerializer(many=True)

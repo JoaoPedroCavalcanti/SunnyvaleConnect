@@ -2,6 +2,7 @@
 
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -10,6 +11,7 @@ from condominiums.serializers import (
     CondominiumInputSerializer,
     CondominiumLookupOutputSerializer,
     CondominiumOutputSerializer,
+    PaginatedCondominiumOutputSerializer,
 )
 from shared.container import container
 
@@ -46,13 +48,15 @@ class CondominiumListCreateView(APIView):
             return [IsAdminUser()]
         return [IsAdminUser()]
 
-    @extend_schema(responses={200: CondominiumOutputSerializer(many=True)})
+    @extend_schema(responses={200: PaginatedCondominiumOutputSerializer})
     def get(self, request):
         condominiums = container.condominium_service.list_for_platform(request.user)
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(condominiums, request, view=self)
         serializer = CondominiumOutputSerializer(
-            condominiums, many=True, context={"request": request}
+            page, many=True, context={"request": request}
         )
-        return Response(serializer.data)
+        return paginator.get_paginated_response(serializer.data)
 
     @extend_schema(
         request=CondominiumInputSerializer,

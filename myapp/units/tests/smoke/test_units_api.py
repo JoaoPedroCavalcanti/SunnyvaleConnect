@@ -169,12 +169,13 @@ class UnitMembershipFlowSmoke(BaseTestsUsers):
         self.authenticate(self.admin)
         pending = self.client.get(PENDING_URL)
         self.assertEqual(pending.status_code, 200)
-        self.assertEqual(len(pending.data), 1)
+        self.assertEqual(pending.data["count"], 1)
+        self.assertEqual(len(pending.data["results"]), 1)
 
         # Legacy households path still works for old clients.
         legacy = self.client.get("/households/pending-approvals/")
         self.assertEqual(legacy.status_code, 200)
-        self.assertEqual(len(legacy.data), 1)
+        self.assertEqual(legacy.data["count"], 1)
 
         approve = self.client.post(
             _membership_approve_url(unit.id, membership.id)
@@ -185,11 +186,12 @@ class UnitMembershipFlowSmoke(BaseTestsUsers):
 
         decisions = self.client.get(_decisions_url(unit.id))
         self.assertEqual(decisions.status_code, 200)
-        self.assertEqual(len(decisions.data), 1)
-        self.assertEqual(decisions.data[0]["action"], "APPROVED")
-        self.assertEqual(decisions.data[0]["unit"]["id"], unit.id)
-        self.assertEqual(decisions.data[0]["actor"]["id"], self.admin.id)
-        self.assertEqual(decisions.data[0]["target"]["id"], self.user_a.id)
+        self.assertEqual(decisions.data["count"], 1)
+        decision = decisions.data["results"][0]
+        self.assertEqual(decision["action"], "APPROVED")
+        self.assertEqual(decision["unit"]["id"], unit.id)
+        self.assertEqual(decision["actor"]["id"], self.admin.id)
+        self.assertEqual(decision["target"]["id"], self.user_a.id)
 
     def test_join_occupied_unit_and_owner_approve(self):
         unit = Unit.objects.create(
@@ -213,7 +215,7 @@ class UnitMembershipFlowSmoke(BaseTestsUsers):
 
         self.authenticate(self.user_a)
         pending = self.client.get(PENDING_URL)
-        self.assertEqual(len(pending.data), 1)
+        self.assertEqual(pending.data["count"], 1)
 
         approve = self.client.post(
             _membership_approve_url(unit.id, membership.id)
@@ -254,9 +256,10 @@ class UnitMembershipFlowSmoke(BaseTestsUsers):
         )
         decisions = self.client.get(_decisions_url(unit.id))
         self.assertEqual(decisions.status_code, 200)
-        self.assertEqual(decisions.data[0]["action"], "REJECTED")
-        self.assertEqual(decisions.data[0]["reason"], "no")
-        self.assertEqual(decisions.data[0]["target"]["id"], self.user_b.id)
+        decision = decisions.data["results"][0]
+        self.assertEqual(decision["action"], "REJECTED")
+        self.assertEqual(decision["reason"], "no")
+        self.assertEqual(decision["target"]["id"], self.user_b.id)
 
         self.authenticate(self.user_b)
         forbidden = self.client.get(_decisions_url(unit.id))
@@ -282,7 +285,8 @@ class UnitMembershipFlowSmoke(BaseTestsUsers):
 
         members = self.client.get(_memberships_list_url(unit.id))
         self.assertEqual(members.status_code, 200)
-        self.assertEqual(len(members.data), 1)
+        self.assertEqual(members.data["count"], 1)
+        self.assertEqual(len(members.data["results"]), 1)
 
     def test_owner_transfers_ownership_to_resident(self):
         unit = Unit.objects.create(

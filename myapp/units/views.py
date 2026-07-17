@@ -8,6 +8,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from units.serializers import (
+    PaginatedPendingUnitApprovalSerializer,
+    PaginatedUnitMembershipDecisionOutputSerializer,
+    PaginatedUnitMembershipOutputSerializer,
     PendingUnitApprovalSerializer,
     UnitBulkProvisionInputSerializer,
     UnitBulkProvisionOutputSerializer,
@@ -178,25 +181,30 @@ class UnitDetailView(APIView):
 class PendingApprovalsView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(responses={200: PendingUnitApprovalSerializer(many=True)})
+    @extend_schema(responses={200: PaginatedPendingUnitApprovalSerializer})
     def get(self, request):
         items = container.unit_membership_service.list_pending_approvals(
             request.user
         )
-        return Response(PendingUnitApprovalSerializer(items, many=True).data)
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(items, request, view=self)
+        serializer = PendingUnitApprovalSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
 @extend_schema(tags=["units"])
 class UnitMembershipListView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(responses={200: UnitMembershipOutputSerializer(many=True)})
+    @extend_schema(responses={200: PaginatedUnitMembershipOutputSerializer})
     def get(self, request, pk: int):
         memberships = container.unit_membership_service.list_for_unit(
             request.user, pk
         )
-        serializer = UnitMembershipOutputSerializer(memberships, many=True)
-        return Response(serializer.data)
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(memberships, request, view=self)
+        serializer = UnitMembershipOutputSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
 @extend_schema(tags=["units"])
@@ -204,15 +212,16 @@ class UnitDecisionListView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        responses={200: UnitMembershipDecisionOutputSerializer(many=True)}
+        responses={200: PaginatedUnitMembershipDecisionOutputSerializer}
     )
     def get(self, request, pk: int):
         items = container.unit_membership_decision_service.list_for_unit(
             request.user, pk
         )
-        return Response(
-            UnitMembershipDecisionOutputSerializer(items, many=True).data
-        )
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(items, request, view=self)
+        serializer = UnitMembershipDecisionOutputSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
 @extend_schema(tags=["units"])

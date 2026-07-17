@@ -4,6 +4,7 @@ from dataclasses import asdict
 
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -11,6 +12,7 @@ from delivery_notification.serializers import (
     DeliveryApartmentListItemSerializer,
     DeliveryNotificationInputSerializer,
     DeliveryNotificationOutputSerializer,
+    PaginatedDeliveryNotificationOutputSerializer,
 )
 from shared.container import container
 from shared.permissions import IsAdminOrDoorman
@@ -54,12 +56,16 @@ class SendDeliveryNotificationView(APIView):
 class ListDeliveryNotificationsView(APIView):
     permission_classes = [IsAdminOrDoorman]
 
-    @extend_schema(responses={200: DeliveryNotificationOutputSerializer(many=True)})
+    @extend_schema(
+        responses={200: PaginatedDeliveryNotificationOutputSerializer}
+    )
     def get(self, request):
         items = container.delivery_notification_service.list(request.user)
-        return Response(
-            DeliveryNotificationOutputSerializer(items, many=True).data,
-            status=status.HTTP_200_OK,
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(items, request, view=self)
+        serializer = DeliveryNotificationOutputSerializer(page, many=True)
+        return paginator.get_paginated_response(
+            serializer.data,
         )
 
 

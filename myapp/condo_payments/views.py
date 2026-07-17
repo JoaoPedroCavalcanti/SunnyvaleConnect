@@ -11,6 +11,7 @@ from condo_payments.serializers import (
     CondoPaymentInputSerializer,
     CondoPaymentOutputSerializer,
     CondoPaymentPatchSerializer,
+    PaginatedCondoPaymentOutputSerializer,
     SetPaidStatusInputSerializer,
 )
 from shared.container import container
@@ -20,7 +21,7 @@ from shared.container import container
 class CondoPaymentListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(responses={200: CondoPaymentOutputSerializer(many=True)})
+    @extend_schema(responses={200: PaginatedCondoPaymentOutputSerializer})
     def get(self, request):
         queryset = container.condo_payment_service.list_for(request.user)
         paginator = PageNumberPagination()

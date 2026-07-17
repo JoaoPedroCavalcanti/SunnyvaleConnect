@@ -161,6 +161,20 @@ class PendingUnitApprovalSerializer(serializers.ModelSerializer):
         ]
 
 
+class PaginatedPendingUnitApprovalSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    next = serializers.URLField(allow_null=True)
+    previous = serializers.URLField(allow_null=True)
+    results = PendingUnitApprovalSerializer(many=True)
+
+
+class PaginatedUnitMembershipOutputSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    next = serializers.URLField(allow_null=True)
+    previous = serializers.URLField(allow_null=True)
+    results = UnitMembershipOutputSerializer(many=True)
+
+
 class UnitMembershipRejectSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True, default="")
 
@@ -213,6 +227,13 @@ class UnitMembershipDecisionOutputSerializer(serializers.ModelSerializer):
             "reason",
             "created_at",
         ]
+
+
+class PaginatedUnitMembershipDecisionOutputSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    next = serializers.URLField(allow_null=True)
+    previous = serializers.URLField(allow_null=True)
+    results = UnitMembershipDecisionOutputSerializer(many=True)
 
 
 class UnitBulkBlockSerializer(serializers.Serializer):

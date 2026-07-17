@@ -143,6 +143,20 @@ class VisitorGroupOutputSerializer(serializers.ModelSerializer):
         ]
 
 
+class PaginatedVisitorAccessOutputSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    next = serializers.URLField(allow_null=True)
+    previous = serializers.URLField(allow_null=True)
+    results = VisitorAccessOutputSerializer(many=True)
+
+
+class PaginatedVisitorGroupOutputSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    next = serializers.URLField(allow_null=True)
+    previous = serializers.URLField(allow_null=True)
+    results = VisitorGroupOutputSerializer(many=True)
+
+
 class VisitorGroupScheduleInputSerializer(serializers.Serializer):
     scheduled_date = serializers.DateTimeField(required=True)
     checkout_date_time = serializers.DateTimeField(required=False, allow_null=True)

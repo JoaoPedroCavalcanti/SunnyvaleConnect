@@ -78,6 +78,13 @@ class UserOutputSerializer(serializers.ModelSerializer):
         return display_username(obj)
 
 
+class PaginatedUserOutputSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    next = serializers.URLField(allow_null=True)
+    previous = serializers.URLField(allow_null=True)
+    results = UserOutputSerializer(many=True)
+
+
 class LoginInputSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
     password = serializers.CharField(required=True, write_only=True)

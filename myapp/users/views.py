@@ -16,6 +16,7 @@ from users.models import EmployeeType, UserRole
 from users.serializers import (
     LoginInputSerializer,
     LoginOutputSerializer,
+    PaginatedUserOutputSerializer,
     UserInputSerializer,
     UserOutputSerializer,
     UserPatchSerializer,
@@ -90,7 +91,7 @@ class UserListCreateView(APIView):
                 ),
             ),
         ],
-        responses={200: UserOutputSerializer(many=True)},
+        responses={200: PaginatedUserOutputSerializer},
     )
     def get(self, request):
         role = request.query_params.get("role") or None

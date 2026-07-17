@@ -10,6 +10,7 @@ from rest_framework.views import APIView
 from shared.container import container
 from sunny_vale_news.models import SunnyValeNewsModel
 from sunny_vale_news.serializers import (
+    PaginatedSunnyValeNewsOutputSerializer,
     SunnyValeNewsInputSerializer,
     SunnyValeNewsOutputSerializer,
     SunnyValeNewsPatchSerializer,
@@ -31,7 +32,7 @@ class SunnyValeNewsListCreateView(APIView):
                 description="Filter by announcement kind.",
             ),
         ],
-        responses={200: SunnyValeNewsOutputSerializer(many=True)},
+        responses={200: PaginatedSunnyValeNewsOutputSerializer},
     )
     def get(self, request):
         kind = request.query_params.get("kind") or None

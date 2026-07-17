@@ -64,3 +64,10 @@ class DeliveryNotificationOutputSerializer(serializers.ModelSerializer):
             "email": instance.notified_holder_email,
         }
         return data
+
+
+class PaginatedDeliveryNotificationOutputSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    next = serializers.URLField(allow_null=True)
+    previous = serializers.URLField(allow_null=True)
+    results = DeliveryNotificationOutputSerializer(many=True)

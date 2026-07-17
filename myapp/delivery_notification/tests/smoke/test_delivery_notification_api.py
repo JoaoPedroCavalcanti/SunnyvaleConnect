@@ -93,6 +93,29 @@ class DeliveryNotificationAPISmoke(BaseTestsUsers):
         self.assertEqual(response.data[0]["holder_name"], self.user_a.full_name)
         self.assertEqual(response.data[0]["status"], Unit.Status.ACTIVE)
 
+    def test_admin_list_notifications_is_paginated(self):
+        DeliveryNotificationModel.objects.bulk_create(
+            [
+                DeliveryNotificationModel(
+                    unit=self.unit_a,
+                    title=f"Package {index}",
+                    delivery_from="Store",
+                    notified_holder_name=self.user_a.full_name,
+                    notified_holder_email=self.user_a.email,
+                    priority_level="low",
+                )
+                for index in range(11)
+            ]
+        )
+        self.authenticate(self.admin)
+
+        response = self.client.get(LIST_URL)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["count"], 11)
+        self.assertEqual(len(response.data["results"]), 10)
+        self.assertIsNotNone(response.data["next"])
+
     def test_invalid_payload_400(self):
         self.authenticate(self.admin)
         response = self.client.post(

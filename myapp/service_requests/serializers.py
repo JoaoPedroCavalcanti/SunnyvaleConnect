@@ -118,3 +118,10 @@ class ServiceRequestOutputSerializer(serializers.ModelSerializer):
             "username": u.username,
             "full_name": getattr(u, "full_name", ""),
         }
+
+
+class PaginatedServiceRequestOutputSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    next = serializers.URLField(allow_null=True)
+    previous = serializers.URLField(allow_null=True)
+    results = ServiceRequestOutputSerializer(many=True)

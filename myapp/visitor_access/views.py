@@ -14,6 +14,8 @@ from shared.container import container
 from shared.permissions import IsAdminOrDoorman
 from visitor_access.models import VisitorAccessModel
 from visitor_access.serializers import (
+    PaginatedVisitorAccessOutputSerializer,
+    PaginatedVisitorGroupOutputSerializer,
     VisitorAccessInputSerializer,
     VisitorAccessOutputSerializer,
     VisitorAccessValidateInputSerializer,
@@ -56,7 +58,7 @@ class VisitorAccessListCreateView(APIView):
 
     @extend_schema(
         parameters=[_PERIOD_PARAM, _STATUS_PARAM],
-        responses={200: VisitorAccessOutputSerializer(many=True)},
+        responses={200: PaginatedVisitorAccessOutputSerializer},
     )
     def get(self, request):
         queryset = container.visitor_access_service.list_for(
@@ -144,7 +146,7 @@ class VisitorAccessValidateView(APIView):
 class VisitorGroupListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(responses={200: VisitorGroupOutputSerializer(many=True)})
+    @extend_schema(responses={200: PaginatedVisitorGroupOutputSerializer})
     def get(self, request):
         queryset = container.visitor_group_service.list_for(request.user)
         paginator = PageNumberPagination()
@@ -229,7 +231,7 @@ class VisitorGroupVisitsListView(APIView):
 
     @extend_schema(
         parameters=[_PERIOD_PARAM, _STATUS_PARAM],
-        responses={200: VisitorAccessOutputSerializer(many=True)},
+        responses={200: PaginatedVisitorAccessOutputSerializer},
     )
     def get(self, request):
         queryset = container.visitor_access_service.list_for(

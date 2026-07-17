@@ -47,3 +47,10 @@ class CondoPaymentOutputSerializer(serializers.ModelSerializer):
     class Meta:
         model = CondoPaymentModel
         fields = "__all__"
+
+
+class PaginatedCondoPaymentOutputSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    next = serializers.URLField(allow_null=True)
+    previous = serializers.URLField(allow_null=True)
+    results = CondoPaymentOutputSerializer(many=True)

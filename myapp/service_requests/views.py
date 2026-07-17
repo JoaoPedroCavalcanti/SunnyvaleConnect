@@ -10,6 +10,7 @@ from rest_framework.views import APIView
 
 from service_requests.models import ServiceRequestModel
 from service_requests.serializers import (
+    PaginatedServiceRequestOutputSerializer,
     ServiceRequestInputSerializer,
     ServiceRequestOutputSerializer,
     ServiceRequestPatchSerializer,
@@ -71,7 +72,7 @@ class ServiceRequestListCreateView(APIView):
                 ),
             ),
         ],
-        responses={200: ServiceRequestOutputSerializer(many=True)},
+        responses={200: PaginatedServiceRequestOutputSerializer},
     )
     def get(self, request):
         try:
@@ -141,7 +142,7 @@ class ServiceRequestMyListView(APIView):
                 ),
             ),
         ],
-        responses={200: ServiceRequestOutputSerializer(many=True)},
+        responses={200: PaginatedServiceRequestOutputSerializer},
     )
     def get(self, request):
         queryset = container.service_request_service.list_mine(

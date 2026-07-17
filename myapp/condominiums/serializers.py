@@ -50,3 +50,10 @@ class CondominiumOutputSerializer(CondominiumLookupOutputSerializer):
             "is_active",
             "created_at",
         ]
+
+
+class PaginatedCondominiumOutputSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    next = serializers.URLField(allow_null=True)
+    previous = serializers.URLField(allow_null=True)
+    results = CondominiumOutputSerializer(many=True)
