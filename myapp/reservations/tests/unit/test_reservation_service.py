@@ -352,12 +352,12 @@ def test_edit_permissions_follow_reservation_status(setup):
     assert updated_pending.guest_count == 8
 
     approved = setup.service.approve(setup.staff, pending.id)
-    with pytest.raises(PermissionDeniedError):
-        setup.service.update(
-            setup.resident,
-            approved.id,
-            {"guest_count": 10},
-        )
+    resident_updated_approved = setup.service.update(
+        setup.resident,
+        approved.id,
+        {"guest_count": 10},
+    )
+    assert resident_updated_approved.guest_count == 10
 
     updated_approved = setup.service.update(
         setup.staff,
@@ -383,12 +383,24 @@ def test_edit_permissions_follow_reservation_status(setup):
         _payload(location_id=2),
     )
     setup.service.reject(setup.staff, rejected.id, reason="maintenance")
-    with pytest.raises(BusinessRuleError):
+    with pytest.raises(BusinessRuleError) as exc_info:
         setup.service.update(
             setup.staff,
             rejected.id,
             {"guest_count": 5},
         )
+    assert exc_info.value.field == "status"
+
+
+def test_past_reservation_cannot_be_edited(setup):
+    item = setup.service.create(setup.resident, _payload())
+    item.reservation_date = date.today() - timedelta(days=1)
+
+    with pytest.raises(BusinessRuleError) as exc:
+        setup.service.update(setup.resident, item.id, {"guest_count": 9})
+
+    assert exc.value.field == "reservation_date"
+    assert item.guest_count != 9
 
 
 def test_pending_and_approved_future_reservations_can_be_deleted(setup):

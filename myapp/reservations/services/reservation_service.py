@@ -193,16 +193,18 @@ class ReservationService(IReservationService):
     def update(self, user, pk, payload):
         ensure_not_employee(user, action="book reservations")
         instance = self.get(user, pk)
-        if instance.status == Reservation.Status.REJECTED:
+        if instance.status not in {
+            Reservation.Status.PENDING,
+            Reservation.Status.APPROVED,
+        }:
             raise BusinessRuleError(
-                "Rejected reservations cannot be edited."
+                "Only pending or approved reservations can be edited.",
+                field="status",
             )
-        if (
-            not is_admin(user)
-            and instance.status != Reservation.Status.PENDING
-        ):
-            raise PermissionDeniedError(
-                "Residents can only edit pending reservations."
+        if self._is_past(instance):
+            raise BusinessRuleError(
+                "Past reservations cannot be edited.",
+                field="reservation_date",
             )
         data = dict(payload)
         if "location_id" in data:

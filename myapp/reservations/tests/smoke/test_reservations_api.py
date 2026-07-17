@@ -78,7 +78,7 @@ class ReservationsAPISmoke(BaseTestsUsers):
             response.data["reservation_user"]["id"], self.user_a.id
         )
 
-    def test_pending_resident_and_approved_admin_can_edit(self):
+    def test_pending_and_approved_future_reservations_can_be_edited(self):
         location = self._create_location()
         self._seed_membership(self.user_a)
         self.authenticate(self.user_a)
@@ -141,12 +141,17 @@ class ReservationsAPISmoke(BaseTestsUsers):
         self.assertIn("location_id", immutable_location.data)
 
         self.authenticate(self.user_a)
-        forbidden = self.client.patch(
+        resident_approved_patch = self.client.patch(
             detail_url,
             {"guest_count": 12},
             format="json",
         )
-        self.assertEqual(forbidden.status_code, 403, forbidden.data)
+        self.assertEqual(
+            resident_approved_patch.status_code,
+            200,
+            resident_approved_patch.data,
+        )
+        self.assertEqual(resident_approved_patch.data["guest_count"], 12)
 
     def test_reservation_today_cannot_start_in_the_past(self):
         location = self._create_location()
@@ -277,6 +282,22 @@ class ReservationsAPISmoke(BaseTestsUsers):
         )
         self.authenticate(self.user_a)
 
+        rejected_patch = self.client.patch(
+            reverse(
+                "reservations:reservation-detail",
+                kwargs={"pk": rejected.id},
+            ),
+            {"guest_count": 8},
+            format="json",
+        )
+        past_patch = self.client.patch(
+            reverse(
+                "reservations:reservation-detail",
+                kwargs={"pk": past.id},
+            ),
+            {"guest_count": 8},
+            format="json",
+        )
         rejected_response = self.client.delete(
             reverse(
                 "reservations:reservation-detail",
@@ -290,6 +311,10 @@ class ReservationsAPISmoke(BaseTestsUsers):
             )
         )
 
+        self.assertEqual(rejected_patch.status_code, 400)
+        self.assertIn("status", rejected_patch.data)
+        self.assertEqual(past_patch.status_code, 400)
+        self.assertIn("reservation_date", past_patch.data)
         self.assertEqual(rejected_response.status_code, 400)
         self.assertIn("status", rejected_response.data)
         self.assertEqual(past_response.status_code, 400)
