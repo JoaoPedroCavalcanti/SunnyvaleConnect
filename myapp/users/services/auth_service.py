@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 
+from units.models import UnitMembership
 from units.repositories.unit_membership_repository import IUnitMembershipRepository
 from users.repositories.user_repository import IUserRepository
 
@@ -10,6 +11,7 @@ KIND_OK = "ok"
 KIND_INVALID = "invalid_credentials"
 KIND_DISABLED = "account_disabled"
 KIND_PENDING = "pending_unit_approval"
+KIND_PENDING_EMAIL = "pending_email_verification"
 
 
 class IAuthService(ABC):
@@ -50,8 +52,13 @@ class AuthService(IAuthService):
         if pending:
             membership = pending[0]
             unit = membership.unit
+            kind = (
+                KIND_PENDING_EMAIL
+                if membership.status == UnitMembership.Status.PENDING_EMAIL
+                else KIND_PENDING
+            )
             return {
-                "kind": KIND_PENDING,
+                "kind": kind,
                 "user": user,
                 "condominium": condominium,
                 "unit": {

@@ -100,6 +100,7 @@ class SignupService(ISignupService):
                 )
             else:
                 self._memberships.request_join(user, normalized["unit_id"])
+                self._memberships.send_verification_code(user)
 
             return user
 

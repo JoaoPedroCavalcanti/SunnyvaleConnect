@@ -17,15 +17,18 @@ from users.serializers import (
     LoginInputSerializer,
     LoginOutputSerializer,
     PaginatedUserOutputSerializer,
+    ResendVerificationInputSerializer,
     UserInputSerializer,
     UserOutputSerializer,
     UserPatchSerializer,
+    VerifyEmailInputSerializer,
 )
 from users.services.auth_service import (
     KIND_DISABLED,
     KIND_INVALID,
     KIND_OK,
     KIND_PENDING,
+    KIND_PENDING_EMAIL,
 )
 
 
@@ -226,6 +229,17 @@ class LoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        if kind == KIND_PENDING_EMAIL:
+            return Response(
+                {
+                    "detail": "Please verify your email to continue.",
+                    "code": KIND_PENDING_EMAIL,
+                    "unit": result["unit"],
+                    "condominium": condominium_payload,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         if kind == KIND_DISABLED:
             return Response(
                 {
@@ -267,3 +281,52 @@ class UserMeView(APIView):
             request.user, serializer.validated_data
         )
         return Response(UserOutputSerializer(user).data)
+
+
+@extend_schema(tags=["users"])
+class VerifyEmailView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        request=VerifyEmailInputSerializer,
+        responses={200: None},
+        description=(
+            "Validates the email OTP from self-signup and moves the "
+            "membership into the admin/owner approval queue."
+        ),
+    )
+    def post(self, request):
+        serializer = VerifyEmailInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        container.unit_membership_service.verify_email(
+            serializer.validated_data["email"],
+            serializer.validated_data["code"],
+        )
+        return Response(
+            {"detail": "Email verified. Waiting for approval."},
+            status=status.HTTP_200_OK,
+        )
+
+
+@extend_schema(tags=["users"])
+class ResendVerificationView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        request=ResendVerificationInputSerializer,
+        responses={200: None},
+        description=(
+            "Resends the email verification OTP when the membership is "
+            "still PENDING_EMAIL. Rate-limited to once per minute."
+        ),
+    )
+    def post(self, request):
+        serializer = ResendVerificationInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        container.unit_membership_service.resend_verification(
+            serializer.validated_data["email"]
+        )
+        return Response(
+            {"detail": "Verification code sent."},
+            status=status.HTTP_200_OK,
+        )

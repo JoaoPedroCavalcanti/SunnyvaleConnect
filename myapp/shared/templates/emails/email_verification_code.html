@@ -1,0 +1,15 @@
+{% extends "emails/base.html" %}
+
+{% block title %}Verify your email{% endblock %}
+
+{% block content %}
+<p style="margin:0 0 16px;">Dear {{ user_name }},</p>
+<p style="margin:0 0 16px;">
+  Use the code below to verify your email and continue your household request.
+</p>
+<p style="margin:0 0 16px;font-size:28px;font-weight:700;letter-spacing:4px;">
+  {{ code }}
+</p>
+{% include "emails/partials/details_box.html" with details=details %}
+<p style="margin:16px 0 0;">This code expires in 15 minutes.</p>
+{% endblock %}

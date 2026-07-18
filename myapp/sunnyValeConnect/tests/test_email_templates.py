@@ -49,6 +49,19 @@ pytestmark = pytest.mark.unit
             },
             ["Eve", "barbecue area", "maintenance scheduled"],
         ),
+        (
+            "email_verification_code",
+            {
+                "heading": "Verify your email",
+                "user_name": "Frank",
+                "code": "654321",
+                "details": [
+                    {"label": "Verification code", "value": "654321"},
+                    {"label": "Expires in", "value": "15 minutes"},
+                ],
+            },
+            ["Frank", "654321", "15 minutes"],
+        ),
     ],
 )
 def test_render_email_includes_expected_content(

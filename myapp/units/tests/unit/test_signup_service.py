@@ -24,7 +24,7 @@ from shared.infrastructure.document_validators import (
 )
 from shared.infrastructure.password_policy import DefaultPasswordPolicy
 from shared.infrastructure.transactions import NullTransactionRunner
-from shared.test_doubles.fakes import FakeCodeGenerator, FakeEmailSender
+from shared.test_doubles.fakes import FakeCache, FakeCodeGenerator, FakeEmailSender
 from users.services.user_service import UserService
 
 
@@ -41,6 +41,8 @@ def env():
     decisions = FakeUnitMembershipDecisionRepository()
     users = FakeUserRepository()
     email = FakeEmailSender()
+    cache = FakeCache()
+    codes = FakeCodeGenerator("112233")
     tx = NullTransactionRunner()
     user_service = UserService(
         user_repository=users,
@@ -63,6 +65,8 @@ def env():
         email_sender=email,
         decision_repository=decisions,
         transaction_runner=tx,
+        cache=cache,
+        code_generator=codes,
     )
     condominium_service = CondominiumService(
         repository=condominiums,
@@ -82,6 +86,7 @@ def env():
         "units": units,
         "memberships": memberships,
         "users": users,
+        "email": email,
         "unit": unit,
         "unit_service": unit_service,
     }
@@ -109,7 +114,7 @@ class TestSignup:
         user = env["signup"].signup(anon(), _user_payload(), None)
         assert user.is_active is True
 
-    def test_with_unit_request_creates_pending_user(self, env):
+    def test_with_unit_request_creates_pending_email_user(self, env):
         user = env["signup"].signup(
             anon(),
             _user_payload(),
@@ -118,8 +123,11 @@ class TestSignup:
         assert user.is_active is False
         ms = env["memberships"].list_for_unit(env["unit"].id)
         assert len(ms) == 1
-        assert ms[0].status == UnitMembership.Status.PENDING_ADMIN
+        assert ms[0].status == UnitMembership.Status.PENDING_EMAIL
         assert ms[0].role == UnitMembership.Role.OWNER
+        assert any(
+            s["kind"] == "email_verification" for s in env["email"].sent
+        )
 
     def test_invalid_unit_request_raises(self, env):
         with pytest.raises(BusinessRuleError):

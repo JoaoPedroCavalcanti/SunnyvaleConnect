@@ -426,6 +426,8 @@ class Container:
                 email_sender=self.email_sender,
                 decision_repository=self.unit_membership_decision_repository,
                 transaction_runner=self.transaction_runner,
+                cache=self.cache,
+                code_generator=self.code_generator,
             ),
         )
 

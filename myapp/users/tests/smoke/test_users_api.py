@@ -382,3 +382,100 @@ class LoginAPISmoke(BaseTestsUsers):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.data["code"], "pending_unit_approval")
         self.assertEqual(response.data["unit"]["display_name"], "Apt 701 / Block C")
+
+    def test_pending_email_user_returns_403(self):
+        from units.models import Unit, UnitMembership
+
+        self.user_a.is_active = False
+        self.user_a.save()
+        unit = Unit.objects.create(
+            kind=Unit.Kind.APARTMENT_BLOCK,
+            apartment="702",
+            block="C",
+            status=Unit.Status.ACTIVE,
+            condominium=self.condominium,
+        )
+        UnitMembership.objects.create(
+            unit=unit,
+            user=self.user_a,
+            role=UnitMembership.Role.OWNER,
+            status=UnitMembership.Status.PENDING_EMAIL,
+        )
+
+        response = self.client.post(
+            LOGIN_URL,
+            data=self.login_payload(self.user_a),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["code"], "pending_email_verification")
+
+    def test_verify_email_moves_to_approval_queue(self):
+        from django.core import mail
+
+        from shared.container import container
+        from shared.test_doubles.fakes import FakeCodeGenerator
+        from units.models import Unit, UnitMembership
+
+        codes = FakeCodeGenerator("998877")
+        container.override("code_generator", codes)
+
+        vacant = Unit.objects.create(
+            kind=Unit.Kind.APARTMENT_BLOCK,
+            apartment="880",
+            block="Z",
+            status=Unit.Status.ACTIVE,
+            condominium=self.condominium,
+        )
+        payload = self.create_random_user_from_faker()
+        payload["unit_request"] = {"unit_id": vacant.id}
+        signup = self.client.post(LIST_URL, data=payload, format="json")
+        self.assertEqual(signup.status_code, 201, signup.data)
+
+        user = self.User.objects.get(pk=signup.data["id"])
+        membership = vacant.memberships.get(user=user)
+        self.assertEqual(membership.status, UnitMembership.Status.PENDING_EMAIL)
+        self.assertTrue(
+            any("Verify your email" in m.subject for m in mail.outbox)
+        )
+
+        verify_url = reverse("users:verify-email")
+        response = self.client.post(
+            verify_url,
+            data={"email": user.email, "code": codes.six_digits()},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+
+        membership.refresh_from_db()
+        self.assertEqual(membership.status, UnitMembership.Status.PENDING_ADMIN)
+
+    def test_verify_email_rejects_wrong_code(self):
+        from shared.container import container
+        from shared.test_doubles.fakes import FakeCodeGenerator
+        from units.models import Unit, UnitMembership
+
+        codes = FakeCodeGenerator("112233")
+        container.override("code_generator", codes)
+
+        vacant = Unit.objects.create(
+            kind=Unit.Kind.APARTMENT_BLOCK,
+            apartment="881",
+            block="Z",
+            status=Unit.Status.ACTIVE,
+            condominium=self.condominium,
+        )
+        payload = self.create_random_user_from_faker()
+        payload["unit_request"] = {"unit_id": vacant.id}
+        signup = self.client.post(LIST_URL, data=payload, format="json")
+        self.assertEqual(signup.status_code, 201, signup.data)
+
+        response = self.client.post(
+            reverse("users:verify-email"),
+            data={"email": signup.data["email"], "code": "000000"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+        membership = UnitMembership.objects.get(user_id=signup.data["id"])
+        self.assertEqual(membership.status, UnitMembership.Status.PENDING_EMAIL)

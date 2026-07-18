@@ -190,6 +190,14 @@ class FakeEmailSender(IEmailSender):
             "visitor_email": visitor_email,
         })
 
+    def send_email_verification_code(self, to_email, user_name, code):
+        self.sent.append({
+            "kind": "email_verification",
+            "to": to_email,
+            "user_name": user_name,
+            "code": code,
+        })
+
 
 class FakeCodeGenerator(ICodeGenerator):
     def __init__(self, value: str = "12345"):
@@ -197,7 +205,11 @@ class FakeCodeGenerator(ICodeGenerator):
         self._counter = 0
 
     def five_digits(self) -> str:
-        return self.value
+        return self.value[:5].ljust(5, "0")
+
+    def six_digits(self) -> str:
+        raw = self.value if len(self.value) >= 6 else self.value.ljust(6, "0")
+        return raw[:6]
 
     def alphanumeric(self, length: int = 5) -> str:
         self._counter += 1
@@ -232,3 +244,6 @@ class FakeCache(ICache):
     def set(self, key, value, ttl_seconds):
         self.store[key] = value
         self.set_calls.append((key, value, ttl_seconds))
+
+    def delete(self, key):
+        self.store.pop(key, None)

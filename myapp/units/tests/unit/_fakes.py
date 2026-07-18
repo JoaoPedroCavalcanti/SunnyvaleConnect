@@ -413,6 +413,7 @@ class FakeUnitMembershipRepository(IUnitMembershipRepository):
 
     def list_pending_for_user(self, user_id):
         pending = {
+            UnitMembership.Status.PENDING_EMAIL,
             UnitMembership.Status.PENDING_OWNER,
             UnitMembership.Status.PENDING_ADMIN,
         }

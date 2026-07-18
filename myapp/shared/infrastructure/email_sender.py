@@ -140,6 +140,14 @@ class IEmailSender(ABC):
         visitor_email: str,
     ) -> None: ...
 
+    @abstractmethod
+    def send_email_verification_code(
+        self,
+        to_email: str,
+        user_name: str,
+        code: str,
+    ) -> None: ...
+
 
 class DjangoEmailSender(IEmailSender):
     """SMTP-backed sender. Failures are logged and swallowed so a flaky mail
@@ -544,6 +552,31 @@ class DjangoEmailSender(IEmailSender):
                     {"label": "Visitor", "value": visitor_name},
                     {"label": "Sent to", "value": visitor_email},
                     {"label": "Sent at", "value": sent_at},
+                ],
+            },
+            to_email,
+        )
+
+    def send_email_verification_code(
+        self,
+        to_email: str,
+        user_name: str,
+        code: str,
+    ) -> None:
+        subject = "Verify your email"
+        self._render_and_send(
+            subject,
+            "email_verification_code",
+            {
+                "heading": "Verify your email",
+                "user_name": user_name,
+                "code": code,
+                "details": [
+                    {"label": "Verification code", "value": code},
+                    {
+                        "label": "Expires in",
+                        "value": "15 minutes",
+                    },
                 ],
             },
             to_email,

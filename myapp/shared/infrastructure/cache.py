@@ -13,6 +13,9 @@ class ICache(ABC):
     @abstractmethod
     def set(self, key: str, value: Any, ttl_seconds: int) -> None: ...
 
+    @abstractmethod
+    def delete(self, key: str) -> None: ...
+
 
 class DjangoCache(ICache):
     def get(self, key):
@@ -20,3 +23,6 @@ class DjangoCache(ICache):
 
     def set(self, key, value, ttl_seconds):
         django_cache.set(key, value, ttl_seconds)
+
+    def delete(self, key):
+        django_cache.delete(key)

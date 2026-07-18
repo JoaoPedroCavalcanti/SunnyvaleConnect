@@ -94,3 +94,12 @@ class LoginOutputSerializer(serializers.Serializer):
     access = serializers.CharField(read_only=True)
     refresh = serializers.CharField(read_only=True)
     condominium = CondominiumLookupOutputSerializer(read_only=True)
+
+
+class VerifyEmailInputSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+    code = serializers.CharField(required=True, max_length=6, min_length=6)
+
+
+class ResendVerificationInputSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)

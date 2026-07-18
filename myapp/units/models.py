@@ -76,6 +76,7 @@ class UnitMembership(models.Model):
         RESIDENT = "RESIDENT", "Resident"
 
     class Status(models.TextChoices):
+        PENDING_EMAIL = "PENDING_EMAIL", "Pending email verification"
         PENDING_ADMIN = "PENDING_ADMIN", "Pending admin approval"
         PENDING_OWNER = "PENDING_OWNER", "Pending owner approval"
         ACTIVE = "ACTIVE", "Active"
