@@ -234,7 +234,7 @@ class VisitorAccessService(IVisitorAccessService):
         scheduled_date = data.get("scheduled_date")
         if scheduled_date and scheduled_date < timezone.now():
             if data.get("all_day"):
-                if scheduled_date.date() < timezone.now().date():
+                if scheduled_date.date() < timezone.localdate():
                     raise BusinessRuleError(
                         "You can not create a visitor access with a past date.",
                         field="Scheduled_date",

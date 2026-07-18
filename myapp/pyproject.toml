@@ -63,6 +63,7 @@ source = [
     "condo_payments",
     "delivery_notification",
     "sunny_vale_news",
+    "notifications",
     "users",
     "units",
     "condominiums",
