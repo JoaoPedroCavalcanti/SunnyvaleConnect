@@ -1,0 +1,11 @@
+{% extends "emails/base.html" %}
+
+{% block title %}Visitor QR access sent{% endblock %}
+
+{% block content %}
+<p style="margin:0 0 16px;">Dear {{ user_name }},</p>
+<p style="margin:0 0 16px;">
+  QR access for <strong>{{ visitor_name }}</strong> was sent successfully.
+</p>
+{% include "emails/partials/details_box.html" with details=details %}
+{% endblock %}

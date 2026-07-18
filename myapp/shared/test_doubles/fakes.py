@@ -179,6 +179,17 @@ class FakeEmailSender(IEmailSender):
             "visitor_name": visitor_name,
         })
 
+    def send_visitor_qr_sent_notification(
+        self, to_email, user_name, visitor_name, visitor_email
+    ):
+        self.sent.append({
+            "kind": "visitor_qr_sent",
+            "to": to_email,
+            "user_name": user_name,
+            "visitor_name": visitor_name,
+            "visitor_email": visitor_email,
+        })
+
 
 class FakeCodeGenerator(ICodeGenerator):
     def __init__(self, value: str = "12345"):

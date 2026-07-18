@@ -272,7 +272,7 @@ def service(email_sender, group_repo):
     )
 
 
-def _user(pk=1, is_staff=False, role=None, employee_types=None):
+def _user(pk=1, is_staff=False, role=None, employee_types=None, email=None):
     return SimpleNamespace(
         id=pk,
         is_staff=is_staff,
@@ -280,6 +280,9 @@ def _user(pk=1, is_staff=False, role=None, employee_types=None):
         role=role or ("ADMIN" if is_staff else "RESIDENT"),
         employee_types=list(employee_types or []),
         condominium_id=TEST_CONDOMINIUM_ID,
+        email=email if email is not None else f"user{pk}@example.com",
+        username=f"user{pk}",
+        full_name=f"User {pk}",
     )
 
 
@@ -309,6 +312,10 @@ class TestCreate:
         assert item.access_token
         assert item.access_code == "C0001"
         assert any(s["kind"] == "visitor_qr_access" for s in email_sender.sent)
+        host_notices = [s for s in email_sender.sent if s["kind"] == "visitor_qr_sent"]
+        assert len(host_notices) == 1
+        assert host_notices[0]["to"] == u.email
+        assert host_notices[0]["visitor_email"] == "v@example.com"
 
     def test_regular_user_cannot_pass_host_user(self, service):
         with pytest.raises(BusinessRuleError):
@@ -421,7 +428,8 @@ class TestValidateAccess:
 
         result = service.validate_access(doorman, item.access_code)
         assert result.status == Status.CHECKED_IN
-        assert any(s["kind"] == "checkin" for s in email_sender.sent)
+        checkin_emails = [s for s in email_sender.sent if s["kind"] == "checkin"]
+        assert [s["to"] for s in checkin_emails] == [u.email]
 
     def test_doorman_validates_by_qr_payload(self, service):
         u = _user(1)
@@ -479,13 +487,14 @@ class TestValidateAccess:
         self, service, email_sender, group_repo
     ):
         doorman = _user(2, role="EMPLOYEE", employee_types=["DOORMAN"])
+        host = _user(1)
         group = SimpleNamespace(id=11, name="G")
         group_repo.members_by_group[11] = [
             SimpleNamespace(name="A", email="a@x.com"),
             SimpleNamespace(name="B", email="b@x.com"),
         ]
         visits = service.create_group_visits(
-            _user(),
+            host,
             _payload(visitor_group=group, email="", qr_access_enabled=True),
         )
         visit_a = next(v for v in visits if v.visitor_name == "A")
@@ -494,7 +503,7 @@ class TestValidateAccess:
 
         service.validate_access(doorman, visit_a.access_code)
         checkin_emails = [s for s in email_sender.sent if s["kind"] == "checkin"]
-        assert [s["to"] for s in checkin_emails] == ["a@x.com"]
+        assert [s["to"] for s in checkin_emails] == [host.email]
 
 
 class TestDelete:

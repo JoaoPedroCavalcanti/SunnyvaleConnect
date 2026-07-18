@@ -131,6 +131,15 @@ class IEmailSender(ABC):
         visitor_name: str,
     ) -> None: ...
 
+    @abstractmethod
+    def send_visitor_qr_sent_notification(
+        self,
+        to_email: str,
+        user_name: str,
+        visitor_name: str,
+        visitor_email: str,
+    ) -> None: ...
+
 
 class DjangoEmailSender(IEmailSender):
     """SMTP-backed sender. Failures are logged and swallowed so a flaky mail
@@ -508,6 +517,33 @@ class DjangoEmailSender(IEmailSender):
                 "details": [
                     {"label": "Visitor", "value": visitor_name},
                     {"label": "Notified at", "value": arrived_at},
+                ],
+            },
+            to_email,
+        )
+
+    def send_visitor_qr_sent_notification(
+        self,
+        to_email: str,
+        user_name: str,
+        visitor_name: str,
+        visitor_email: str,
+    ) -> None:
+        subject = "Visitor QR access sent"
+        sent_at = timezone.localtime(timezone.now()).strftime(
+            "%B %d, %Y at %I:%M %p"
+        )
+        self._render_and_send(
+            subject,
+            "visitor_qr_sent_notification",
+            {
+                "heading": "Visitor QR access sent",
+                "user_name": user_name,
+                "visitor_name": visitor_name,
+                "details": [
+                    {"label": "Visitor", "value": visitor_name},
+                    {"label": "Sent to", "value": visitor_email},
+                    {"label": "Sent at", "value": sent_at},
                 ],
             },
             to_email,

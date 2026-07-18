@@ -508,27 +508,28 @@ senha alterada.
 
 Todos os e-mails do sistema passam por `shared/infrastructure/email_sender.py` (`DjangoEmailSender`). Falhas de SMTP são logadas e **não** quebram a request que disparou o envio. Destinatário vazio é ignorado (exceto entrega, que retorna erro antes de criar o registro).
 
-| # | Assunto | Destinatário | Gatilho (endpoint) | Condições / observações |
-|---|---------|--------------|--------------------|-------------------------|
-| 1 | `Welcome to Sunnyvale` | E-mail do visitante | `POST /visitor_access/` | Enviado após criar a visita. Visita solo: `email` do payload. Se vazio, **não envia**. |
-| 1b | `Welcome to Sunnyvale` | E-mail de cada membro do grupo | `POST /visitor_access/groups/{id}/schedule/` | Um convite por membro que tenha e-mail cadastrado no grupo. |
-| 2 | `Check-in notification` | Mesmo(s) e-mail(s) do convite | `GET /visitor_access/checkin/{link}/` | Só no **primeiro** check-in bem-sucedido, dentro da janela `checkin_date_time` → `checkout_date_time`. |
-| 3 | `Check-out notification` | Mesmo(s) e-mail(s) do convite | `GET /visitor_access/checkout/{link}/` | Só no **primeiro** check-out bem-sucedido; visita precisa estar `CHECKED_IN` e dentro da janela de checkout (10 h antes do `scheduled_date`). |
-| 4 | `Delivery notification` | Titular (holder) do apartamento | `POST /delivery_notification/` | Staff registra entrega por apto/bloco. Backend notifica só o holder. **Falha com 400** se não houver holder ativo ou sem e-mail. |
-| 5 | `New resident request` | Titular(es) ativo(s) da unidade | `POST /user/` (signup com `household_request` → `join_existing`) | Novo morador pede entrada numa household já existente. Um e-mail por titular com e-mail. |
-| 6 | `New household creation request` | Todos os admins (`is_staff=True`, ativos, com e-mail) | `POST /user/` (signup com `household_request` → `create_new`) | Novo morador pede criação de household nova (aguarda aprovação admin). |
-| 7 | `Your account is approved` | Morador aprovado | `POST /households/{pk}/approve/` **ou** `POST /households/{pk}/memberships/{mid}/approve/` | Admin aprova household nova → todos os memberships `PENDING_ADMIN` com e-mail. Titular aprova entrada → requester com e-mail. |
-| 8 | `Your request was rejected` | Morador rejeitado | `POST /households/{pk}/reject/` **ou** `POST /households/{pk}/memberships/{mid}/reject/` | Admin rejeita household → todos os membros com e-mail (motivo opcional no body). Titular rejeita entrada → requester com e-mail (motivo opcional). |
-| 9 | `Your reservation is approved` | `reservation_user` da reserva | `POST /reservations/{pk}/approve/` | Admin aprova reserva `PENDING`. Se sem e-mail, **não envia** (aprovação segue). Idempotente: re-aprovar não reenvia. |
-| 10 | `Your reservation was rejected` | `reservation_user` da reserva | `POST /reservations/{pk}/reject/` | Admin rejeita reserva `PENDING`. Motivo obrigatório no body (`reason`). Idempotente: re-rejeitar não reenvia. |
+| # | Assunto | Destinatário | Gatilho | Observações |
+|---|---------|--------------|---------|-------------|
+| 1 | `Welcome to Sunnyvale` (QR) | E-mail do **visitante** | `POST /visitor_access/` ou schedule de grupo com `qr_access_enabled` | Contém QR + código. Sem e-mail do visitante → não cria com QR. |
+| 2 | `Visitor QR access sent` | **Host** da visita | Mesmo gatilho do item 1, após envio do QR | Confirma ao morador que o QR saiu para o visitante. |
+| 3 | `Check-in notification` | **Host** da visita | Validação QR/código pelo porteiro (`POST /visitor_access/validate/`) | Avisa que o visitante entrou. |
+| 4 | `Visitor arrival notification` | **Host** da visita | `POST /visitor_access/{id}/notify-arrival/` | Porteiro avisa chegada na portaria. |
+| 5 | `Delivery notification` | Owner da unidade | `POST /delivery_notification/` | **400** se não houver owner ativo ou sem e-mail. |
+| 6 | `New household creation request` | Admins (`is_staff`, ativos, com e-mail) | Pedido de unidade vaga (signup / `request_join`) | Um e-mail por admin. |
+| 7 | `New resident request` | Owners ativos da unidade | Pedido para entrar em unidade ocupada | Um e-mail por owner com e-mail. |
+| 8 | `Your account is approved` | Solicitante | Approve de membership | |
+| 9 | `Your request was rejected` | Solicitante | Reject de membership | Motivo opcional no body. |
+| 10 | `Your reservation is approved` | `reservation_user` | `POST /reservations/{id}/approve/` | Sem e-mail → aprovação segue, não envia. |
+| 11 | `Your reservation was rejected` | `reservation_user` | `POST /reservations/{id}/reject/` | Motivo obrigatório. |
+| 12 | Service request responded | Requester | Accept/decline de service request | Aceita ou recusa. |
 
 ### O que **não** envia e-mail
 
-- Login, refresh/verify de token, CRUD de usuário (exceto signup com `household_request`)
-- Criação de reservas em locais configuráveis, pagamentos, notícias, solicitações de serviço
-- Cancelamento de visita (`DELETE /visitor_access/{id}/`)
-- Promover/rebaixar/remover membro, sair da household, transferir titularidade
-- Cadastro de dependentes
+- Login / tokens
+- CRUD de notícias, pagamentos, edição de perfil
+- Cancelamento / edição de visita
+- Transferência de titularidade, leave/remove de membro
+- Checkout de visitante (template legado sem caller ativo)
 
 ### Configuração
 

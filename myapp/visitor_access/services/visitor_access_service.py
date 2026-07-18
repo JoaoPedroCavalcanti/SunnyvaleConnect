@@ -324,6 +324,15 @@ class VisitorAccessService(IVisitorAccessService):
                     "Could not send the visitor QR access email.",
                     field="email",
                 ) from exc
+            host = saved.host_user
+            host_email = getattr(host, "email", "") if host else ""
+            if host_email:
+                self._email.send_visitor_qr_sent_notification(
+                    to_email=host_email,
+                    user_name=getattr(host, "full_name", "") or host.username,
+                    visitor_name=saved.visitor_name,
+                    visitor_email=saved.email,
+                )
 
         return saved
 
@@ -387,11 +396,13 @@ class VisitorAccessService(IVisitorAccessService):
         instance.checkin_code = instance.access_code or ""
         saved = self._repo.save(instance)
 
-        for to_email, name in self._notification_recipients(saved):
+        host = saved.host_user
+        host_email = getattr(host, "email", "") if host else ""
+        if host_email:
             self._email.send_checkin_notification(
-                to_email=to_email,
-                user_name=saved.host_user,
-                visitor_name=name,
+                to_email=host_email,
+                user_name=getattr(host, "full_name", "") or host.username,
+                visitor_name=saved.visitor_name,
             )
         return saved
 
@@ -453,11 +464,6 @@ class VisitorAccessService(IVisitorAccessService):
     @staticmethod
     def _qr_payload(token: str) -> str:
         return f"{_QR_PAYLOAD_PREFIX}{token}"
-
-    def _notification_recipients(self, instance) -> list[tuple[str, str]]:
-        if instance.email:
-            return [(instance.email, instance.visitor_name)]
-        return []
 
     # ------------------------------------------------------------------ #
     # filter helpers                                                     #
