@@ -3,6 +3,32 @@ from django.db import models
 from django.utils import timezone
 
 
+class VisitorContactModel(models.Model):
+    """Reusable solo visitor contact (saved for later scheduling)."""
+
+    name = models.CharField(max_length=100)
+    email = models.EmailField(blank=True, null=True, default="")
+    host_user = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        related_name="visitor_contacts",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["host_user", "name"],
+                name="uniq_visitor_contact_host_name",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.host_user_id})"
+
+
 class VisitorGroupModel(models.Model):
     """Reusable group of visitors (e.g. 'Família Pai')."""
 

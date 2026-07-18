@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from visitor_access.models import (
     VisitorAccessModel,
+    VisitorContactModel,
     VisitorGroupMemberModel,
     VisitorGroupModel,
 )
@@ -17,6 +18,12 @@ class VisitorGroupAdmin(admin.ModelAdmin):
     list_display = ("id", "name", "host_user", "created_at")
     search_fields = ("name", "host_user__email")
     inlines = [VisitorGroupMemberInline]
+
+
+@admin.register(VisitorContactModel)
+class VisitorContactAdmin(admin.ModelAdmin):
+    list_display = ("id", "name", "email", "host_user", "created_at")
+    search_fields = ("name", "email", "host_user__email")
 
 
 @admin.register(VisitorAccessModel)

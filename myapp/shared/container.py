@@ -215,6 +215,16 @@ class Container:
         )
 
     @property
+    def visitor_contact_repository(self):
+        from visitor_access.repositories.visitor_contact_repository import (
+            DjangoVisitorContactRepository,
+        )
+
+        return self._resolve(
+            "visitor_contact_repository", DjangoVisitorContactRepository
+        )
+
+    @property
     def unit_repository(self):
         from units.repositories.unit_repository import DjangoUnitRepository
 
@@ -374,6 +384,18 @@ class Container:
             "visitor_group_service",
             lambda: VisitorGroupService(
                 repository=self.visitor_group_repository,
+                visitor_access_service=self.visitor_access_service,
+            ),
+        )
+
+    @property
+    def visitor_contact_service(self):
+        from visitor_access.services.visitor_contact_service import VisitorContactService
+
+        return self._resolve(
+            "visitor_contact_service",
+            lambda: VisitorContactService(
+                repository=self.visitor_contact_repository,
                 visitor_access_service=self.visitor_access_service,
             ),
         )

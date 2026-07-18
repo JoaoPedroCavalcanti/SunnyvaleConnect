@@ -15,11 +15,16 @@ from shared.permissions import IsAdminOrDoorman
 from visitor_access.models import VisitorAccessModel
 from visitor_access.serializers import (
     PaginatedVisitorAccessOutputSerializer,
+    PaginatedVisitorContactOutputSerializer,
     PaginatedVisitorGroupOutputSerializer,
     VisitorAccessInputSerializer,
     VisitorAccessOutputSerializer,
     VisitorAccessPatchSerializer,
     VisitorAccessValidateInputSerializer,
+    VisitorContactInputSerializer,
+    VisitorContactOutputSerializer,
+    VisitorContactPatchSerializer,
+    VisitorContactScheduleInputSerializer,
     VisitorGroupInputSerializer,
     VisitorGroupOutputSerializer,
     VisitorGroupPatchSerializer,
@@ -257,3 +262,83 @@ class VisitorGroupVisitsListView(APIView):
         page = paginator.paginate_queryset(queryset, request, view=self)
         serializer = VisitorAccessOutputSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
+
+
+# ---------------------------------------------------------------------- #
+# Visitor contacts (saved solo visitors) — CRUD                          #
+# ---------------------------------------------------------------------- #
+@extend_schema(tags=["visitor_access"])
+class VisitorContactListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses={200: PaginatedVisitorContactOutputSerializer})
+    def get(self, request):
+        queryset = container.visitor_contact_service.list_for(request.user)
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        serializer = VisitorContactOutputSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    @extend_schema(
+        request=VisitorContactInputSerializer,
+        responses={201: VisitorContactOutputSerializer},
+    )
+    def post(self, request):
+        serializer = VisitorContactInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instance = container.visitor_contact_service.create(
+            request.user, serializer.validated_data
+        )
+        return Response(
+            VisitorContactOutputSerializer(instance).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+@extend_schema(tags=["visitor_access"])
+class VisitorContactDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses={200: VisitorContactOutputSerializer})
+    def get(self, request, pk: int):
+        instance = container.visitor_contact_service.get_for(request.user, pk)
+        return Response(VisitorContactOutputSerializer(instance).data)
+
+    @extend_schema(
+        request=VisitorContactPatchSerializer,
+        responses={200: VisitorContactOutputSerializer},
+    )
+    def patch(self, request, pk: int):
+        serializer = VisitorContactPatchSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        instance = container.visitor_contact_service.update(
+            request.user, pk, serializer.validated_data
+        )
+        return Response(VisitorContactOutputSerializer(instance).data)
+
+    @extend_schema(responses={204: None})
+    def delete(self, request, pk: int):
+        container.visitor_contact_service.delete(request.user, pk)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@extend_schema(tags=["visitor_access"])
+class VisitorContactScheduleView(APIView):
+    """Schedule a visit from a saved solo contact."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=VisitorContactScheduleInputSerializer,
+        responses={201: VisitorAccessOutputSerializer},
+    )
+    def post(self, request, pk: int):
+        serializer = VisitorContactScheduleInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        visit = container.visitor_contact_service.schedule_visit(
+            request.user, pk, serializer.validated_data
+        )
+        return Response(
+            VisitorAccessOutputSerializer(visit).data,
+            status=status.HTTP_201_CREATED,
+        )

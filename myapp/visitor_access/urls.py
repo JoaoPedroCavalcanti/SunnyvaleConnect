@@ -5,6 +5,9 @@ from visitor_access.views import (
     VisitorAccessListCreateView,
     VisitorAccessNotifyArrivalView,
     VisitorAccessValidateView,
+    VisitorContactDetailView,
+    VisitorContactListCreateView,
+    VisitorContactScheduleView,
     VisitorGroupDetailView,
     VisitorGroupListCreateView,
     VisitorGroupScheduleView,
@@ -19,6 +22,21 @@ urlpatterns = [
         "validate/",
         VisitorAccessValidateView.as_view(),
         name="validate",
+    ),
+    path(
+        "contacts/",
+        VisitorContactListCreateView.as_view(),
+        name="contacts-list-create",
+    ),
+    path(
+        "contacts/<int:pk>/",
+        VisitorContactDetailView.as_view(),
+        name="contacts-detail",
+    ),
+    path(
+        "contacts/<int:pk>/schedule/",
+        VisitorContactScheduleView.as_view(),
+        name="contacts-schedule",
     ),
     path(
         "groups/",

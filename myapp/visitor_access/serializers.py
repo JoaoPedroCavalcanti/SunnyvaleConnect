@@ -6,6 +6,7 @@ from rest_framework import serializers
 
 from visitor_access.models import (
     VisitorAccessModel,
+    VisitorContactModel,
     VisitorGroupMemberModel,
     VisitorGroupModel,
 )
@@ -174,6 +175,53 @@ class PaginatedVisitorGroupOutputSerializer(serializers.Serializer):
 
 
 class VisitorGroupScheduleInputSerializer(serializers.Serializer):
+    scheduled_date = serializers.DateTimeField(required=True)
+    checkout_date_time = serializers.DateTimeField(required=False, allow_null=True)
+    all_day = serializers.BooleanField(required=False, default=False)
+    qr_access_enabled = serializers.BooleanField(required=False, default=False)
+    description = serializers.CharField(
+        max_length=150, required=False, allow_blank=True, allow_null=True, default=""
+    )
+
+
+# ---------------------------------------------------------------------- #
+# VisitorContact (saved solo visitor)                                    #
+# ---------------------------------------------------------------------- #
+class VisitorContactInputSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=100, required=True)
+    email = serializers.EmailField(
+        required=False, allow_blank=True, allow_null=True, default=""
+    )
+
+
+class VisitorContactPatchSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=100, required=False)
+    email = serializers.EmailField(
+        required=False, allow_blank=True, allow_null=True
+    )
+
+
+class VisitorContactOutputSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VisitorContactModel
+        fields = [
+            "id",
+            "name",
+            "email",
+            "host_user",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class PaginatedVisitorContactOutputSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    next = serializers.URLField(allow_null=True)
+    previous = serializers.URLField(allow_null=True)
+    results = VisitorContactOutputSerializer(many=True)
+
+
+class VisitorContactScheduleInputSerializer(serializers.Serializer):
     scheduled_date = serializers.DateTimeField(required=True)
     checkout_date_time = serializers.DateTimeField(required=False, allow_null=True)
     all_day = serializers.BooleanField(required=False, default=False)
