@@ -515,8 +515,8 @@ Todos os e-mails do sistema passam por `shared/infrastructure/email_sender.py` (
 | 3 | `Check-in notification` | **Host** da visita | Validação QR/código pelo porteiro (`POST /visitor_access/validate/`) | Avisa que o visitante entrou. |
 | 4 | `Visitor arrival notification` | **Host** da visita | `POST /visitor_access/{id}/notify-arrival/` | Porteiro avisa chegada na portaria. |
 | 5 | `Delivery notification` | Owner da unidade | `POST /delivery_notification/` | **400** se não houver owner ativo ou sem e-mail. |
-| 6 | `Verify your email` | Solicitante (self-signup com `unit_request`) | `POST /user/` (signup) ou `POST /user/resend-verification/` | OTP 6 dígitos, TTL 15 min. Membership fica `PENDING_EMAIL`. |
-| 7 | `New household creation request` | Admins (`is_staff`, ativos, com e-mail) | `POST /user/verify-email/` quando unidade está vaga | Um e-mail por admin. Só após verify. |
+| 6 | `Verify your email` | Solicitante (self-signup com `unit_request`) | `POST /user/` (signup) ou `POST /user/resend-verification/` | OTP 6 dígitos, TTL 15 min. **Nada é gravado no banco** até o verify. |
+| 7 | `New household creation request` | Admins (`is_staff`, ativos, com e-mail) | `POST /user/verify-email/` quando unidade está vaga | Um e-mail por admin. Cria user + membership na fila. |
 | 8 | `New resident request` | Owners ativos da unidade | `POST /user/verify-email/` quando unidade já tem owner | Um e-mail por owner com e-mail. |
 | 9 | `Your account is approved` | Solicitante | Approve de membership | |
 | 10 | `Your request was rejected` | Solicitante | Reject de membership | Motivo opcional no body. |

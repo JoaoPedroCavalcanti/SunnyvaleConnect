@@ -138,7 +138,6 @@ class DjangoUnitMembershipRepository(IUnitMembershipRepository):
         return UnitMembership.objects.filter(
             user_id=user_id,
             status__in=[
-                UnitMembership.Status.PENDING_EMAIL,
                 UnitMembership.Status.PENDING_OWNER,
                 UnitMembership.Status.PENDING_ADMIN,
             ],

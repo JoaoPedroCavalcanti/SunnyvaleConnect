@@ -19,7 +19,6 @@ from users.services.auth_service import (
     KIND_INVALID,
     KIND_OK,
     KIND_PENDING,
-    KIND_PENDING_EMAIL,
 )
 
 
@@ -95,32 +94,6 @@ class TestAuthenticate:
         assert (
             result["unit"]["membership_status"]
             == UnitMembership.Status.PENDING_ADMIN
-        )
-
-    def test_pending_email_when_awaiting_verification(self, env):
-        user = _add(
-            env["users"], 1, "secret", email="alice@example.com", is_active=False
-        )
-        unit = make_unit(
-            1,
-            kind=Unit.Kind.APARTMENT_BLOCK,
-            apartment="502",
-            block="A",
-        )
-        env["memberships"].create(
-            {
-                "unit": unit,
-                "user": user,
-                "role": UnitMembership.Role.OWNER,
-                "status": UnitMembership.Status.PENDING_EMAIL,
-            }
-        )
-
-        result = env["auth"].authenticate("alice@example.com", "secret")
-        assert result["kind"] == KIND_PENDING_EMAIL
-        assert (
-            result["unit"]["membership_status"]
-            == UnitMembership.Status.PENDING_EMAIL
         )
 
     def test_disabled_when_inactive_without_pending(self, env):

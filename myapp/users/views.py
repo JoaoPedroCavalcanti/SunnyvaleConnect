@@ -28,8 +28,8 @@ from users.services.auth_service import (
     KIND_INVALID,
     KIND_OK,
     KIND_PENDING,
-    KIND_PENDING_EMAIL,
 )
+from units.services.signup_service import KIND_PENDING_EMAIL as SIGNUP_PENDING_EMAIL
 
 
 def _parse_optional_bool(raw: str | None) -> bool | None:
@@ -123,10 +123,22 @@ class UserListCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         data = dict(serializer.validated_data)
         unit_request = data.pop("unit_request", None)
-        user = container.unit_signup_service.signup(
+        result = container.unit_signup_service.signup(
             request.user, data, unit_request
         )
-        return Response(UserOutputSerializer(user).data, status=status.HTTP_201_CREATED)
+        if result["kind"] == SIGNUP_PENDING_EMAIL:
+            return Response(
+                {
+                    "detail": "Check your email for a verification code.",
+                    "email": result["email"],
+                    "code": SIGNUP_PENDING_EMAIL,
+                },
+                status=status.HTTP_202_ACCEPTED,
+            )
+        return Response(
+            UserOutputSerializer(result["user"]).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 @extend_schema(tags=["users"])
@@ -229,17 +241,6 @@ class LoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        if kind == KIND_PENDING_EMAIL:
-            return Response(
-                {
-                    "detail": "Please verify your email to continue.",
-                    "code": KIND_PENDING_EMAIL,
-                    "unit": result["unit"],
-                    "condominium": condominium_payload,
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
         if kind == KIND_DISABLED:
             return Response(
                 {
@@ -289,22 +290,22 @@ class VerifyEmailView(APIView):
 
     @extend_schema(
         request=VerifyEmailInputSerializer,
-        responses={200: None},
+        responses={200: UserOutputSerializer},
         description=(
-            "Validates the email OTP from self-signup and moves the "
-            "membership into the admin/owner approval queue."
+            "Validates the email OTP from self-signup, creates the user and "
+            "membership in the admin/owner approval queue."
         ),
     )
     def post(self, request):
         serializer = VerifyEmailInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        container.unit_membership_service.verify_email(
+        result = container.unit_signup_service.confirm_email(
             serializer.validated_data["email"],
             serializer.validated_data["code"],
         )
         return Response(
-            {"detail": "Email verified. Waiting for approval."},
-            status=status.HTTP_200_OK,
+            UserOutputSerializer(result["user"]).data,
+            status=status.HTTP_201_CREATED,
         )
 
 
@@ -316,14 +317,14 @@ class ResendVerificationView(APIView):
         request=ResendVerificationInputSerializer,
         responses={200: None},
         description=(
-            "Resends the email verification OTP when the membership is "
-            "still PENDING_EMAIL. Rate-limited to once per minute."
+            "Resends the email verification OTP for a pending signup held in "
+            "cache (no DB row yet). Rate-limited to once per minute."
         ),
     )
     def post(self, request):
         serializer = ResendVerificationInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        container.unit_membership_service.resend_verification(
+        container.unit_signup_service.resend_verification(
             serializer.validated_data["email"]
         )
         return Response(

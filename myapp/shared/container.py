@@ -426,8 +426,6 @@ class Container:
                 email_sender=self.email_sender,
                 decision_repository=self.unit_membership_decision_repository,
                 transaction_runner=self.transaction_runner,
-                cache=self.cache,
-                code_generator=self.code_generator,
             ),
         )
 
@@ -456,6 +454,10 @@ class Container:
                 user_service=self.user_service,
                 membership_service=self.unit_membership_service,
                 condominium_service=self.condominium_service,
+                unit_repository=self.unit_repository,
+                cache=self.cache,
+                code_generator=self.code_generator,
+                email_sender=self.email_sender,
             ),
         )
 

@@ -48,6 +48,12 @@ class IUserService(ABC):
     def create(self, requester, payload: dict, *, is_active: bool = True): ...
 
     @abstractmethod
+    def prepare_create(self, requester, payload: dict) -> dict: ...
+
+    @abstractmethod
+    def create_prepared(self, fields: dict, *, is_active: bool = True): ...
+
+    @abstractmethod
     def activate(self, user) -> None: ...
 
     @abstractmethod
@@ -118,6 +124,11 @@ class UserService(IUserService):
         self._repo.delete(user)
 
     def create(self, requester, payload: dict, *, is_active: bool = True):
+        fields = self.prepare_create(requester, payload)
+        return self._repo.create_user(**fields, is_active=is_active)
+
+    def prepare_create(self, requester, payload: dict) -> dict:
+        """Validate and normalize signup data without persisting."""
         is_anonymous = requester is None or not getattr(
             requester, "is_authenticated", False
         )
@@ -126,7 +137,8 @@ class UserService(IUserService):
                 "Only anonymous users or staff can create accounts."
             )
 
-        role = payload.pop("role", UserRole.RESIDENT)
+        data = dict(payload)
+        role = data.pop("role", UserRole.RESIDENT)
         if role not in _VALID_ROLES:
             raise BusinessRuleError(
                 message=f"Invalid role: {role!r}.", field="role"
@@ -136,8 +148,8 @@ class UserService(IUserService):
                 "Only admins can create non-resident users."
             )
 
-        condominium_id = payload.pop("condominium_id", None)
-        condominium_code = payload.pop("condominium_code", None)
+        condominium_id = data.pop("condominium_id", None)
+        condominium_code = data.pop("condominium_code", None)
         if is_anonymous:
             if not condominium_id:
                 raise BusinessRuleError(
@@ -154,12 +166,12 @@ class UserService(IUserService):
             condominium_id = require_condominium_id(requester)
             condominium_code = requester.condominium.code
 
-        password = payload.get("password", "")
+        password = data.get("password", "")
         errors = self._policy.validate(password)
         if errors:
             raise BusinessRuleError(message=errors, field="password")
 
-        username = payload.get("username", "")
+        username = data.get("username", "")
         if username:
             if not condominium_code:
                 raise BusinessRuleError(
@@ -173,16 +185,16 @@ class UserService(IUserService):
                     message="A user with that username already exists.",
                     field="username",
                 )
-            payload["username"] = build_tenant_username(condominium_code, username)
+            username = build_tenant_username(condominium_code, username)
 
-        email = (payload.get("email") or "").lower().strip()
+        email = (data.get("email") or "").lower().strip()
         if email and self._repo.exists_with_email(email):
             raise BusinessRuleError(
                 message="An account with this email address already exists.",
                 field="email",
             )
 
-        cpf = self._cpf.normalize(payload.get("cpf", ""))
+        cpf = self._cpf.normalize(data.get("cpf", ""))
         cpf_error = self._cpf.validate(cpf)
         if cpf_error:
             raise BusinessRuleError(message=cpf_error, field="cpf")
@@ -191,39 +203,54 @@ class UserService(IUserService):
                 message="An account with this CPF already exists.", field="cpf"
             )
 
-        phone = self._phone.normalize(payload.get("phone", ""))
+        phone = self._phone.normalize(data.get("phone", ""))
         phone_error = self._phone.validate(phone)
         if phone_error:
             raise BusinessRuleError(message=phone_error, field="phone")
 
         employee_types = self._normalize_employee_types(
-            role, payload.pop("employee_types", None)
+            role, data.pop("employee_types", None)
         )
-        apartment = payload.get("apartment", "") or ""
-        block = payload.get("block", "") or ""
+        apartment = data.get("apartment", "") or ""
+        block = data.get("block", "") or ""
         if role == UserRole.EMPLOYEE and (apartment or block):
             raise BusinessRuleError(
                 "Employees cannot be linked to an apartment.",
                 field="apartment",
             )
 
-        return self._repo.create_user(
-            username=payload.get("username", username),
-            password=password,
-            email=email,
-            full_name=payload["full_name"],
-            birth_date=payload["birth_date"],
-            cpf=cpf,
-            phone=phone,
-            apartment=apartment if role != UserRole.EMPLOYEE else "",
-            block=block if role != UserRole.EMPLOYEE else "",
-            photo=payload.get("photo"),
-            is_active=is_active,
-            role=role,
-            is_staff=role == UserRole.ADMIN,
-            employee_types=employee_types,
-            condominium_id=condominium_id,
-        )
+        return {
+            "username": username,
+            "password": password,
+            "email": email,
+            "full_name": data["full_name"],
+            "birth_date": data["birth_date"],
+            "cpf": cpf,
+            "phone": phone,
+            "apartment": apartment if role != UserRole.EMPLOYEE else "",
+            "block": block if role != UserRole.EMPLOYEE else "",
+            "photo": data.get("photo"),
+            "role": role,
+            "is_staff": role == UserRole.ADMIN,
+            "employee_types": employee_types,
+            "condominium_id": condominium_id,
+        }
+
+    def create_prepared(self, fields: dict, *, is_active: bool = True):
+        """Persist fields previously returned by prepare_create."""
+        email = (fields.get("email") or "").lower().strip()
+        if email and self._repo.exists_with_email(email):
+            raise BusinessRuleError(
+                message="An account with this email address already exists.",
+                field="email",
+            )
+        cpf = fields.get("cpf") or ""
+        condominium_id = fields.get("condominium_id")
+        if cpf and self._repo.exists_with_cpf(cpf, condominium_id=condominium_id):
+            raise BusinessRuleError(
+                message="An account with this CPF already exists.", field="cpf"
+            )
+        return self._repo.create_user(**dict(fields), is_active=is_active)
 
     def update(self, user, pk, payload):
         instance = self.get_for(user, pk)

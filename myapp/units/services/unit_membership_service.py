@@ -13,15 +13,10 @@ from shared.exceptions import (
     NotFoundError,
     PermissionDeniedError,
 )
-from shared.infrastructure.cache import ICache
-from shared.infrastructure.code_generator import ICodeGenerator
 from shared.infrastructure.email_sender import IEmailSender
 from shared.infrastructure.transactions import ITransactionRunner
 from shared.tenant import assert_same_condominium, require_condominium_id
 from users.repositories.user_repository import IUserRepository
-
-_EMAIL_VERIFY_TTL_SECONDS = 15 * 60
-_EMAIL_RESEND_TTL_SECONDS = 60
 
 
 class IUnitMembershipService(ABC):
@@ -33,15 +28,6 @@ class IUnitMembershipService(ABC):
 
     @abstractmethod
     def request_join(self, user, unit_id: int) -> UnitMembership: ...
-
-    @abstractmethod
-    def send_verification_code(self, user) -> None: ...
-
-    @abstractmethod
-    def verify_email(self, email: str, code: str) -> UnitMembership: ...
-
-    @abstractmethod
-    def resend_verification(self, email: str) -> None: ...
 
     @abstractmethod
     def provision_join(
@@ -77,8 +63,6 @@ class UnitMembershipService(IUnitMembershipService):
         email_sender: IEmailSender,
         decision_repository: IUnitMembershipDecisionRepository,
         transaction_runner: ITransactionRunner,
-        cache: ICache,
-        code_generator: ICodeGenerator,
     ):
         self._repo = membership_repository
         self._units = unit_repository
@@ -86,8 +70,6 @@ class UnitMembershipService(IUnitMembershipService):
         self._email = email_sender
         self._decisions = decision_repository
         self._tx = transaction_runner
-        self._cache = cache
-        self._codes = code_generator
 
     def list_for_unit(self, user, unit_id):
         unit = self._get_unit_or_404(unit_id)
@@ -122,57 +104,6 @@ class UnitMembershipService(IUnitMembershipService):
             raise BusinessRuleError("User already has a pending unit request.")
 
         vacant = self._repo.get_active_owner(unit.id) is None
-        role = (
-            UnitMembership.Role.OWNER
-            if vacant
-            else UnitMembership.Role.RESIDENT
-        )
-
-        with self._tx.atomic():
-            membership = self._repo.create(
-                {
-                    "unit": unit,
-                    "user": user,
-                    "role": role,
-                    "status": UnitMembership.Status.PENDING_EMAIL,
-                }
-            )
-
-        return membership
-
-    def send_verification_code(self, user) -> None:
-        if not user.email:
-            raise BusinessRuleError("User has no email to verify.")
-
-        pending = [
-            m
-            for m in self._repo.list_pending_for_user(user.id)
-            if m.status == UnitMembership.Status.PENDING_EMAIL
-        ]
-        if not pending:
-            raise BusinessRuleError(
-                "No membership is waiting for email verification."
-            )
-
-        code = self._codes.six_digits()
-        self._cache.set(
-            self._otp_key(user.id), code, _EMAIL_VERIFY_TTL_SECONDS
-        )
-        self._email.send_email_verification_code(
-            to_email=user.email,
-            user_name=user.full_name or user.username,
-            code=code,
-        )
-
-    def verify_email(self, email: str, code: str) -> UnitMembership:
-        user = self._get_user_by_email_or_404(email)
-        membership = self._pending_email_membership_or_error(user.id)
-
-        cached = self._cache.get(self._otp_key(user.id))
-        if cached is None or str(cached) != str(code).strip():
-            raise BusinessRuleError("Invalid or expired verification code.")
-
-        vacant = self._repo.get_active_owner(membership.unit_id) is None
         if vacant:
             role = UnitMembership.Role.OWNER
             status = UnitMembership.Status.PENDING_ADMIN
@@ -181,24 +112,17 @@ class UnitMembershipService(IUnitMembershipService):
             status = UnitMembership.Status.PENDING_OWNER
 
         with self._tx.atomic():
-            self._repo.update(membership, {"role": role, "status": status})
-
-        self._cache.delete(self._otp_key(user.id))
-        self._notify_approvers(membership)
-        return membership
-
-    def resend_verification(self, email: str) -> None:
-        user = self._get_user_by_email_or_404(email)
-        self._pending_email_membership_or_error(user.id)
-
-        rate_key = self._resend_rate_key(user.email)
-        if self._cache.get(rate_key) is not None:
-            raise BusinessRuleError(
-                "Please wait before requesting another verification code."
+            membership = self._repo.create(
+                {
+                    "unit": unit,
+                    "user": user,
+                    "role": role,
+                    "status": status,
+                }
             )
 
-        self.send_verification_code(user)
-        self._cache.set(rate_key, "1", _EMAIL_RESEND_TTL_SECONDS)
+        self._notify_approvers(membership)
+        return membership
 
     def provision_join(self, admin, user, unit_id):
         if not getattr(admin, "is_staff", False):
@@ -485,31 +409,6 @@ class UnitMembershipService(IUnitMembershipService):
             "action": action,
             "reason": reason or "",
         }
-
-    def _otp_key(self, user_id: int) -> str:
-        return f"email_verify:{user_id}"
-
-    def _resend_rate_key(self, email: str) -> str:
-        return f"email_verify_resend:{(email or '').lower().strip()}"
-
-    def _get_user_by_email_or_404(self, email: str):
-        normalized = (email or "").lower().strip()
-        user = self._users.get_by_email(normalized)
-        if not user:
-            raise NotFoundError("No account matches the given query.")
-        return user
-
-    def _pending_email_membership_or_error(self, user_id: int):
-        pending = [
-            m
-            for m in self._repo.list_pending_for_user(user_id)
-            if m.status == UnitMembership.Status.PENDING_EMAIL
-        ]
-        if not pending:
-            raise BusinessRuleError(
-                "No membership is waiting for email verification."
-            )
-        return pending[0]
 
     def _notify_approvers(self, membership) -> None:
         user = membership.user

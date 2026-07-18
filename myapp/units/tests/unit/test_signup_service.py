@@ -1,10 +1,16 @@
 """Unit tests for units SignupService orchestration."""
 
+from datetime import date
+
 import pytest
 
 from condominiums.services.condominium_service import CondominiumService
 from units.models import UnitMembership
-from units.services.signup_service import SignupService
+from units.services.signup_service import (
+    KIND_CREATED,
+    KIND_PENDING_EMAIL,
+    SignupService,
+)
 from units.services.unit_membership_service import UnitMembershipService
 from units.services.unit_service import UnitService
 from units.tests.unit._fakes import (
@@ -65,8 +71,6 @@ def env():
         email_sender=email,
         decision_repository=decisions,
         transaction_runner=tx,
-        cache=cache,
-        code_generator=codes,
     )
     condominium_service = CondominiumService(
         repository=condominiums,
@@ -76,6 +80,10 @@ def env():
         user_service=user_service,
         membership_service=membership_service,
         condominium_service=condominium_service,
+        unit_repository=units,
+        cache=cache,
+        code_generator=codes,
+        email_sender=email,
     )
     unit = unit_service.create(
         make_user(99, is_staff=True),
@@ -87,6 +95,8 @@ def env():
         "memberships": memberships,
         "users": users,
         "email": email,
+        "cache": cache,
+        "codes": codes,
         "unit": unit,
         "unit_service": unit_service,
     }
@@ -97,7 +107,7 @@ def _user_payload(**overrides):
         "username": "joao",
         "password": "StrongPass1!",
         "full_name": "Joao",
-        "birth_date": "1990-01-01",
+        "birth_date": date(1990, 1, 1),
         "cpf": VALID_CPF_A,
         "phone": "11987654321",
         "email": "joao@example.com",
@@ -111,23 +121,63 @@ def _user_payload(**overrides):
 
 class TestSignup:
     def test_without_unit_request_creates_active_user(self, env):
-        user = env["signup"].signup(anon(), _user_payload(), None)
-        assert user.is_active is True
+        result = env["signup"].signup(anon(), _user_payload(), None)
+        assert result["kind"] == KIND_CREATED
+        assert result["user"].is_active is True
 
-    def test_with_unit_request_creates_pending_email_user(self, env):
-        user = env["signup"].signup(
+    def test_with_unit_request_does_not_persist_until_otp(self, env):
+        result = env["signup"].signup(
             anon(),
             _user_payload(),
             {"unit_id": env["unit"].id},
         )
-        assert user.is_active is False
-        ms = env["memberships"].list_for_unit(env["unit"].id)
-        assert len(ms) == 1
-        assert ms[0].status == UnitMembership.Status.PENDING_EMAIL
-        assert ms[0].role == UnitMembership.Role.OWNER
+        assert result["kind"] == KIND_PENDING_EMAIL
+        assert result["email"] == "joao@example.com"
+        assert list(env["users"].list_all()) == []
+        assert env["memberships"].list_for_unit(env["unit"].id) == []
         assert any(
             s["kind"] == "email_verification" for s in env["email"].sent
         )
+
+    def test_confirm_email_creates_user_and_pending_membership(self, env):
+        env["users"].admin_emails = ["admin@example.com"]
+        env["signup"].signup(
+            anon(),
+            _user_payload(),
+            {"unit_id": env["unit"].id},
+        )
+        confirmed = env["signup"].confirm_email(
+            "joao@example.com", env["codes"].six_digits()
+        )
+        user = confirmed["user"]
+        assert user.is_active is False
+        ms = env["memberships"].list_for_unit(env["unit"].id)
+        assert len(ms) == 1
+        assert ms[0].status == UnitMembership.Status.PENDING_ADMIN
+        assert ms[0].role == UnitMembership.Role.OWNER
+        assert any(
+            s["kind"] == "household_creation_request" for s in env["email"].sent
+        )
+
+    def test_confirm_email_rejects_wrong_code(self, env):
+        env["signup"].signup(
+            anon(),
+            _user_payload(),
+            {"unit_id": env["unit"].id},
+        )
+        with pytest.raises(BusinessRuleError):
+            env["signup"].confirm_email("joao@example.com", "000000")
+        assert list(env["users"].list_all()) == []
+
+    def test_resend_rate_limited(self, env):
+        env["signup"].signup(
+            anon(),
+            _user_payload(),
+            {"unit_id": env["unit"].id},
+        )
+        env["signup"].resend_verification("joao@example.com")
+        with pytest.raises(BusinessRuleError):
+            env["signup"].resend_verification("joao@example.com")
 
     def test_invalid_unit_request_raises(self, env):
         with pytest.raises(BusinessRuleError):
@@ -135,12 +185,13 @@ class TestSignup:
 
     def test_admin_provision_activates_membership_immediately(self, env):
         admin = make_user(99, is_staff=True)
-        user = env["signup"].signup(
+        result = env["signup"].signup(
             admin,
             _user_payload(username="maria", email="maria@example.com", cpf=VALID_CPF_B),
             {"unit_id": env["unit"].id},
         )
-        assert user.is_active is True
+        assert result["kind"] == KIND_CREATED
+        assert result["user"].is_active is True
         ms = env["memberships"].list_for_unit(env["unit"].id)
         assert ms[0].status == UnitMembership.Status.ACTIVE
 
