@@ -478,6 +478,21 @@ class Container:
         )
 
     @property
+    def password_reset_service(self):
+        from users.services.password_reset_service import PasswordResetService
+
+        return self._resolve(
+            "password_reset_service",
+            lambda: PasswordResetService(
+                user_repository=self.user_repository,
+                cache=self.cache,
+                code_generator=self.code_generator,
+                email_sender=self.email_sender,
+                password_policy=self.password_policy,
+            ),
+        )
+
+    @property
     def admin_dashboard_service(self):
         from admin_dashboard.services.admin_dashboard_service import (
             AdminDashboardService,

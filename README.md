@@ -516,13 +516,14 @@ Todos os e-mails do sistema passam por `shared/infrastructure/email_sender.py` (
 | 4 | `Visitor arrival notification` | **Host** da visita | `POST /visitor_access/{id}/notify-arrival/` | Porteiro avisa chegada na portaria. |
 | 5 | `Delivery notification` | Owner da unidade | `POST /delivery_notification/` | **400** se não houver owner ativo ou sem e-mail. |
 | 6 | `Verify your email` | Solicitante (self-signup com `unit_request`) | `POST /user/` (signup) ou `POST /user/resend-verification/` | OTP 6 dígitos, TTL 15 min. **Nada é gravado no banco** até o verify. |
-| 7 | `New household creation request` | Admins (`is_staff`, ativos, com e-mail) | `POST /user/verify-email/` quando unidade está vaga | Um e-mail por admin. Cria user + membership na fila. |
-| 8 | `New resident request` | Owners ativos da unidade | `POST /user/verify-email/` quando unidade já tem owner | Um e-mail por owner com e-mail. |
-| 9 | `Your account is approved` | Solicitante | Approve de membership | |
-| 10 | `Your request was rejected` | Solicitante | Reject de membership | Motivo opcional no body. |
-| 11 | `Your reservation is approved` | `reservation_user` | `POST /reservations/{id}/approve/` | Sem e-mail → aprovação segue, não envia. |
-| 12 | `Your reservation was rejected` | `reservation_user` | `POST /reservations/{id}/reject/` | Motivo obrigatório. |
-| 13 | Service request responded | Requester | Accept/decline de service request | Aceita ou recusa. |
+| 7 | `Reset your password` | Conta existente | `POST /user/password-reset/` ou `.../resend/` | OTP 6 dígitos, TTL 15 min. Response opaca (não revela se o e-mail existe). |
+| 8 | `New household creation request` | Admins (`is_staff`, ativos, com e-mail) | `POST /user/verify-email/` quando unidade está vaga | Um e-mail por admin. Cria user + membership na fila. |
+| 9 | `New resident request` | Owners ativos da unidade | `POST /user/verify-email/` quando unidade já tem owner | Um e-mail por owner com e-mail. |
+| 10 | `Your account is approved` | Solicitante | Approve de membership | |
+| 11 | `Your request was rejected` | Solicitante | Reject de membership | Motivo opcional no body. |
+| 12 | `Your reservation is approved` | `reservation_user` | `POST /reservations/{id}/approve/` | Sem e-mail → aprovação segue, não envia. |
+| 13 | `Your reservation was rejected` | `reservation_user` | `POST /reservations/{id}/reject/` | Motivo obrigatório. |
+| 14 | Service request responded | Requester | Accept/decline de service request | Aceita ou recusa. |
 
 ### O que **não** envia e-mail
 

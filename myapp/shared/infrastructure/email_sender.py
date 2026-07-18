@@ -148,6 +148,14 @@ class IEmailSender(ABC):
         code: str,
     ) -> None: ...
 
+    @abstractmethod
+    def send_password_reset_code(
+        self,
+        to_email: str,
+        user_name: str,
+        code: str,
+    ) -> None: ...
+
 
 class DjangoEmailSender(IEmailSender):
     """SMTP-backed sender. Failures are logged and swallowed so a flaky mail
@@ -569,6 +577,31 @@ class DjangoEmailSender(IEmailSender):
             "email_verification_code",
             {
                 "heading": "Verify your email",
+                "user_name": user_name,
+                "code": code,
+                "details": [
+                    {"label": "Verification code", "value": code},
+                    {
+                        "label": "Expires in",
+                        "value": "15 minutes",
+                    },
+                ],
+            },
+            to_email,
+        )
+
+    def send_password_reset_code(
+        self,
+        to_email: str,
+        user_name: str,
+        code: str,
+    ) -> None:
+        subject = "Reset your password"
+        self._render_and_send(
+            subject,
+            "password_reset_code",
+            {
+                "heading": "Reset your password",
                 "user_name": user_name,
                 "code": code,
                 "details": [

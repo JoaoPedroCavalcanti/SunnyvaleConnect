@@ -198,6 +198,14 @@ class FakeEmailSender(IEmailSender):
             "code": code,
         })
 
+    def send_password_reset_code(self, to_email, user_name, code):
+        self.sent.append({
+            "kind": "password_reset",
+            "to": to_email,
+            "user_name": user_name,
+            "code": code,
+        })
+
 
 class FakeCodeGenerator(ICodeGenerator):
     def __init__(self, value: str = "12345"):

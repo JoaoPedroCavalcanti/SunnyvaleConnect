@@ -455,3 +455,53 @@ class LoginAPISmoke(BaseTestsUsers):
             self.User.objects.filter(email=payload["email"]).exists()
         )
         self.assertEqual(vacant.memberships.count(), 0)
+
+
+class PasswordResetAPISmoke(BaseTestsUsers):
+    def test_password_reset_happy_path(self):
+        from django.core import mail
+
+        from shared.container import container
+        from shared.test_doubles.fakes import FakeCodeGenerator
+
+        codes = FakeCodeGenerator("445566")
+        container.override("code_generator", codes)
+
+        request = self.client.post(
+            reverse("users:password-reset"),
+            data={"email": self.user_a.email},
+            format="json",
+        )
+        self.assertEqual(request.status_code, 200, request.data)
+        self.assertTrue(
+            any("Reset your password" in m.subject for m in mail.outbox)
+        )
+
+        confirm = self.client.post(
+            reverse("users:password-reset-confirm"),
+            data={
+                "email": self.user_a.email,
+                "code": codes.six_digits(),
+                "new_password": "NewPass1!",
+            },
+            format="json",
+        )
+        self.assertEqual(confirm.status_code, 200, confirm.data)
+
+        login = self.client.post(
+            LOGIN_URL,
+            data={
+                "email": self.user_a.email,
+                "password": "NewPass1!",
+            },
+            format="json",
+        )
+        self.assertEqual(login.status_code, 200, login.data)
+
+    def test_password_reset_unknown_email_still_200(self):
+        response = self.client.post(
+            reverse("users:password-reset"),
+            data={"email": "nobody@example.com"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)

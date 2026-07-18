@@ -154,7 +154,10 @@ class FakeUserRepository(IUserRepository):
 
     def update(self, instance, data):
         for k, v in data.items():
-            setattr(instance, k, v)
+            if k == "password":
+                instance._password = v
+            else:
+                setattr(instance, k, v)
         return instance
 
     def delete(self, instance):

@@ -103,3 +103,17 @@ class VerifyEmailInputSerializer(serializers.Serializer):
 
 class ResendVerificationInputSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+    code = serializers.CharField(required=True, max_length=6, min_length=6)
+    new_password = serializers.CharField(required=True, write_only=True)
+
+
+class PasswordResetResendSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)

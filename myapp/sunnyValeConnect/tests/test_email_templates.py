@@ -62,6 +62,19 @@ pytestmark = pytest.mark.unit
             },
             ["Frank", "654321", "15 minutes"],
         ),
+        (
+            "password_reset_code",
+            {
+                "heading": "Reset your password",
+                "user_name": "Grace",
+                "code": "112233",
+                "details": [
+                    {"label": "Verification code", "value": "112233"},
+                    {"label": "Expires in", "value": "15 minutes"},
+                ],
+            },
+            ["Grace", "112233", "15 minutes"],
+        ),
     ],
 )
 def test_render_email_includes_expected_content(

@@ -17,6 +17,9 @@ from users.serializers import (
     LoginInputSerializer,
     LoginOutputSerializer,
     PaginatedUserOutputSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
+    PasswordResetResendSerializer,
     ResendVerificationInputSerializer,
     UserInputSerializer,
     UserOutputSerializer,
@@ -329,5 +332,82 @@ class ResendVerificationView(APIView):
         )
         return Response(
             {"detail": "Verification code sent."},
+            status=status.HTTP_200_OK,
+        )
+
+
+@extend_schema(tags=["users"])
+class PasswordResetRequestView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        request=PasswordResetRequestSerializer,
+        responses={200: None},
+        description=(
+            "Starts a password-reset OTP flow. Always returns 200 so emails "
+            "are not enumerable. Code is emailed when the account exists."
+        ),
+    )
+    def post(self, request):
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        container.password_reset_service.request_reset(
+            serializer.validated_data["email"]
+        )
+        return Response(
+            {
+                "detail": (
+                    "If an account exists for this email, "
+                    "a verification code was sent."
+                )
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+@extend_schema(tags=["users"])
+class PasswordResetConfirmView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        request=PasswordResetConfirmSerializer,
+        responses={200: None},
+        description="Confirms the OTP and sets a new password.",
+    )
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        container.password_reset_service.confirm_reset(
+            data["email"], data["code"], data["new_password"]
+        )
+        return Response(
+            {"detail": "Password updated."},
+            status=status.HTTP_200_OK,
+        )
+
+
+@extend_schema(tags=["users"])
+class PasswordResetResendView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        request=PasswordResetResendSerializer,
+        responses={200: None},
+        description="Resends the password-reset OTP. Rate-limited to once per minute.",
+    )
+    def post(self, request):
+        serializer = PasswordResetResendSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        container.password_reset_service.resend_code(
+            serializer.validated_data["email"]
+        )
+        return Response(
+            {
+                "detail": (
+                    "If an account exists for this email, "
+                    "a verification code was sent."
+                )
+            },
             status=status.HTTP_200_OK,
         )
