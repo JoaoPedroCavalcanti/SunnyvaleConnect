@@ -21,7 +21,6 @@ urlpatterns = [
     path("condo_payments/", include("condo_payments.urls")),
     path("delivery_notification/", include("delivery_notification.urls")),
     path("sunny_vale_news/", include("sunny_vale_news.urls")),
-    path("notifications/", include(("notifications.urls"), namespace="notifications")),
     path("units/", include(("units.urls"), namespace="units")),
     # Legacy alias — households was renamed to units; keep old paths working.
     path("households/", include(("units.urls"), namespace="households")),

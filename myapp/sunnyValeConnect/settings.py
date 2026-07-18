@@ -48,7 +48,6 @@ INSTALLED_APPS = [
     "condo_payments",
     "delivery_notification",
     "sunny_vale_news",
-    "notifications",
     "units",
     "condominiums",
     "admin_dashboard",
@@ -204,7 +203,6 @@ SPECTACULAR_SETTINGS = {
         "UserRoleEnum": "users.models.UserRole",
         "EmployeeTypeEnum": "users.models.EmployeeType",
         "NewsKindEnum": "sunny_vale_news.models.SunnyValeNewsModel.Kind",
-        "NotificationTypeEnum": "notifications.models.NotificationModel.Type",
         "ServiceRequestPriorityEnum": "service_requests.models.ServiceRequestModel.Priority",
         # Delivery + news share low / medium / high — one name only.
         "LowMediumHighPriorityEnum": (

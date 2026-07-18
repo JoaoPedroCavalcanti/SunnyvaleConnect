@@ -195,16 +195,6 @@ class Container:
         )
 
     @property
-    def notification_repository(self):
-        from notifications.repositories.notification_repository import (
-            DjangoNotificationRepository,
-        )
-
-        return self._resolve(
-            "notification_repository", DjangoNotificationRepository
-        )
-
-    @property
     def visitor_access_repository(self):
         from visitor_access.repositories.visitor_access_repository import (
             DjangoVisitorAccessRepository,
@@ -369,15 +359,6 @@ class Container:
         return self._resolve(
             "sunny_vale_news_service",
             lambda: SunnyValeNewsService(repository=self.sunny_vale_news_repository),
-        )
-
-    @property
-    def notification_service(self):
-        from notifications.services.notification_service import NotificationService
-
-        return self._resolve(
-            "notification_service",
-            lambda: NotificationService(repository=self.notification_repository),
         )
 
     @property
