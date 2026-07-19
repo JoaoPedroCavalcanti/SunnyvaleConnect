@@ -28,6 +28,19 @@ def _as_datetime(value: time) -> datetime:
     return datetime.combine(datetime.min.date(), value)
 
 
+def _subtract_gap(value: time, gap: timedelta) -> datetime:
+    """Subtract ``gap`` from ``value``, clamped to the start of the day.
+
+    ``datetime.min`` cannot go before year 1, so an all-day booking that
+    starts at 00:00 would OverflowError on ``00:00 - 30min`` without this.
+    """
+    start_of_day = _as_datetime(DAY_START)
+    value_dt = _as_datetime(value)
+    if value_dt <= start_of_day + gap:
+        return start_of_day
+    return value_dt - gap
+
+
 def slots_overlap(
     a_start: time | None,
     a_end: time | None,
@@ -102,7 +115,7 @@ def compute_free_slots(
     day_end_dt = _as_datetime(DAY_END)
 
     for start, end in merged:
-        free_end_dt = _as_datetime(start) - min_gap
+        free_end_dt = _subtract_gap(start, min_gap)
         if free_end_dt > cursor_dt:
             free.append((_to_time(cursor_dt), _to_time(free_end_dt)))
         next_cursor = _as_datetime(end) + min_gap

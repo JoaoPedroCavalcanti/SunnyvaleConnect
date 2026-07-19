@@ -46,3 +46,15 @@ def test_custom_min_gap():
         (time(0, 0), time(11, 45)),
         (time(13, 15), time(23, 59, 59)),
     ]
+
+
+def test_all_day_booking_leaves_no_free_slots():
+    # null/null normalizes to 00:00–23:59:59 (full day).
+    free = compute_free_slots([(None, None)])
+    assert free == []
+
+
+def test_booking_at_midnight_does_not_overflow():
+    free = compute_free_slots([(time(0, 0), time(1, 0))])
+    assert free == [(time(1, 30), time(23, 59, 59))]
+
