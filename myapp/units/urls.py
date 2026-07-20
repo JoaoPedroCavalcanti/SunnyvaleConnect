@@ -1,6 +1,7 @@
 from django.urls import path
 
 from units.views import (
+    MembershipDecisionHistoryView,
     PendingApprovalsView,
     UnitBulkProvisionView,
     UnitCatalogFiltersView,
@@ -22,6 +23,11 @@ urlpatterns = [
         "pending-approvals/",
         PendingApprovalsView.as_view(),
         name="pending-approvals",
+    ),
+    path(
+        "decision-history/",
+        MembershipDecisionHistoryView.as_view(),
+        name="decision-history",
     ),
     path(
         "bulk-provision/",

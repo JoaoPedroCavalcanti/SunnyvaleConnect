@@ -500,14 +500,19 @@ class FakeUnitMembershipDecisionRepository(
         self._next_id = 1
 
     def record(self, data):
+        payload = {
+            "actor_email": "",
+            "actor_role": "",
+            **data,
+        }
         item = SimpleNamespace(
             id=self._next_id,
             pk=self._next_id,
             created_at=None,
-            unit_id=data["unit"].id,
-            actor_id=data["actor"].id,
-            target_id=data["target"].id,
-            **data,
+            unit_id=payload["unit"].id,
+            actor_id=payload["actor"].id,
+            target_id=payload["target"].id,
+            **payload,
         )
         self._items.append(item)
         self._next_id += 1
@@ -519,3 +524,13 @@ class FakeUnitMembershipDecisionRepository(
             for decision in reversed(self._items)
             if decision.unit_id == unit_id
         ]
+
+    def list_for_condominium(self, condominium_id, *, action=None):
+        items = [
+            decision
+            for decision in reversed(self._items)
+            if getattr(decision.unit, "condominium_id", None) == condominium_id
+        ]
+        if action is not None:
+            items = [d for d in items if d.action == action]
+        return items

@@ -402,6 +402,10 @@ class UnitMembershipService(IUnitMembershipService):
             "actor": actor,
             "actor_username": getattr(actor, "username", "") or "",
             "actor_full_name": getattr(actor, "full_name", "") or "",
+            "actor_email": getattr(actor, "email", "") or "",
+            "actor_role": (
+                "ADMIN" if getattr(actor, "is_staff", False) else "OWNER"
+            ),
             "target": user,
             "target_username": getattr(user, "username", "") or "",
             "target_full_name": getattr(user, "full_name", "") or "",

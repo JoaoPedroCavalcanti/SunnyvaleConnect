@@ -137,6 +137,13 @@ class UnitMembershipDecision(models.Model):
     )
     actor_username = models.CharField(max_length=150, blank=True, default="")
     actor_full_name = models.CharField(max_length=150, blank=True, default="")
+    actor_email = models.EmailField(blank=True, default="")
+    actor_role = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        help_text="Capacity used for the decision: ADMIN or OWNER.",
+    )
 
     target = models.ForeignKey(
         get_user_model(),

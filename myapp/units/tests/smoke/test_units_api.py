@@ -11,6 +11,7 @@ pytestmark = pytest.mark.api
 
 LIST_URL = reverse("units:list")
 PENDING_URL = reverse("units:pending-approvals")
+HISTORY_URL = reverse("units:decision-history")
 
 
 def _detail_url(pk):
@@ -191,7 +192,17 @@ class UnitMembershipFlowSmoke(BaseTestsUsers):
         self.assertEqual(decision["action"], "APPROVED")
         self.assertEqual(decision["unit"]["id"], unit.id)
         self.assertEqual(decision["actor"]["id"], self.admin.id)
+        self.assertEqual(decision["actor"]["role"], "ADMIN")
+        self.assertEqual(decision["actor"]["email"], self.admin.email)
+        self.assertTrue(decision["actor"]["full_name"])
         self.assertEqual(decision["target"]["id"], self.user_a.id)
+
+        history = self.client.get(HISTORY_URL)
+        self.assertEqual(history.status_code, 200)
+        self.assertGreaterEqual(history.data["count"], 1)
+        self.assertTrue(
+            any(item["id"] == decision["id"] for item in history.data["results"])
+        )
 
     def test_join_occupied_unit_and_owner_approve(self):
         unit = Unit.objects.create(
@@ -260,10 +271,31 @@ class UnitMembershipFlowSmoke(BaseTestsUsers):
         self.assertEqual(decision["action"], "REJECTED")
         self.assertEqual(decision["reason"], "no")
         self.assertEqual(decision["target"]["id"], self.user_b.id)
+        self.assertEqual(decision["actor"]["id"], self.user_a.id)
+        self.assertEqual(decision["actor"]["role"], "OWNER")
 
         self.authenticate(self.user_b)
         forbidden = self.client.get(_decisions_url(unit.id))
         self.assertEqual(forbidden.status_code, 403)
+
+    def test_decision_history_admin_only(self):
+        self.authenticate(self.user_a)
+        forbidden = self.client.get(HISTORY_URL)
+        self.assertEqual(forbidden.status_code, 403)
+
+        self.authenticate(self.admin)
+        ok = self.client.get(HISTORY_URL)
+        self.assertEqual(ok.status_code, 200)
+        self.assertIn("results", ok.data)
+        self.assertIn("count", ok.data)
+
+        filtered = self.client.get(HISTORY_URL, {"action": "APPROVED"})
+        self.assertEqual(filtered.status_code, 200)
+        for item in filtered.data["results"]:
+            self.assertEqual(item["action"], "APPROVED")
+
+        bad = self.client.get(HISTORY_URL, {"action": "PENDING"})
+        self.assertEqual(bad.status_code, 400)
 
     def test_detail_and_memberships_list(self):
         unit = Unit.objects.create(

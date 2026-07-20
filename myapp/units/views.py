@@ -193,6 +193,42 @@ class PendingApprovalsView(APIView):
 
 
 @extend_schema(tags=["units"])
+class MembershipDecisionHistoryView(APIView):
+    """Condo-wide history of membership approvals and rejections (admin)."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="action",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                enum=["APPROVED", "REJECTED"],
+                description="Filter by decision action.",
+            ),
+        ],
+        responses={200: PaginatedUnitMembershipDecisionOutputSerializer},
+        description=(
+            "Paginated history of APPROVED/REJECTED membership decisions "
+            "for the caller's condominium. Staff only. Pending requests "
+            "are not included (use pending-approvals). Optional "
+            "`action=APPROVED|REJECTED` filter."
+        ),
+    )
+    def get(self, request):
+        items = container.unit_membership_decision_service.list_history(
+            request.user,
+            action=request.query_params.get("action") or None,
+        )
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(items, request, view=self)
+        serializer = UnitMembershipDecisionOutputSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+
+@extend_schema(tags=["units"])
 class UnitMembershipListView(APIView):
     permission_classes = [IsAuthenticated]
 

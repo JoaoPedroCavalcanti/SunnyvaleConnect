@@ -192,23 +192,33 @@ class UnitDecisionUnitSerializer(serializers.Serializer):
 
 class UnitDecisionActorSerializer(serializers.Serializer):
     id = serializers.IntegerField(source="actor_id", allow_null=True)
-    username = serializers.CharField(
-        source="actor_username", allow_blank=True
-    )
+    username = serializers.SerializerMethodField()
     full_name = serializers.CharField(
         source="actor_full_name", allow_blank=True
     )
+    email = serializers.EmailField(source="actor_email", allow_blank=True)
+    role = serializers.CharField(source="actor_role", allow_blank=True)
+
+    def get_username(self, obj) -> str:
+        raw = getattr(obj, "actor_username", "") or ""
+        if ":" in raw:
+            return raw.split(":", 1)[1]
+        return raw
 
 
 class UnitDecisionTargetSerializer(serializers.Serializer):
     id = serializers.IntegerField(source="target_id", allow_null=True)
-    username = serializers.CharField(
-        source="target_username", allow_blank=True
-    )
+    username = serializers.SerializerMethodField()
     full_name = serializers.CharField(
         source="target_full_name", allow_blank=True
     )
     email = serializers.EmailField(source="target_email", allow_blank=True)
+
+    def get_username(self, obj) -> str:
+        raw = getattr(obj, "target_username", "") or ""
+        if ":" in raw:
+            return raw.split(":", 1)[1]
+        return raw
 
 
 class UnitMembershipDecisionOutputSerializer(serializers.ModelSerializer):
