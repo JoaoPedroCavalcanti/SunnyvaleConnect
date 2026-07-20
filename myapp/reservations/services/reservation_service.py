@@ -4,9 +4,12 @@ from datetime import date, time
 
 from django.utils import timezone
 
-from reservations.models import Reservation
+from reservations.models import Reservation, ReservationDecision
 from reservations.repositories.reservable_location_repository import (
     IReservableLocationRepository,
+)
+from reservations.repositories.reservation_decision_repository import (
+    IReservationDecisionRepository,
 )
 from reservations.repositories.reservation_repository import (
     IReservationRepository,
@@ -43,6 +46,7 @@ class IReservationService(ABC):
         status: str | None = None,
         period: str | None = None,
         condominium_id: int | None = None,
+        location_id: int | None = None,
     ): ...
 
     @abstractmethod
@@ -84,12 +88,14 @@ class ReservationService(IReservationService):
         membership_repository: IUnitMembershipRepository,
         user_repository: IUserRepository,
         email_sender: IEmailSender,
+        decision_repository: IReservationDecisionRepository,
     ):
         self._repo = repository
         self._locations = location_repository
         self._memberships = membership_repository
         self._users = user_repository
         self._email = email_sender
+        self._decisions = decision_repository
 
     def list(
         self,
@@ -98,10 +104,12 @@ class ReservationService(IReservationService):
         status=None,
         period=None,
         condominium_id=None,
+        location_id=None,
     ):
         ensure_not_employee(user, action="access reservations")
         normalized = self._normalize_status(status)
         normalized_period = self._normalize_period(period)
+        normalized_location = self._normalize_location_id(location_id)
         tenant_id = self._list_tenant_id(user, condominium_id)
         reference = None
         if normalized_period:
@@ -115,6 +123,7 @@ class ReservationService(IReservationService):
                 status=normalized,
                 period=normalized_period,
                 reference=reference,
+                location_id=normalized_location,
             )
         return self._repo.list_for_user(
             user.id,
@@ -122,6 +131,7 @@ class ReservationService(IReservationService):
             status=normalized,
             period=normalized_period,
             reference=reference,
+            location_id=normalized_location,
         )
 
     def availability(
@@ -188,7 +198,15 @@ class ReservationService(IReservationService):
                 ),
             }
         )
-        return self._repo.create(data)
+        created = self._repo.create(data)
+        if created.status == Reservation.Status.APPROVED:
+            self._record_decision(
+                created,
+                actor=user,
+                action=ReservationDecision.Action.APPROVED,
+                reason="",
+            )
+        return created
 
     def update(self, user, pk, payload):
         ensure_not_employee(user, action="book reservations")
@@ -291,6 +309,12 @@ class ReservationService(IReservationService):
         updated = self._repo.update(
             instance, {"status": Reservation.Status.APPROVED}
         )
+        self._record_decision(
+            updated,
+            actor=user,
+            action=ReservationDecision.Action.APPROVED,
+            reason="",
+        )
         self._notify(updated, approved=True)
         return updated
 
@@ -305,6 +329,12 @@ class ReservationService(IReservationService):
             return instance
         updated = self._repo.update(
             instance, {"status": Reservation.Status.REJECTED}
+        )
+        self._record_decision(
+            updated,
+            actor=user,
+            action=ReservationDecision.Action.REJECTED,
+            reason=reason.strip(),
         )
         self._notify(updated, approved=False, reason=reason)
         return updated
@@ -442,6 +472,52 @@ class ReservationService(IReservationService):
                 field="status",
             )
         return normalized
+
+    @staticmethod
+    def _normalize_location_id(location_id):
+        if location_id is None or str(location_id).strip() == "":
+            return None
+        try:
+            return int(location_id)
+        except (TypeError, ValueError) as exc:
+            raise BusinessRuleError(
+                "location_id must be an integer.",
+                field="location_id",
+            ) from exc
+
+    def _record_decision(self, reservation, *, actor, action, reason):
+        location = getattr(reservation, "location", None)
+        unit = getattr(reservation, "unit", None)
+        target = getattr(reservation, "reservation_user", None)
+        unit_display = ""
+        if unit is not None:
+            display = getattr(unit, "display_name", None)
+            unit_display = display() if callable(display) else (display or "")
+        self._decisions.record(
+            {
+                "reservation": reservation,
+                "condominium_id": reservation.condominium_id,
+                "location": location,
+                "location_name": getattr(location, "name", "") or "",
+                "location_icon": getattr(location, "icon", "") or "",
+                "reservation_date": reservation.reservation_date,
+                "start_time": reservation.start_time,
+                "end_time": reservation.end_time,
+                "unit": unit,
+                "unit_display_name": unit_display,
+                "target": target,
+                "target_username": getattr(target, "username", "") or "",
+                "target_full_name": getattr(target, "full_name", "") or "",
+                "target_email": getattr(target, "email", "") or "",
+                "actor": actor,
+                "actor_username": getattr(actor, "username", "") or "",
+                "actor_full_name": getattr(actor, "full_name", "") or "",
+                "actor_email": getattr(actor, "email", "") or "",
+                "actor_role": "ADMIN",
+                "action": action,
+                "reason": reason or "",
+            }
+        )
 
     @staticmethod
     def _normalize_period(period):

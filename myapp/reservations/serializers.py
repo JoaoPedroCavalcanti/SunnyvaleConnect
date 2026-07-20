@@ -1,7 +1,7 @@
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from reservations.models import ReservableLocation, Reservation
+from reservations.models import ReservableLocation, Reservation, ReservationDecision
 
 
 class TenantTargetSerializer(serializers.Serializer):
@@ -193,3 +193,79 @@ class PaginatedReservationOutputSerializer(serializers.Serializer):
     next = serializers.URLField(allow_null=True)
     previous = serializers.URLField(allow_null=True)
     results = ReservationOutputSerializer(many=True)
+
+
+class ReservationDecisionLocationSerializer(serializers.Serializer):
+    id = serializers.IntegerField(source="location_id", allow_null=True)
+    name = serializers.CharField(source="location_name", allow_blank=True)
+    icon = serializers.CharField(source="location_icon", allow_blank=True)
+
+
+class ReservationDecisionUnitSerializer(serializers.Serializer):
+    id = serializers.IntegerField(source="unit_id", allow_null=True)
+    display_name = serializers.CharField(
+        source="unit_display_name", allow_blank=True
+    )
+
+
+class ReservationDecisionActorSerializer(serializers.Serializer):
+    id = serializers.IntegerField(source="actor_id", allow_null=True)
+    username = serializers.SerializerMethodField()
+    full_name = serializers.CharField(
+        source="actor_full_name", allow_blank=True
+    )
+    email = serializers.EmailField(source="actor_email", allow_blank=True)
+    role = serializers.CharField(source="actor_role", allow_blank=True)
+
+    def get_username(self, obj) -> str:
+        raw = getattr(obj, "actor_username", "") or ""
+        if ":" in raw:
+            return raw.split(":", 1)[1]
+        return raw
+
+
+class ReservationDecisionTargetSerializer(serializers.Serializer):
+    id = serializers.IntegerField(source="target_id", allow_null=True)
+    username = serializers.SerializerMethodField()
+    full_name = serializers.CharField(
+        source="target_full_name", allow_blank=True
+    )
+    email = serializers.EmailField(source="target_email", allow_blank=True)
+
+    def get_username(self, obj) -> str:
+        raw = getattr(obj, "target_username", "") or ""
+        if ":" in raw:
+            return raw.split(":", 1)[1]
+        return raw
+
+
+class ReservationDecisionOutputSerializer(serializers.ModelSerializer):
+    reservation_id = serializers.IntegerField(allow_null=True, read_only=True)
+    location = ReservationDecisionLocationSerializer(source="*", read_only=True)
+    unit = ReservationDecisionUnitSerializer(source="*", read_only=True)
+    actor = ReservationDecisionActorSerializer(source="*", read_only=True)
+    target = ReservationDecisionTargetSerializer(source="*", read_only=True)
+
+    class Meta:
+        model = ReservationDecision
+        fields = [
+            "id",
+            "reservation_id",
+            "location",
+            "reservation_date",
+            "start_time",
+            "end_time",
+            "unit",
+            "actor",
+            "target",
+            "action",
+            "reason",
+            "created_at",
+        ]
+
+
+class PaginatedReservationDecisionOutputSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    next = serializers.URLField(allow_null=True)
+    previous = serializers.URLField(allow_null=True)
+    results = ReservationDecisionOutputSerializer(many=True)

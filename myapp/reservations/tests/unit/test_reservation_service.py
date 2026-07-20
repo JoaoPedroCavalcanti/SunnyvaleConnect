@@ -3,7 +3,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from reservations.models import Reservation
+from reservations.models import Reservation, ReservationDecision
+from reservations.repositories.reservation_decision_repository import (
+    IReservationDecisionRepository,
+)
 from reservations.repositories.reservation_repository import (
     IReservationRepository,
 )
@@ -30,12 +33,14 @@ class FakeReservationRepository(IReservationRepository):
         status=None,
         period=None,
         reference=None,
+        location_id=None,
     ):
         items = [
             item
             for item in self.items
             if item.condominium_id == condominium_id
             and (not status or item.status == status)
+            and (location_id is None or item.location_id == location_id)
         ]
         if period == "future" and reference:
             today, current_time = reference
@@ -73,6 +78,7 @@ class FakeReservationRepository(IReservationRepository):
         status=None,
         period=None,
         reference=None,
+        location_id=None,
     ):
         return [
             item
@@ -81,6 +87,7 @@ class FakeReservationRepository(IReservationRepository):
                 status=status,
                 period=period,
                 reference=reference,
+                location_id=location_id,
             )
             if item.reservation_user_id == user_id
         ]
@@ -167,6 +174,39 @@ class FakeReservationRepository(IReservationRepository):
         self.items.remove(instance)
 
 
+class FakeDecisionRepository(IReservationDecisionRepository):
+    def __init__(self):
+        self.items = []
+        self._next_id = 1
+
+    def record(self, data):
+        item = SimpleNamespace(
+            id=self._next_id,
+            reservation_id=getattr(data.get("reservation"), "id", None),
+            location_id=getattr(data.get("location"), "id", None),
+            actor_id=getattr(data.get("actor"), "id", None),
+            target_id=getattr(data.get("target"), "id", None),
+            **data,
+        )
+        self.items.append(item)
+        self._next_id += 1
+        return item
+
+    def list_for_condominium(
+        self, condominium_id, *, action=None, location_id=None
+    ):
+        items = [
+            item
+            for item in reversed(self.items)
+            if item.condominium_id == condominium_id
+        ]
+        if action is not None:
+            items = [item for item in items if item.action == action]
+        if location_id is not None:
+            items = [item for item in items if item.location_id == location_id]
+        return items
+
+
 class FakeLocationRepository:
     def __init__(self, locations):
         self.locations = locations
@@ -242,6 +282,7 @@ def setup():
         SimpleNamespace(user_id=other.id, unit=unit),
     ]
     repository = FakeReservationRepository()
+    decisions = FakeDecisionRepository()
     email = FakeEmailSender()
     service = ReservationService(
         repository=repository,
@@ -251,10 +292,12 @@ def setup():
         membership_repository=FakeMembershipRepository(memberships),
         user_repository=FakeUserRepository([resident, other, staff]),
         email_sender=email,
+        decision_repository=decisions,
     )
     return SimpleNamespace(
         service=service,
         repository=repository,
+        decisions=decisions,
         location=location,
         other_location=other_location,
         resident=resident,
@@ -613,3 +656,46 @@ def test_pending_reservation_marks_calendar_partial_for_other_users(setup):
         )
         for slot in day.free_slots
     )
+
+
+def test_approve_and_reject_record_decision_with_actor(setup):
+    pending = setup.service.create(setup.resident, _payload())
+    setup.service.approve(setup.staff, pending.id)
+    assert len(setup.decisions.items) == 1
+    decision = setup.decisions.items[0]
+    assert decision.action == ReservationDecision.Action.APPROVED
+    assert decision.actor_id == setup.staff.id
+    assert decision.actor_role == "ADMIN"
+    assert decision.target_id == setup.resident.id
+    assert decision.location_id == setup.location.id
+
+    other = setup.service.create(
+        setup.resident, _payload(location_id=setup.other_location.id)
+    )
+    setup.service.reject(setup.staff, other.id, reason="busy")
+    rejected = setup.decisions.items[-1]
+    assert rejected.action == ReservationDecision.Action.REJECTED
+    assert rejected.reason == "busy"
+    assert rejected.actor_id == setup.staff.id
+
+
+def test_admin_create_records_approved_decision(setup):
+    created = setup.service.create(setup.staff, _payload())
+    assert created.status == Reservation.Status.APPROVED
+    assert len(setup.decisions.items) == 1
+    assert setup.decisions.items[0].action == ReservationDecision.Action.APPROVED
+    assert setup.decisions.items[0].actor_id == setup.staff.id
+
+
+def test_list_filters_by_location_id(setup):
+    first = setup.service.create(setup.resident, _payload())
+    second = setup.service.create(
+        setup.resident, _payload(location_id=setup.other_location.id)
+    )
+    filtered = setup.service.list(
+        setup.staff, location_id=setup.location.id
+    )
+    assert [item.id for item in filtered] == [first.id]
+    assert second.id not in {item.id for item in filtered}
+    with pytest.raises(BusinessRuleError):
+        setup.service.list(setup.staff, location_id="abc")

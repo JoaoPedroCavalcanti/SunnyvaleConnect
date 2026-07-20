@@ -8,10 +8,12 @@ from rest_framework.views import APIView
 from reservations.serializers import (
     AvailabilityQuerySerializer,
     AvailabilityRangeSerializer,
+    PaginatedReservationDecisionOutputSerializer,
     PaginatedReservationOutputSerializer,
     ReservableLocationInputSerializer,
     ReservableLocationOutputSerializer,
     ReservableLocationPatchSerializer,
+    ReservationDecisionOutputSerializer,
     ReservationInputSerializer,
     ReservationOutputSerializer,
     ReservationPatchSerializer,
@@ -153,6 +155,16 @@ class ReservationListCreateView(APIView):
                 location="query",
                 enum=["future", "past"],
             ),
+            OpenApiParameter(
+                "location_id",
+                int,
+                required=False,
+                location="query",
+                description=(
+                    "Filter by reservable location id. Options come from "
+                    "GET /reservation-locations/."
+                ),
+            ),
         ],
         responses={200: PaginatedReservationOutputSerializer},
     )
@@ -169,6 +181,7 @@ class ReservationListCreateView(APIView):
             status=request.query_params.get("status"),
             period=request.query_params.get("period"),
             condominium_id=condominium_id,
+            location_id=request.query_params.get("location_id"),
         )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(result, request, view=self)
@@ -217,6 +230,52 @@ class ReservationDetailView(APIView):
     def delete(self, request, pk):
         container.reservation_service.delete(request.user, pk)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@extend_schema(tags=["reservations"])
+class ReservationDecisionHistoryView(APIView):
+    """Condo-wide history of reservation approvals and rejections (admin)."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="action",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                enum=["APPROVED", "REJECTED"],
+                description="Filter by decision action.",
+            ),
+            OpenApiParameter(
+                name="location_id",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description=(
+                    "Filter by reservable location id. Options come from "
+                    "GET /reservation-locations/."
+                ),
+            ),
+        ],
+        responses={200: PaginatedReservationDecisionOutputSerializer},
+        description=(
+            "Paginated history of APPROVED/REJECTED reservation decisions "
+            "for the caller's condominium. Staff only. Includes which admin "
+            "acted. Optional `action` and `location_id` filters."
+        ),
+    )
+    def get(self, request):
+        items = container.reservation_decision_service.list_history(
+            request.user,
+            action=request.query_params.get("action") or None,
+            location_id=request.query_params.get("location_id") or None,
+        )
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(items, request, view=self)
+        serializer = ReservationDecisionOutputSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
 @extend_schema(tags=["reservations"])

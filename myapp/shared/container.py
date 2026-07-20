@@ -154,6 +154,17 @@ class Container:
         )
 
     @property
+    def reservation_decision_repository(self):
+        from reservations.repositories.reservation_decision_repository import (
+            DjangoReservationDecisionRepository,
+        )
+
+        return self._resolve(
+            "reservation_decision_repository",
+            DjangoReservationDecisionRepository,
+        )
+
+    @property
     def condo_payment_repository(self):
         from condo_payments.repositories.condo_payment_repository import (
             DjangoCondoPaymentRepository,
@@ -308,6 +319,20 @@ class Container:
                 membership_repository=self.unit_membership_repository,
                 user_repository=self.user_repository,
                 email_sender=self.email_sender,
+                decision_repository=self.reservation_decision_repository,
+            ),
+        )
+
+    @property
+    def reservation_decision_service(self):
+        from reservations.services.reservation_decision_service import (
+            ReservationDecisionService,
+        )
+
+        return self._resolve(
+            "reservation_decision_service",
+            lambda: ReservationDecisionService(
+                decision_repository=self.reservation_decision_repository,
             ),
         )
 

@@ -15,6 +15,7 @@ class IReservationRepository(ABC):
         status: str | None = None,
         period: str | None = None,
         reference: tuple[date, time] | None = None,
+        location_id: int | None = None,
     ): ...
 
     @abstractmethod
@@ -26,6 +27,7 @@ class IReservationRepository(ABC):
         status: str | None = None,
         period: str | None = None,
         reference: tuple[date, time] | None = None,
+        location_id: int | None = None,
     ): ...
 
     @abstractmethod
@@ -73,10 +75,13 @@ class DjangoReservationRepository(IReservationRepository):
         status=None,
         period=None,
         reference=None,
+        location_id=None,
     ):
         queryset = self._base().filter(condominium_id=condominium_id)
         if status:
             queryset = queryset.filter(status=status)
+        if location_id is not None:
+            queryset = queryset.filter(location_id=location_id)
         if period == "future" and reference:
             today, current_time = reference
             queryset = queryset.filter(
@@ -109,6 +114,7 @@ class DjangoReservationRepository(IReservationRepository):
         status=None,
         period=None,
         reference=None,
+        location_id=None,
     ):
         queryset = self._base().filter(
             condominium_id=condominium_id,
@@ -116,6 +122,8 @@ class DjangoReservationRepository(IReservationRepository):
         )
         if status:
             queryset = queryset.filter(status=status)
+        if location_id is not None:
+            queryset = queryset.filter(location_id=location_id)
         if period == "future" and reference:
             today, current_time = reference
             queryset = queryset.filter(

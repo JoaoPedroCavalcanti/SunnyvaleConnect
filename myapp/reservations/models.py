@@ -102,3 +102,91 @@ class Reservation(models.Model):
 
     def __str__(self) -> str:
         return f"{self.location_id} on {self.reservation_date}"
+
+
+class ReservationDecision(models.Model):
+    """Immutable audit row for reservation approvals and rejections."""
+
+    class Action(models.TextChoices):
+        APPROVED = "APPROVED", "Approved"
+        REJECTED = "REJECTED", "Rejected"
+
+    reservation = models.ForeignKey(
+        Reservation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="decisions",
+    )
+    condominium = models.ForeignKey(
+        "condominiums.Condominium",
+        on_delete=models.PROTECT,
+        related_name="reservation_decisions",
+    )
+    location = models.ForeignKey(
+        ReservableLocation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    location_name = models.CharField(max_length=150, blank=True, default="")
+    location_icon = models.CharField(max_length=100, blank=True, default="")
+
+    reservation_date = models.DateField()
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+
+    unit = models.ForeignKey(
+        "units.Unit",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    unit_display_name = models.CharField(max_length=160, blank=True, default="")
+
+    target = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    target_username = models.CharField(max_length=150, blank=True, default="")
+    target_full_name = models.CharField(max_length=150, blank=True, default="")
+    target_email = models.EmailField(blank=True, default="")
+
+    actor = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    actor_username = models.CharField(max_length=150, blank=True, default="")
+    actor_full_name = models.CharField(max_length=150, blank=True, default="")
+    actor_email = models.EmailField(blank=True, default="")
+    actor_role = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        help_text="Capacity used for the decision: ADMIN.",
+    )
+
+    action = models.CharField(max_length=20, choices=Action.choices)
+    reason = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["condominium", "-created_at"]),
+            models.Index(fields=["location", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.action} reservation@{self.location_name} "
+            f"by {self.actor_username or '?'}"
+        )

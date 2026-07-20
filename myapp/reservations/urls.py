@@ -5,6 +5,7 @@ from reservations.views import (
     ReservableLocationDetailView,
     ReservableLocationListCreateView,
     ReservationApproveView,
+    ReservationDecisionHistoryView,
     ReservationDetailView,
     ReservationListCreateView,
     ReservationRejectView,
@@ -28,6 +29,11 @@ urlpatterns = [
         "reservation-locations/<int:pk>/availability/",
         LocationAvailabilityView.as_view(),
         name="location-availability",
+    ),
+    path(
+        "reservations/decision-history/",
+        ReservationDecisionHistoryView.as_view(),
+        name="decision-history",
     ),
     path(
         "reservations/",

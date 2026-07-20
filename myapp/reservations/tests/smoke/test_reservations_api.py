@@ -379,3 +379,103 @@ class ReservationsAPISmoke(BaseTestsUsers):
         self.assertEqual(
             other_location.status_code, 201, other_location.data
         )
+
+    def test_decision_history_and_location_filter(self):
+        hall = self._create_location("Hall")
+        bbq = self._create_location("BBQ", icon="outdoor_grill")
+        self._seed_membership(self.user_a)
+        list_url = reverse("reservations:reservation-list-create")
+        history_url = reverse("reservations:decision-history")
+        reservation_date = (date.today() + timedelta(days=6)).isoformat()
+
+        self.authenticate(self.user_a)
+        pending_hall = self.client.post(
+            list_url,
+            {
+                "location_id": hall["id"],
+                "reservation_date": reservation_date,
+            },
+            format="json",
+        )
+        pending_bbq = self.client.post(
+            list_url,
+            {
+                "location_id": bbq["id"],
+                "reservation_date": reservation_date,
+                "start_time": "10:00:00",
+                "end_time": "11:00:00",
+            },
+            format="json",
+        )
+        self.assertEqual(pending_hall.status_code, 201, pending_hall.data)
+        self.assertEqual(pending_bbq.status_code, 201, pending_bbq.data)
+
+        self.authenticate(self.admin)
+        approve = self.client.post(
+            reverse(
+                "reservations:reservation-approve",
+                kwargs={"pk": pending_hall.data["id"]},
+            )
+        )
+        reject = self.client.post(
+            reverse(
+                "reservations:reservation-reject",
+                kwargs={"pk": pending_bbq.data["id"]},
+            ),
+            {"reason": "maintenance"},
+            format="json",
+        )
+        self.assertEqual(approve.status_code, 200, approve.data)
+        self.assertEqual(reject.status_code, 200, reject.data)
+
+        self.authenticate(self.user_a)
+        forbidden = self.client.get(history_url)
+        self.assertEqual(forbidden.status_code, 403)
+
+        self.authenticate(self.admin)
+        history = self.client.get(history_url)
+        self.assertEqual(history.status_code, 200, history.data)
+        self.assertEqual(history.data["count"], 2)
+        actions = {item["action"] for item in history.data["results"]}
+        self.assertEqual(actions, {"APPROVED", "REJECTED"})
+        actor = history.data["results"][0]["actor"]
+        self.assertEqual(actor["id"], self.admin.id)
+        self.assertEqual(actor["role"], "ADMIN")
+
+        by_location = self.client.get(
+            history_url, {"location_id": hall["id"]}
+        )
+        self.assertEqual(by_location.status_code, 200)
+        self.assertEqual(by_location.data["count"], 1)
+        self.assertEqual(
+            by_location.data["results"][0]["location"]["id"], hall["id"]
+        )
+
+        pending = self.client.get(
+            list_url,
+            {
+                "status": "PENDING",
+                "location_id": hall["id"],
+                "condominium_id": self.condominium.id,
+            },
+        )
+        self.assertEqual(
+            pending.status_code,
+            200,
+            pending.data,
+        )
+        self.assertEqual(pending.data["count"], 0)
+
+        approved_hall = self.client.get(
+            list_url,
+            {
+                "status": "APPROVED",
+                "location_id": hall["id"],
+                "condominium_id": self.condominium.id,
+            },
+        )
+        self.assertEqual(approved_hall.status_code, 200, approved_hall.data)
+        self.assertEqual(approved_hall.data["count"], 1)
+        self.assertEqual(
+            approved_hall.data["results"][0]["location"]["id"], hall["id"]
+        )
