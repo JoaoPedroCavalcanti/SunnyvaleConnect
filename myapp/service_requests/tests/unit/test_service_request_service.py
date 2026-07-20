@@ -45,7 +45,14 @@ class FakeRepo(IServiceRequestRepository):
 
     # --- helpers ----------------------------------------------------- #
     @staticmethod
-    def _matches(item, status, priority, service_type, responded_by_id=None) -> bool:
+    def _matches(
+        item,
+        status,
+        priority,
+        service_type,
+        responded_by_id=None,
+        requester_id=None,
+    ) -> bool:
         if status and item.status != status:
             return False
         if priority and item.priority != priority:
@@ -53,6 +60,8 @@ class FakeRepo(IServiceRequestRepository):
         if service_type and item.service_type != service_type:
             return False
         if responded_by_id and item.responded_by_id != responded_by_id:
+            return False
+        if requester_id and item.requester_id != requester_id:
             return False
         return True
 
@@ -63,23 +72,7 @@ class FakeRepo(IServiceRequestRepository):
         priority=None,
         service_type=None,
         responded_by_id=None,
-        *,
-        condominium_id,
-    ):
-        return [
-            i
-            for i in self._items.values()
-            if getattr(getattr(i, "requester", None), "condominium_id", None)
-            == condominium_id
-            and self._matches(i, status, priority, service_type, responded_by_id)
-        ]
-
-    def list_for_user(
-        self,
-        user_id,
-        status=None,
-        priority=None,
-        service_type=None,
+        requester_id=None,
         period=None,
         reference=None,
         *,
@@ -88,10 +81,16 @@ class FakeRepo(IServiceRequestRepository):
         items = [
             i
             for i in self._items.values()
-            if i.requester_id == user_id
-            and getattr(getattr(i, "requester", None), "condominium_id", None)
+            if getattr(getattr(i, "requester", None), "condominium_id", None)
             == condominium_id
-            and self._matches(i, status, priority, service_type)
+            and self._matches(
+                i,
+                status,
+                priority,
+                service_type,
+                responded_by_id,
+                requester_id,
+            )
         ]
         if period == "future":
             items = [
@@ -268,8 +267,9 @@ def test_my_requests_filters_requester_period_and_existing_fields(
         },
     )
 
-    result = service.list_mine(
+    result = service.list(
         _user(1),
+        mine=True,
         period="future",
         status="PENDING",
         priority="HIGH",
@@ -278,7 +278,7 @@ def test_my_requests_filters_requester_period_and_existing_fields(
 
     assert [item.id for item in result] == [expected.id]
     with pytest.raises(BusinessRuleError):
-        service.list_mine(_user(1), period="invalid")
+        service.list(_user(1), period="invalid")
 
 
 def test_list_filters_validated(service):
@@ -294,29 +294,33 @@ def test_list_filters_by_priority_case_insensitive(service):
     )
 
 
-def test_list_mine_returns_only_responded_by_caller(service):
+def test_list_responded_by_me_returns_only_responded_by_caller(service):
     item_a = service.create(_user(1), {"title": "a"})
     item_b = service.create(_user(2), {"title": "b"})
     cleaner = _cleaning()
     service.respond(cleaner, item_a.id, "accept", "on it")
     service.respond(_admin(), item_b.id, "decline", "no")
-    assert len(list(service.list(cleaner, mine=True))) == 1
-    assert list(service.list(cleaner, mine=True))[0].id == item_a.id
+    assert len(list(service.list(cleaner, responded_by_me=True))) == 1
+    assert list(service.list(cleaner, responded_by_me=True))[0].id == item_a.id
 
 
-def test_list_mine_forbidden_for_resident(service):
+def test_list_responded_by_me_forbidden_for_resident(service):
     with pytest.raises(PermissionDeniedError):
-        service.list(_user(1), mine=True)
+        service.list(_user(1), responded_by_me=True)
 
 
-def test_list_mine_with_status_filters(service):
+def test_list_responded_by_me_with_status_filters(service):
     accepted = service.create(_user(1), {"title": "accepted"})
     declined = service.create(_user(1), {"title": "declined"})
     cleaner = _cleaning()
     service.respond(cleaner, accepted.id, "accept", "ok")
     service.respond(cleaner, declined.id, "decline", "no")
     in_progress = list(
-        service.list(cleaner, mine=True, status=ServiceRequestModel.Status.ACCEPTED)
+        service.list(
+            cleaner,
+            responded_by_me=True,
+            status=ServiceRequestModel.Status.ACCEPTED,
+        )
     )
     assert len(in_progress) == 1
     assert in_progress[0].id == accepted.id

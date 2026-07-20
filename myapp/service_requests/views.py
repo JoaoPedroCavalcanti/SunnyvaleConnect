@@ -63,12 +63,29 @@ class ServiceRequestListCreateView(APIView):
                 enum=_enum_values(ServiceRequestModel.ServiceType),
             ),
             OpenApiParameter(
+                name="period",
+                required=False,
+                type=str,
+                enum=["future", "past"],
+                description=(
+                    "Filters by request_scheduled_date relative to now."
+                ),
+            ),
+            OpenApiParameter(
                 name="mine",
                 required=False,
                 type=bool,
                 description=(
+                    "When true, only requests created by the authenticated user."
+                ),
+            ),
+            OpenApiParameter(
+                name="responded_by_me",
+                required=False,
+                type=bool,
+                description=(
                     "When true, only requests this cleaning employee (or admin) "
-                    "accepted/declined/completed (responded_by = caller)."
+                    "accepted/declined (responded_by = caller)."
                 ),
             ),
         ],
@@ -77,14 +94,19 @@ class ServiceRequestListCreateView(APIView):
     def get(self, request):
         try:
             mine = _parse_optional_bool(request.query_params.get("mine"))
+            responded_by_me = _parse_optional_bool(
+                request.query_params.get("responded_by_me")
+            )
         except ValueError as exc:
-            raise ValidationError({"mine": str(exc)}) from exc
+            raise ValidationError({"detail": str(exc)}) from exc
         queryset = container.service_request_service.list(
             request.user,
             status=request.query_params.get("status"),
             priority=request.query_params.get("priority"),
             service_type=request.query_params.get("service_type"),
+            period=request.query_params.get("period"),
             mine=mine,
+            responded_by_me=responded_by_me,
         )
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request, view=self)
@@ -105,57 +127,6 @@ class ServiceRequestListCreateView(APIView):
             ServiceRequestOutputSerializer(instance).data,
             status=status.HTTP_201_CREATED,
         )
-
-
-@extend_schema(tags=["service_requests"])
-class ServiceRequestMyListView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        operation_id="service_requests_my_requests_list",
-        parameters=[
-            OpenApiParameter(
-                name="status",
-                required=False,
-                type=str,
-                enum=_enum_values(ServiceRequestModel.Status),
-            ),
-            OpenApiParameter(
-                name="priority",
-                required=False,
-                type=str,
-                enum=_enum_values(ServiceRequestModel.Priority),
-            ),
-            OpenApiParameter(
-                name="service_type",
-                required=False,
-                type=str,
-                enum=_enum_values(ServiceRequestModel.ServiceType),
-            ),
-            OpenApiParameter(
-                name="period",
-                required=False,
-                type=str,
-                enum=["future", "past"],
-                description=(
-                    "Filters by request_scheduled_date relative to now."
-                ),
-            ),
-        ],
-        responses={200: PaginatedServiceRequestOutputSerializer},
-    )
-    def get(self, request):
-        queryset = container.service_request_service.list_mine(
-            request.user,
-            status=request.query_params.get("status"),
-            priority=request.query_params.get("priority"),
-            service_type=request.query_params.get("service_type"),
-            period=request.query_params.get("period"),
-        )
-        paginator = PageNumberPagination()
-        page = paginator.paginate_queryset(queryset, request, view=self)
-        serializer = ServiceRequestOutputSerializer(page, many=True)
-        return paginator.get_paginated_response(serializer.data)
 
 
 @extend_schema(tags=["service_requests"])

@@ -14,17 +14,7 @@ class IServiceRequestRepository(ABC):
         priority: str | None = None,
         service_type: str | None = None,
         responded_by_id: int | None = None,
-        *,
-        condominium_id: int,
-    ): ...
-
-    @abstractmethod
-    def list_for_user(
-        self,
-        user_id: int,
-        status: str | None = None,
-        priority: str | None = None,
-        service_type: str | None = None,
+        requester_id: int | None = None,
         period: str | None = None,
         reference: datetime | None = None,
         *,
@@ -56,22 +46,7 @@ class DjangoServiceRequestRepository(IServiceRequestRepository):
         priority=None,
         service_type=None,
         responded_by_id=None,
-        *,
-        condominium_id,
-    ):
-        qs = ServiceRequestModel.objects.select_related(
-            "requester", "responded_by"
-        ).filter(requester__condominium_id=condominium_id)
-        return self._apply_filters(
-            qs, status, priority, service_type, responded_by_id
-        )
-
-    def list_for_user(
-        self,
-        user_id,
-        status=None,
-        priority=None,
-        service_type=None,
+        requester_id=None,
         period=None,
         reference=None,
         *,
@@ -79,14 +54,18 @@ class DjangoServiceRequestRepository(IServiceRequestRepository):
     ):
         qs = ServiceRequestModel.objects.select_related(
             "requester", "responded_by"
-        ).filter(
-            requester_id=user_id,
-            requester__condominium_id=condominium_id,
+        ).filter(requester__condominium_id=condominium_id)
+        qs = self._apply_filters(
+            qs,
+            status,
+            priority,
+            service_type,
+            responded_by_id,
+            requester_id,
         )
-        qs = self._apply_filters(qs, status, priority, service_type)
-        if period == "future":
+        if period == "future" and reference is not None:
             qs = qs.filter(request_scheduled_date__gte=reference)
-        elif period == "past":
+        elif period == "past" and reference is not None:
             qs = qs.filter(request_scheduled_date__lt=reference)
         return qs
 
@@ -118,7 +97,14 @@ class DjangoServiceRequestRepository(IServiceRequestRepository):
         return qs.count()
 
     @staticmethod
-    def _apply_filters(qs, status, priority, service_type, responded_by_id=None):
+    def _apply_filters(
+        qs,
+        status,
+        priority,
+        service_type,
+        responded_by_id=None,
+        requester_id=None,
+    ):
         if status:
             qs = qs.filter(status=status)
         if priority:
@@ -127,4 +113,6 @@ class DjangoServiceRequestRepository(IServiceRequestRepository):
             qs = qs.filter(service_type=service_type)
         if responded_by_id:
             qs = qs.filter(responded_by_id=responded_by_id)
+        if requester_id:
+            qs = qs.filter(requester_id=requester_id)
         return qs

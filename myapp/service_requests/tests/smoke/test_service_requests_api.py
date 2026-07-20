@@ -25,7 +25,6 @@ pytestmark = pytest.mark.api
 
 
 LIST_URL = reverse("service_requests:list-create")
-MY_REQUESTS_URL = reverse("service_requests:my-requests")
 
 
 def detail_url(pk):
@@ -134,8 +133,9 @@ class ServiceRequestsAPISmoke(BaseTestsUsers):
         self.authenticate(self.user_a)
 
         response = self.client.get(
-            MY_REQUESTS_URL,
+            LIST_URL,
             {
+                "mine": "true",
                 "period": "future",
                 "status": "PENDING",
                 "priority": "HIGH",
@@ -235,7 +235,7 @@ class ServiceRequestsAPISmoke(BaseTestsUsers):
         response = self.client.post(complete_url(item.id))
         self.assertEqual(response.status_code, 400)
 
-    def test_cleaning_mine_filter(self):
+    def test_cleaning_responded_by_me_filter(self):
         from datetime import date
 
         from tests_base.base_tests_user import _gen_cpf
@@ -267,7 +267,7 @@ class ServiceRequestsAPISmoke(BaseTestsUsers):
             format="json",
         )
         self.authenticate(cleaner)
-        response = self.client.get(LIST_URL, {"mine": "true"})
+        response = self.client.get(LIST_URL, {"responded_by_me": "true"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["title"], "mine")

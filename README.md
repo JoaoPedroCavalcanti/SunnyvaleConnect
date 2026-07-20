@@ -319,9 +319,10 @@ Create payload:
 ```
 
 ## My service requests
-- `GET /service_requests/` continues to list every request in the caller's condominium.
-- `GET /service_requests/my-requests/` lists only requests created by the authenticated user.
-- The personal endpoint accepts `status`, `priority`, `service_type`, and `period=future|past`. Period compares `request_scheduled_date` with the current time.
+- `GET /service_requests/` lists every request in the caller's condominium.
+- `GET /service_requests/?mine=true` filters to requests created by the authenticated user.
+- `GET /service_requests/?responded_by_me=true` (admin/cleaning) filters to requests they accepted/declined.
+- Optional filters on the same endpoint: `status`, `priority`, `service_type`, and `period=future|past` (compares `request_scheduled_date` with now).
 
 Para rodar:
 ```

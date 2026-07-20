@@ -3,10 +3,12 @@
 Workflow:
   • Residents and admins open requests (always PENDING). Employees cannot.
   • Any authenticated user can list and read every request.
+  • ``mine=true`` filters to requests created by the caller.
+  • ``responded_by_me=true`` filters to requests the caller accepted/declined
+    (admins and cleaning staff only).
   • The owner can edit / delete only while PENDING.
   • Admins and cleaning employees respond (accept/decline) with a message.
   • Admins and cleaning employees may mark ACCEPTED requests COMPLETED.
-  • Cleaning staff can filter list with ``mine=true`` (responded_by = caller).
   • Only the employee who accepted (or an admin) may complete a request.
 """
 
@@ -36,17 +38,9 @@ class IServiceRequestService(ABC):
         status: str | None = None,
         priority: str | None = None,
         service_type: str | None = None,
-        mine: bool = False,
-    ): ...
-
-    @abstractmethod
-    def list_mine(
-        self,
-        user,
-        status: str | None = None,
-        priority: str | None = None,
-        service_type: str | None = None,
         period: str | None = None,
+        mine: bool = False,
+        responded_by_me: bool = False,
     ): ...
 
     @abstractmethod
@@ -87,39 +81,9 @@ class ServiceRequestService(IServiceRequestService):
         status: str | None = None,
         priority: str | None = None,
         service_type: str | None = None,
+        period: str | None = None,
         mine: bool = False,
-    ):
-        status = self._normalize_choice(
-            status, ServiceRequestModel.Status, "status"
-        )
-        priority = self._normalize_choice(
-            priority, ServiceRequestModel.Priority, "priority"
-        )
-        service_type = self._normalize_choice(
-            service_type, ServiceRequestModel.ServiceType, "service_type"
-        )
-        responded_by_id = None
-        if mine:
-            if not can_manage_service_requests(user):
-                raise PermissionDeniedError(
-                    "Only admins or cleaning staff can filter by mine."
-                )
-            responded_by_id = user.id
-        return self._repo.list_all(
-            status=status,
-            priority=priority,
-            service_type=service_type,
-            responded_by_id=responded_by_id,
-            condominium_id=require_condominium_id(user),
-        )
-
-    def list_mine(
-        self,
-        user,
-        status=None,
-        priority=None,
-        service_type=None,
-        period=None,
+        responded_by_me: bool = False,
     ):
         status = self._normalize_choice(
             status, ServiceRequestModel.Status, "status"
@@ -131,11 +95,19 @@ class ServiceRequestService(IServiceRequestService):
             service_type, ServiceRequestModel.ServiceType, "service_type"
         )
         normalized_period = self._normalize_period(period)
-        return self._repo.list_for_user(
-            user.id,
+        responded_by_id = None
+        if responded_by_me:
+            if not can_manage_service_requests(user):
+                raise PermissionDeniedError(
+                    "Only admins or cleaning staff can filter by responded_by_me."
+                )
+            responded_by_id = user.id
+        return self._repo.list_all(
             status=status,
             priority=priority,
             service_type=service_type,
+            responded_by_id=responded_by_id,
+            requester_id=user.id if mine else None,
             period=normalized_period,
             reference=timezone.now() if normalized_period else None,
             condominium_id=require_condominium_id(user),
@@ -262,11 +234,13 @@ class ServiceRequestService(IServiceRequestService):
             return
         self._email.send_service_request_responded(
             to_email=requester.email,
-            requester_name=getattr(requester, "full_name", "") or requester.username,
+            requester_name=getattr(requester, "full_name", "")
+            or requester.username,
             title=instance.title,
             action=action,
             response=instance.admin_response,
-            responder_name=getattr(operator, "full_name", "") or operator.username,
+            responder_name=getattr(operator, "full_name", "")
+            or operator.username,
         )
 
     def _fetch_or_404(self, pk: int) -> ServiceRequestModel:
