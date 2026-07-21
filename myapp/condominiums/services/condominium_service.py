@@ -38,13 +38,13 @@ class CondominiumService(ICondominiumService):
     def _require_platform_superuser(user) -> None:
         if not getattr(user, "is_superuser", False):
             raise PermissionDeniedError(
-                "Only platform superusers can manage condominiums."
+                "Apenas superusuários da plataforma podem gerenciar condomínios."
             )
 
     def lookup_by_code(self, code: str):
         condominium = self._repo.get_by_code(code)
         if not condominium or not condominium.is_active:
-            raise NotFoundError("Invalid or inactive condominium code.")
+            raise NotFoundError("Código de condomínio inválido ou inativo.")
         return condominium
 
     def resolve_for_signup(self, code: str):
@@ -67,5 +67,5 @@ class CondominiumService(ICondominiumService):
             if not self._repo.exists_with_code(candidate):
                 return candidate
         raise BusinessRuleError(
-            "Could not generate a unique condominium code. Try again."
+            "Não foi possível gerar um código de condomínio único. Tente novamente."
         )

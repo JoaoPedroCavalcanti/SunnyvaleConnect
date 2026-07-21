@@ -14,20 +14,20 @@ def is_platform_superuser(user) -> bool:
 def require_condominium_id(user) -> int:
     condominium_id = get_condominium_id(user)
     if condominium_id is None:
-        raise PermissionDeniedError("This account is not linked to a condominium.")
+        raise PermissionDeniedError("Esta conta não está vinculada a um condomínio.")
     return condominium_id
 
 
 def assert_same_condominium(user, resource_condominium_id: int | None) -> None:
     if resource_condominium_id is None:
-        raise NotFoundError("Resource not found.")
+        raise NotFoundError("Recurso não encontrado.")
     user_condominium_id = get_condominium_id(user)
     if user_condominium_id is None:
         if is_platform_superuser(user):
             return
-        raise PermissionDeniedError("This account is not linked to a condominium.")
+        raise PermissionDeniedError("Esta conta não está vinculada a um condomínio.")
     if user_condominium_id != resource_condominium_id:
-        raise NotFoundError("Resource not found.")
+        raise NotFoundError("Recurso não encontrado.")
 
 
 def normalize_condominium_code(code: str) -> str:

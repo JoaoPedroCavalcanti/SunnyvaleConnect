@@ -109,11 +109,11 @@ class EmployeeDashboardService(IEmployeeDashboardService):
         self._require_staff_user(user)
         if not can_doorman_ops(user):
             raise PermissionDeniedError(
-                "Only doorman staff can list upcoming visits."
+                "Apenas porteiros podem listar as próximas visitas."
             )
         if limit < 1 or limit > 50:
             raise BusinessRuleError(
-                "Limit must be between 1 and 50.", field="limit"
+                "O limite deve estar entre 1 e 50.", field="limit"
             )
 
         return self._visitors.list_upcoming(
@@ -128,7 +128,7 @@ class EmployeeDashboardService(IEmployeeDashboardService):
     def _require_staff_user(user) -> None:
         if not is_admin(user) and not is_employee(user):
             raise PermissionDeniedError(
-                "Only condo staff can access the employee dashboard."
+                "Apenas a equipe do condomínio pode acessar o painel de funcionários."
             )
 
     @staticmethod

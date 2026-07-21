@@ -51,21 +51,21 @@ class VisitorContactService(IVisitorContactService):
     def get_for(self, user, pk):
         instance = self._repo.get_by_id(pk)
         if not instance:
-            raise NotFoundError("No visitor contact matches the given query.")
+            raise NotFoundError("Nenhum contato de visitante encontrado.")
         assert_same_condominium(user, instance.host_user.condominium_id)
         if not user.is_staff and instance.host_user_id != user.id:
-            raise NotFoundError("No visitor contact matches the given query.")
+            raise NotFoundError("Nenhum contato de visitante encontrado.")
         return instance
 
     def create(self, user, payload: dict):
-        ensure_not_employee(user, action="manage visitor contacts")
+        ensure_not_employee(user, action="gerenciar contatos de visitantes")
         name = (payload.get("name") or "").strip()
         if not name:
-            raise BusinessRuleError("Name is required.", field="name")
+            raise BusinessRuleError("O nome é obrigatório.", field="name")
 
         if self._repo.exists_with_name_for_user(user.id, name):
             raise BusinessRuleError(
-                "You already have a contact with this name.",
+                "Você já tem um contato com esse nome.",
                 field="name",
             )
 
@@ -75,19 +75,19 @@ class VisitorContactService(IVisitorContactService):
         )
 
     def update(self, user, pk: int, payload: dict):
-        ensure_not_employee(user, action="manage visitor contacts")
+        ensure_not_employee(user, action="gerenciar contatos de visitantes")
         instance = self.get_for(user, pk)
         data = {}
 
         if "name" in payload:
             name = (payload.get("name") or "").strip()
             if not name:
-                raise BusinessRuleError("Name cannot be blank.", field="name")
+                raise BusinessRuleError("O nome não pode ficar em branco.", field="name")
             if self._repo.exists_with_name_for_user(
                 instance.host_user_id, name, exclude_pk=instance.id
             ):
                 raise BusinessRuleError(
-                    "You already have a contact with this name.",
+                    "Você já tem um contato com esse nome.",
                     field="name",
                 )
             data["name"] = name
@@ -100,17 +100,17 @@ class VisitorContactService(IVisitorContactService):
         return self._repo.update(instance, data)
 
     def delete(self, user, pk: int) -> None:
-        ensure_not_employee(user, action="manage visitor contacts")
+        ensure_not_employee(user, action="gerenciar contatos de visitantes")
         instance = self.get_for(user, pk)
         self._repo.delete(instance)
 
     def schedule_visit(self, user, pk: int, payload: dict):
-        ensure_not_employee(user, action="schedule visits")
+        ensure_not_employee(user, action="agendar visitas")
         contact = self.get_for(user, pk)
         scheduled_date = payload.get("scheduled_date")
         if scheduled_date is None:
             raise BusinessRuleError(
-                "scheduled_date is required.", field="scheduled_date"
+                "scheduled_date é obrigatório.", field="scheduled_date"
             )
 
         host_user = contact.host_user

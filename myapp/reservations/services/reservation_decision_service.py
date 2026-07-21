@@ -29,7 +29,7 @@ class ReservationDecisionService(IReservationDecisionService):
     def list_history(self, user, *, action=None, location_id=None):
         if not is_admin(user):
             raise PermissionDeniedError(
-                "Only staff can view the reservation decision history."
+                "Apenas administradores podem ver o histórico de decisões de reservas."
             )
         normalized_action = None
         if action is not None and str(action).strip() != "":
@@ -40,8 +40,8 @@ class ReservationDecisionService(IReservationDecisionService):
             if normalized_action not in valid:
                 raise BusinessRuleError(
                     message=(
-                        f"Invalid action filter: {action!r}. "
-                        f"Use one of {sorted(valid)}."
+                        f"Filtro de ação inválido: {action!r}. "
+                        f"Use um de {sorted(valid)}."
                     ),
                     field="action",
                 )
@@ -51,7 +51,7 @@ class ReservationDecisionService(IReservationDecisionService):
                 normalized_location = int(location_id)
             except (TypeError, ValueError) as exc:
                 raise BusinessRuleError(
-                    message="location_id must be an integer.",
+                    message="location_id deve ser um número inteiro.",
                     field="location_id",
                 ) from exc
         condominium_id = require_condominium_id(user)

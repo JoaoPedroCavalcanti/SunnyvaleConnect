@@ -60,7 +60,7 @@ class VisitorAccessInputSerializer(serializers.Serializer):
     def validate(self, attrs):
         if attrs.get("qr_access_enabled") and not (attrs.get("email") or "").strip():
             raise serializers.ValidationError(
-                {"email": "Visitor email is required when QR access is enabled."}
+                {"email": "O e-mail do visitante é obrigatório quando o acesso por QR está ativado."}
             )
         return attrs
 

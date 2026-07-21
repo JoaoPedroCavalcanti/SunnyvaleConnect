@@ -38,7 +38,7 @@ class CondoPaymentService(ICondoPaymentService):
     def _require_admin(user) -> None:
         if not getattr(user, "is_staff", False):
             raise PermissionDeniedError(
-                "Only staff users can perform this action."
+                "Apenas administradores podem executar esta ação."
             )
 
     def list_for(self, user):
@@ -50,10 +50,10 @@ class CondoPaymentService(ICondoPaymentService):
     def get_for(self, user, pk):
         instance = self._repo.get_by_id(pk)
         if not instance:
-            raise NotFoundError("No payment matches the given query.")
+            raise NotFoundError("Nenhum pagamento encontrado.")
         assert_same_condominium(user, instance.payer_user.condominium_id)
         if not user.is_staff and instance.payer_user_id != user.id:
-            raise NotFoundError("No payment matches the given query.")
+            raise NotFoundError("Nenhum pagamento encontrado.")
         return instance
 
     def create(self, user, payload):
@@ -74,7 +74,8 @@ class CondoPaymentService(ICondoPaymentService):
         self._require_admin(user)
         if not isinstance(payment_ids, list) or len(payment_ids) <= 0:
             raise BusinessRuleError(
-                "The IDs list is invalid or empty", field="Invalid JSON"
+                "A lista de IDs é inválida ou está vazia.",
+                field="payment_ids",
             )
 
         found = {p.id: p for p in self._repo.list_by_ids(payment_ids)}
@@ -89,8 +90,11 @@ class CondoPaymentService(ICondoPaymentService):
 
         if invalid:
             raise BusinessRuleError(
-                message=str(invalid),
-                field="These IDs are invalid or already paid",
+                message=(
+                    "Estes IDs são inválidos ou já estão pagos: "
+                    f"{invalid}."
+                ),
+                field="payment_ids",
             )
 
         self._repo.bulk_set_status(to_update, "paid")

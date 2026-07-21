@@ -59,7 +59,7 @@ class AdminDashboardService(IAdminDashboardService):
     def _require_admin(user) -> None:
         if not getattr(user, "is_staff", False):
             raise PermissionDeniedError(
-                "Only staff users can access the admin dashboard."
+                "Apenas administradores podem acessar o painel administrativo."
             )
 
     def overview(self, user) -> AdminDashboardOverview:

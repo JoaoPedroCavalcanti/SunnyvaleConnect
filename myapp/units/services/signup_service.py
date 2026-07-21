@@ -63,7 +63,7 @@ class SignupService(ISignupService):
         role = user_payload.get("role", UserRole.RESIDENT)
         if role != UserRole.RESIDENT and unit_request is not None:
             raise BusinessRuleError(
-                "Non-resident users cannot have a unit_request.",
+                "Usuários não residentes não podem ter unit_request.",
                 field="unit_request",
             )
 
@@ -78,7 +78,7 @@ class SignupService(ISignupService):
             and unit_request is None
         ):
             raise BusinessRuleError(
-                "unit_request is required when an admin creates a resident.",
+                "unit_request é obrigatório quando um administrador cria um morador.",
                 field="unit_request",
             )
 
@@ -86,7 +86,7 @@ class SignupService(ISignupService):
             condominium_code = data.pop("condominium_code", None)
             if not condominium_code:
                 raise BusinessRuleError(
-                    "condominium_code is required for signup.",
+                    "condominium_code é obrigatório para o cadastro.",
                     field="condominium_code",
                 )
             condominium = self._condominiums.resolve_for_signup(condominium_code)
@@ -133,7 +133,7 @@ class SignupService(ISignupService):
     def confirm_email(self, email: str, code: str):
         pending = self._get_pending_or_404(email)
         if str(pending.get("code", "")) != str(code).strip():
-            raise BusinessRuleError("Invalid or expired verification code.")
+            raise BusinessRuleError("Código de verificação inválido ou expirado.")
 
         fields = self._deserialize_user_fields(pending["user_fields"])
         unit_id = pending["unit_id"]
@@ -150,7 +150,7 @@ class SignupService(ISignupService):
         rate_key = self._resend_rate_key(email)
         if self._cache.get(rate_key) is not None:
             raise BusinessRuleError(
-                "Please wait before requesting another verification code."
+                "Aguarde antes de solicitar outro código de verificação."
             )
 
         code = self._codes.six_digits()
@@ -172,18 +172,18 @@ class SignupService(ISignupService):
     def _begin_pending_signup(self, requester, data: dict, unit_id: int) -> dict:
         if data.get("photo") is not None:
             raise BusinessRuleError(
-                "Photo cannot be uploaded before email verification.",
+                "A foto não pode ser enviada antes da verificação de e-mail.",
                 field="photo",
             )
 
         unit = self._units.get_by_id(unit_id)
         if not unit:
-            raise NotFoundError("No unit matches the given query.")
+            raise NotFoundError("Nenhuma unidade encontrada.")
         if unit.status != Unit.Status.ACTIVE:
-            raise BusinessRuleError("This unit is not open for new members.")
+            raise BusinessRuleError("Esta unidade não está aberta para novos membros.")
         if unit.condominium_id != data.get("condominium_id"):
             raise BusinessRuleError(
-                "Unit does not belong to this condominium.",
+                "A unidade não pertence a este condomínio.",
                 field="unit_request",
             )
 
@@ -191,7 +191,7 @@ class SignupService(ISignupService):
         email = fields["email"]
         if not email:
             raise BusinessRuleError(
-                "Email is required for signup with a unit request.",
+                "O e-mail é obrigatório para cadastro com solicitação de unidade.",
                 field="email",
             )
 
@@ -216,7 +216,7 @@ class SignupService(ISignupService):
         normalized = (email or "").lower().strip()
         pending = self._cache.get(self._pending_key(normalized))
         if not pending:
-            raise NotFoundError("No pending signup matches the given query.")
+            raise NotFoundError("Nenhum cadastro pendente encontrado.")
         return pending
 
     def _pending_key(self, email: str) -> str:
@@ -252,6 +252,6 @@ class SignupService(ISignupService):
             return {"unit_id": unit_id}
 
         raise BusinessRuleError(
-            "unit_request must provide unit_id.",
+            "unit_request deve fornecer unit_id.",
             field="unit_request",
         )

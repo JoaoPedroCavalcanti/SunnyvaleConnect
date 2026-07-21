@@ -106,7 +106,7 @@ class ReservationService(IReservationService):
         condominium_id=None,
         location_id=None,
     ):
-        ensure_not_employee(user, action="access reservations")
+        ensure_not_employee(user, action="acessar reservas")
         normalized = self._normalize_status(status)
         normalized_period = self._normalize_period(period)
         normalized_location = self._normalize_location_id(location_id)
@@ -137,7 +137,7 @@ class ReservationService(IReservationService):
     def availability(
         self, user, location_id, *, from_date, to_date
     ):
-        ensure_not_employee(user, action="access reservations")
+        ensure_not_employee(user, action="acessar reservas")
         self._validate_availability_range(from_date, to_date)
         location = self._active_location_for_user(user, location_id)
         blocking_by_date = defaultdict(list)
@@ -152,17 +152,17 @@ class ReservationService(IReservationService):
         )
 
     def get(self, user, pk):
-        ensure_not_employee(user, action="access reservations")
+        ensure_not_employee(user, action="acessar reservas")
         instance = self._repo.get_by_id(pk)
         if not instance:
-            raise NotFoundError("Reservation not found.")
+            raise NotFoundError("Reserva não encontrada.")
         assert_same_condominium(user, instance.condominium_id)
         if not is_admin(user) and instance.reservation_user_id != user.id:
-            raise NotFoundError("Reservation not found.")
+            raise NotFoundError("Reserva não encontrada.")
         return instance
 
     def create(self, user, payload):
-        ensure_not_employee(user, action="book reservations")
+        ensure_not_employee(user, action="fazer reservas")
         data = dict(payload)
         location = self._active_location_for_user(
             user, data.pop("location_id")
@@ -209,30 +209,30 @@ class ReservationService(IReservationService):
         return created
 
     def update(self, user, pk, payload):
-        ensure_not_employee(user, action="book reservations")
+        ensure_not_employee(user, action="fazer reservas")
         instance = self.get(user, pk)
         if instance.status not in {
             Reservation.Status.PENDING,
             Reservation.Status.APPROVED,
         }:
             raise BusinessRuleError(
-                "Only pending or approved reservations can be edited.",
+                "Apenas reservas pendentes ou aprovadas podem ser editadas.",
                 field="status",
             )
         if self._is_past(instance):
             raise BusinessRuleError(
-                "Past reservations cannot be edited.",
+                "Reservas passadas não podem ser editadas.",
                 field="reservation_date",
             )
         data = dict(payload)
         if "location_id" in data:
             raise BusinessRuleError(
-                "Reservation location cannot be changed.",
+                "O local da reserva não pode ser alterado.",
                 field="location_id",
             )
         if "status" in data:
             raise BusinessRuleError(
-                "Reservation status cannot be changed directly.",
+                "O status da reserva não pode ser alterado diretamente.",
                 field="status",
             )
         location = instance.location
@@ -250,7 +250,7 @@ class ReservationService(IReservationService):
                 requester=user,
             )
         if target_user and target_user.condominium_id != location.condominium_id:
-            raise NotFoundError("Reservation user not found.")
+            raise NotFoundError("Usuário da reserva não encontrado.")
         reservation_date = data.get(
             "reservation_date", instance.reservation_date
         )
@@ -273,25 +273,25 @@ class ReservationService(IReservationService):
         return self._repo.update(instance, data)
 
     def delete(self, user, pk):
-        ensure_not_employee(user, action="book reservations")
+        ensure_not_employee(user, action="fazer reservas")
         instance = self.get(user, pk)
         if instance.status not in {
             Reservation.Status.PENDING,
             Reservation.Status.APPROVED,
         }:
             raise BusinessRuleError(
-                "Only pending or approved reservations can be deleted.",
+                "Apenas reservas pendentes ou aprovadas podem ser excluídas.",
                 field="status",
             )
         if self._is_past(instance):
             raise BusinessRuleError(
-                "Past reservations cannot be deleted.",
+                "Reservas passadas não podem ser excluídas.",
                 field="reservation_date",
             )
         self._repo.delete(instance)
 
     def approve(self, user, pk):
-        self._ensure_staff(user, "approve")
+        self._ensure_staff(user, "aprovar")
         instance = self.get(user, pk)
         if instance.status == Reservation.Status.APPROVED:
             return instance
@@ -319,10 +319,10 @@ class ReservationService(IReservationService):
         return updated
 
     def reject(self, user, pk, reason=""):
-        self._ensure_staff(user, "reject")
+        self._ensure_staff(user, "rejeitar")
         if not reason or not reason.strip():
             raise BusinessRuleError(
-                "A rejection reason is required.", field="reason"
+                "O motivo da rejeição é obrigatório.", field="reason"
             )
         instance = self.get(user, pk)
         if instance.status == Reservation.Status.REJECTED:
@@ -342,7 +342,7 @@ class ReservationService(IReservationService):
     def _active_location_for_user(self, user, location_id):
         location = self._locations.get_by_id(location_id)
         if not location or not location.is_active:
-            raise NotFoundError("Reservable location not found.")
+            raise NotFoundError("Local reservável não encontrado.")
         assert_same_condominium(user, location.condominium_id)
         return location
 
@@ -352,7 +352,7 @@ class ReservationService(IReservationService):
         if not is_admin(requester):
             if user_id is not None and user_id != requester.id:
                 raise PermissionDeniedError(
-                    "Residents can only create their own reservations."
+                    "Moradores só podem criar reservas para si mesmos."
                 )
             return requester
         if user_id is None:
@@ -364,7 +364,7 @@ class ReservationService(IReservationService):
             return requester
         target = self._users.get_by_id(user_id)
         if not target or target.condominium_id != condominium_id:
-            raise NotFoundError("Reservation user not found.")
+            raise NotFoundError("Usuário da reserva não encontrado.")
         return target
 
     def _first_active_unit(
@@ -380,7 +380,7 @@ class ReservationService(IReservationService):
         if is_admin(requester):
             return None
         raise BusinessRuleError(
-            "User must belong to an active unit to book this location."
+            "O usuário deve pertencer a uma unidade ativa para reservar este local."
         )
 
     def _validate_slot(
@@ -394,7 +394,7 @@ class ReservationService(IReservationService):
     ):
         if start_time and end_time and start_time >= end_time:
             raise BusinessRuleError(
-                "start_time must be earlier than end_time.",
+                "start_time deve ser anterior a end_time.",
                 field="start_time",
             )
         existing_items = self._repo.list_blocking_for_location_date(
@@ -410,7 +410,7 @@ class ReservationService(IReservationService):
                 existing.end_time,
             ):
                 raise BusinessRuleError(
-                    "This location already has a reservation in this time window.",
+                    "Este local já possui uma reserva nesse horário.",
                     field="reservation_date",
                 )
             if slots_too_close(
@@ -420,7 +420,7 @@ class ReservationService(IReservationService):
                 existing.end_time,
             ):
                 raise BusinessRuleError(
-                    "Reservations must be at least 30 minutes apart.",
+                    "As reservas devem ter ao menos 30 minutos de intervalo entre elas.",
                     field="start_time",
                 )
 
@@ -429,13 +429,13 @@ class ReservationService(IReservationService):
         today = timezone.localdate()
         if reservation_date < today:
             raise BusinessRuleError(
-                "Reservations cannot be made for a past date.",
+                "Não é possível fazer reservas para uma data passada.",
                 field="reservation_date",
             )
         current_time = timezone.localtime().time().replace(tzinfo=None)
         if reservation_date == today and (start_time or time.min) < current_time:
             raise BusinessRuleError(
-                "Reservations cannot start in the past.",
+                "A reserva não pode começar em um horário passado.",
                 field="start_time",
             )
 
@@ -453,11 +453,11 @@ class ReservationService(IReservationService):
     def _validate_availability_range(from_date, to_date):
         if to_date < from_date:
             raise BusinessRuleError(
-                "`to` must be on or after `from`.", field="to"
+                "`to` deve ser igual ou posterior a `from`.", field="to"
             )
         if (to_date - from_date).days + 1 > _MAX_AVAILABILITY_DAYS:
             raise BusinessRuleError(
-                "Availability range cannot exceed 93 days.", field="to"
+                "O intervalo de disponibilidade não pode exceder 93 dias.", field="to"
             )
 
     @staticmethod
@@ -468,7 +468,7 @@ class ReservationService(IReservationService):
         valid = {choice.value for choice in Reservation.Status}
         if normalized not in valid:
             raise BusinessRuleError(
-                f"Invalid status filter: {status!r}.",
+                f"Filtro de status inválido: {status!r}.",
                 field="status",
             )
         return normalized
@@ -481,7 +481,7 @@ class ReservationService(IReservationService):
             return int(location_id)
         except (TypeError, ValueError) as exc:
             raise BusinessRuleError(
-                "location_id must be an integer.",
+                "location_id deve ser um número inteiro.",
                 field="location_id",
             ) from exc
 
@@ -526,8 +526,8 @@ class ReservationService(IReservationService):
         normalized = period.lower()
         if normalized not in {"future", "past"}:
             raise BusinessRuleError(
-                f"Invalid period filter: {period!r}. "
-                "Expected 'future' or 'past'.",
+                f"Filtro de período inválido: {period!r}. "
+                "Esperado 'future' ou 'past'.",
                 field="period",
             )
         return normalized
@@ -536,7 +536,7 @@ class ReservationService(IReservationService):
     def _ensure_staff(user, action):
         if not is_admin(user):
             raise PermissionDeniedError(
-                f"Only condominium staff can {action} reservations."
+                f"Apenas a equipe do condomínio pode {action} reservas."
             )
 
     @staticmethod
@@ -544,13 +544,13 @@ class ReservationService(IReservationService):
         if is_platform_superuser(user):
             if condominium_id is None:
                 raise BusinessRuleError(
-                    "condominium_id is required for platform superusers.",
+                    "condominium_id é obrigatório para superusuários da plataforma.",
                     field="condominium_id",
                 )
             return condominium_id
         tenant_id = require_condominium_id(user)
         if condominium_id is not None and condominium_id != tenant_id:
-            raise NotFoundError("Condominium not found.")
+            raise NotFoundError("Condomínio não encontrado.")
         return tenant_id
 
     def _notify(self, instance, *, approved, reason=""):

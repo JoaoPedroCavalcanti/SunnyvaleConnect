@@ -91,14 +91,14 @@ class UserService(IUserService):
             return [user]
         if role is not None and role not in _VALID_ROLES:
             raise BusinessRuleError(
-                message=f"Invalid role filter: {role!r}.", field="role"
+                message=f"Filtro de perfil inválido: {role!r}.", field="role"
             )
         normalized_employee_type = None
         if employee_type is not None:
             normalized_employee_type = str(employee_type).upper()
             if normalized_employee_type not in _VALID_EMPLOYEE_TYPES:
                 raise BusinessRuleError(
-                    message=f"Invalid employee type filter: {employee_type!r}.",
+                    message=f"Filtro de tipo de funcionário inválido: {employee_type!r}.",
                     field="employee_type",
                 )
         return self._repo.list_filtered(
@@ -111,9 +111,9 @@ class UserService(IUserService):
     def get_for(self, user, pk):
         instance = self._repo.get_by_id(pk)
         if not instance:
-            raise NotFoundError("No user matches the given query.")
+            raise NotFoundError("Nenhum usuário encontrado.")
         if not is_admin(user) and instance.id != user.id:
-            raise NotFoundError("No user matches the given query.")
+            raise NotFoundError("Nenhum usuário encontrado.")
         assert_same_condominium(user, instance.condominium_id)
         return instance
 
@@ -134,18 +134,18 @@ class UserService(IUserService):
         )
         if not is_anonymous and not getattr(requester, "is_staff", False):
             raise PermissionDeniedError(
-                "Only anonymous users or staff can create accounts."
+                "Apenas usuários anônimos ou administradores podem criar contas."
             )
 
         data = dict(payload)
         role = data.pop("role", UserRole.RESIDENT)
         if role not in _VALID_ROLES:
             raise BusinessRuleError(
-                message=f"Invalid role: {role!r}.", field="role"
+                message=f"Perfil inválido: {role!r}.", field="role"
             )
         if role != UserRole.RESIDENT and is_anonymous:
             raise PermissionDeniedError(
-                "Only admins can create non-resident users."
+                "Apenas administradores podem criar usuários não residentes."
             )
 
         condominium_id = data.pop("condominium_id", None)
@@ -153,13 +153,13 @@ class UserService(IUserService):
         if is_anonymous:
             if not condominium_id:
                 raise BusinessRuleError(
-                    "condominium_id is required for anonymous signup.",
+                    "condominium_id é obrigatório para cadastro anônimo.",
                     field="condominium_code",
                 )
         elif is_platform_superuser(requester):
             if not condominium_id:
                 raise BusinessRuleError(
-                    "condominium_id is required when creating users as superuser.",
+                    "condominium_id é obrigatório ao criar usuários como superusuário.",
                     field="condominium_id",
                 )
         else:
@@ -175,14 +175,14 @@ class UserService(IUserService):
         if username:
             if not condominium_code:
                 raise BusinessRuleError(
-                    "condominium_code is required to validate username.",
+                    "condominium_code é obrigatório para validar o username.",
                     field="condominium_code",
                 )
             if self._repo.exists_with_username(
                 username, condominium_code=condominium_code
             ):
                 raise BusinessRuleError(
-                    message="A user with that username already exists.",
+                    message="Já existe um usuário com esse username.",
                     field="username",
                 )
             username = build_tenant_username(condominium_code, username)
@@ -190,7 +190,7 @@ class UserService(IUserService):
         email = (data.get("email") or "").lower().strip()
         if email and self._repo.exists_with_email(email):
             raise BusinessRuleError(
-                message="An account with this email address already exists.",
+                message="Já existe uma conta com este e-mail.",
                 field="email",
             )
 
@@ -200,7 +200,7 @@ class UserService(IUserService):
             raise BusinessRuleError(message=cpf_error, field="cpf")
         if self._repo.exists_with_cpf(cpf, condominium_id=condominium_id):
             raise BusinessRuleError(
-                message="An account with this CPF already exists.", field="cpf"
+                message="Já existe uma conta com este CPF.", field="cpf"
             )
 
         phone = self._phone.normalize(data.get("phone", ""))
@@ -215,7 +215,7 @@ class UserService(IUserService):
         block = data.get("block", "") or ""
         if role == UserRole.EMPLOYEE and (apartment or block):
             raise BusinessRuleError(
-                "Employees cannot be linked to an apartment.",
+                "Funcionários não podem estar vinculados a um apartamento.",
                 field="apartment",
             )
 
@@ -241,14 +241,14 @@ class UserService(IUserService):
         email = (fields.get("email") or "").lower().strip()
         if email and self._repo.exists_with_email(email):
             raise BusinessRuleError(
-                message="An account with this email address already exists.",
+                message="Já existe uma conta com este e-mail.",
                 field="email",
             )
         cpf = fields.get("cpf") or ""
         condominium_id = fields.get("condominium_id")
         if cpf and self._repo.exists_with_cpf(cpf, condominium_id=condominium_id):
             raise BusinessRuleError(
-                message="An account with this CPF already exists.", field="cpf"
+                message="Já existe uma conta com este CPF.", field="cpf"
             )
         return self._repo.create_user(**dict(fields), is_active=is_active)
 
@@ -259,7 +259,7 @@ class UserService(IUserService):
     def update_self(self, user, payload):
         if is_employee(user):
             raise PermissionDeniedError(
-                "Employees cannot edit their own profile."
+                "Funcionários não podem editar o próprio perfil."
             )
         return self._update(user, user, payload)
 
@@ -271,18 +271,18 @@ class UserService(IUserService):
         requested_is_active = payload.pop("is_active", _UNSET)
         if requested_is_active is not _UNSET:
             if not getattr(requester, "is_staff", False):
-                raise PermissionDeniedError("Only admins can change account status.")
+                raise PermissionDeniedError("Apenas administradores podem alterar o status da conta.")
             new_is_active = bool(requested_is_active)
             if requester.id == instance.id and not new_is_active:
-                raise PermissionDeniedError("Admins cannot deactivate themselves.")
+                raise PermissionDeniedError("Administradores não podem desativar a própria conta.")
 
         if "role" in payload:
             new_role = payload["role"]
             if not getattr(requester, "is_staff", False):
-                raise PermissionDeniedError("Only admins can change user role.")
+                raise PermissionDeniedError("Apenas administradores podem alterar o perfil do usuário.")
             if new_role not in _VALID_ROLES:
                 raise BusinessRuleError(
-                    message=f"Invalid role: {new_role!r}.", field="role"
+                    message=f"Perfil inválido: {new_role!r}.", field="role"
                 )
             if (
                 requester.id == instance.id
@@ -290,7 +290,7 @@ class UserService(IUserService):
                 and new_role != UserRole.ADMIN
             ):
                 raise PermissionDeniedError(
-                    "Admins cannot demote themselves."
+                    "Administradores não podem rebaixar a si mesmos."
                 )
             payload["is_staff"] = new_role == UserRole.ADMIN
             if new_role != UserRole.EMPLOYEE:
@@ -306,7 +306,7 @@ class UserService(IUserService):
         if "employee_types" in payload:
             if not getattr(requester, "is_staff", False):
                 raise PermissionDeniedError(
-                    "Only admins can change employee types."
+                    "Apenas administradores podem alterar os tipos de funcionário."
                 )
             effective_role = payload.get("role", instance.role)
             payload["employee_types"] = self._normalize_employee_types(
@@ -320,7 +320,7 @@ class UserService(IUserService):
                 and self._repo.exists_with_email(payload["email"])
             ):
                 raise BusinessRuleError(
-                    message="An account with this email address already exists.",
+                    message="Já existe uma conta com este e-mail.",
                     field="email",
                 )
 
@@ -333,7 +333,7 @@ class UserService(IUserService):
                 exclude_id=instance.id,
             ):
                 raise BusinessRuleError(
-                    message="A user with that username already exists.",
+                    message="Já existe um usuário com esse username.",
                     field="username",
                 )
             payload["username"] = build_tenant_username(
@@ -351,7 +351,7 @@ class UserService(IUserService):
                 exclude_id=instance.id,
             ):
                 raise BusinessRuleError(
-                    message="An account with this CPF already exists.",
+                    message="Já existe uma conta com este CPF.",
                     field="cpf",
                 )
             payload["cpf"] = cpf
@@ -381,10 +381,10 @@ class UserService(IUserService):
 
     def delete(self, user, pk):
         if not is_admin(user):
-            raise PermissionDeniedError("Only admins can deactivate users.")
+            raise PermissionDeniedError("Apenas administradores podem desativar usuários.")
         instance = self.get_for(user, pk)
         if user.id == instance.id:
-            raise PermissionDeniedError("Admins cannot deactivate themselves.")
+            raise PermissionDeniedError("Administradores não podem desativar a própria conta.")
         self._deactivate(instance)
 
     def _deactivate(self, instance) -> None:
@@ -413,12 +413,12 @@ class UserService(IUserService):
             return []
         if raw is None:
             raise BusinessRuleError(
-                "Employee accounts require at least one employee type.",
+                "Contas de funcionário exigem ao menos um tipo de funcionário.",
                 field="employee_types",
             )
         if not isinstance(raw, (list, tuple)):
             raise BusinessRuleError(
-                "employee_types must be a list.",
+                "employee_types deve ser uma lista.",
                 field="employee_types",
             )
         normalized: list[str] = []
@@ -426,14 +426,14 @@ class UserService(IUserService):
             upper = str(value).upper()
             if upper not in _VALID_EMPLOYEE_TYPES:
                 raise BusinessRuleError(
-                    message=f"Invalid employee type: {value!r}.",
+                    message=f"Tipo de funcionário inválido: {value!r}.",
                     field="employee_types",
                 )
             if upper not in normalized:
                 normalized.append(upper)
         if not normalized:
             raise BusinessRuleError(
-                "Employee accounts require at least one employee type.",
+                "Contas de funcionário exigem ao menos um tipo de funcionário.",
                 field="employee_types",
             )
         return normalized

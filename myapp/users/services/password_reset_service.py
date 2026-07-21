@@ -50,7 +50,7 @@ class PasswordResetService(IPasswordResetService):
         normalized = (email or "").lower().strip()
         pending = self._cache.get(self._otp_key(normalized))
         if pending is None or str(pending) != str(code).strip():
-            raise BusinessRuleError("Invalid or expired verification code.")
+            raise BusinessRuleError("Código de verificação inválido ou expirado.")
 
         errors = self._policy.validate(new_password or "")
         if errors:
@@ -58,7 +58,7 @@ class PasswordResetService(IPasswordResetService):
 
         user = self._users.get_by_email(normalized)
         if not user:
-            raise BusinessRuleError("Invalid or expired verification code.")
+            raise BusinessRuleError("Código de verificação inválido ou expirado.")
 
         self._users.update(user, {"password": new_password})
         self._cache.delete(self._otp_key(normalized))
@@ -71,7 +71,7 @@ class PasswordResetService(IPasswordResetService):
         # but rate-limit when a pending OTP already exists.
         if self._cache.get(self._resend_key(normalized)) is not None:
             raise BusinessRuleError(
-                "Please wait before requesting another verification code."
+                "Aguarde antes de solicitar outro código de verificação."
             )
         if not user or not user.email:
             self._cache.set(self._resend_key(normalized), "1", _RESEND_TTL_SECONDS)

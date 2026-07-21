@@ -88,20 +88,20 @@ class UnitMembershipService(IUnitMembershipService):
     def request_join(self, user, unit_id):
         unit = self._get_unit_or_404(unit_id)
         if unit.status != Unit.Status.ACTIVE:
-            raise BusinessRuleError("This unit is not open for new members.")
+            raise BusinessRuleError("Esta unidade não está aberta para novos membros.")
 
         existing = self._repo.get_for_user_and_unit(user.id, unit.id)
         if existing and existing.status != UnitMembership.Status.LEFT:
             raise BusinessRuleError(
-                "You already have a pending or active membership for this unit."
+                "Você já tem uma solicitação pendente ou vínculo ativo com esta unidade."
             )
 
         if self._repo.list_active_for_user(user.id):
             raise BusinessRuleError(
-                "User is already an active member of another unit."
+                "O usuário já é membro ativo de outra unidade."
             )
         if self._repo.list_pending_for_user(user.id):
-            raise BusinessRuleError("User already has a pending unit request.")
+            raise BusinessRuleError("O usuário já tem uma solicitação de unidade pendente.")
 
         vacant = self._repo.get_active_owner(unit.id) is None
         if vacant:
@@ -127,32 +127,32 @@ class UnitMembershipService(IUnitMembershipService):
     def provision_join(self, admin, user, unit_id):
         if not getattr(admin, "is_staff", False):
             raise PermissionDeniedError(
-                "Only staff can provision unit memberships."
+                "Apenas administradores podem provisionar vínculos de unidade."
             )
 
         unit = self._get_unit_or_404(unit_id)
         assert_same_condominium(admin, unit.condominium_id)
         if unit.status != Unit.Status.ACTIVE:
             raise BusinessRuleError(
-                "This unit is not open for new members.",
+                "Esta unidade não está aberta para novos membros.",
                 field="unit_id",
             )
 
         existing = self._repo.get_for_user_and_unit(user.id, unit.id)
         if existing and existing.status != UnitMembership.Status.LEFT:
             raise BusinessRuleError(
-                "This user already has a pending or active membership for this unit.",
+                "Este usuário já tem uma solicitação pendente ou vínculo ativo com esta unidade.",
                 field="unit_id",
             )
 
         if self._repo.list_active_for_user(user.id):
             raise BusinessRuleError(
-                "User is already an active member of another unit.",
+                "O usuário já é membro ativo de outra unidade.",
                 field="unit_id",
             )
         if self._repo.list_pending_for_user(user.id):
             raise BusinessRuleError(
-                "User already has a pending unit request.",
+                "O usuário já tem uma solicitação de unidade pendente.",
                 field="unit_id",
             )
 
@@ -180,14 +180,14 @@ class UnitMembershipService(IUnitMembershipService):
         if membership.status == UnitMembership.Status.PENDING_ADMIN:
             if not getattr(actor, "is_staff", False):
                 raise PermissionDeniedError(
-                    "Only staff can approve owner requests."
+                    "Apenas administradores podem aprovar solicitações de proprietário."
                 )
             assert_same_condominium(actor, unit.condominium_id)
         elif membership.status == UnitMembership.Status.PENDING_OWNER:
             self._require_owner(actor, unit.id)
         else:
             raise BusinessRuleError(
-                "This membership is not pending approval."
+                "Este vínculo não está pendente de aprovação."
             )
 
         with self._tx.atomic():
@@ -223,14 +223,14 @@ class UnitMembershipService(IUnitMembershipService):
         if membership.status == UnitMembership.Status.PENDING_ADMIN:
             if not getattr(actor, "is_staff", False):
                 raise PermissionDeniedError(
-                    "Only staff can reject owner requests."
+                    "Apenas administradores podem rejeitar solicitações de proprietário."
                 )
             assert_same_condominium(actor, unit.condominium_id)
         elif membership.status == UnitMembership.Status.PENDING_OWNER:
             self._require_owner(actor, unit.id)
         else:
             raise BusinessRuleError(
-                "This membership is not pending approval."
+                "Este vínculo não está pendente de aprovação."
             )
 
         user = membership.user
@@ -271,10 +271,10 @@ class UnitMembershipService(IUnitMembershipService):
 
         if membership.user_id == owner.id:
             raise BusinessRuleError(
-                "Use /leave to remove yourself; /remove is for other members."
+                "Use /leave para remover a si mesmo; /remove é para outros membros."
             )
         if membership.role == UnitMembership.Role.OWNER:
-            raise BusinessRuleError("Cannot remove an owner directly.")
+            raise BusinessRuleError("Não é possível remover um proprietário diretamente.")
 
         self._repo.soft_leave(membership)
 
@@ -282,11 +282,11 @@ class UnitMembershipService(IUnitMembershipService):
         unit = self._get_unit_or_404(unit_id)
         membership = self._repo.get_for_user_and_unit(user.id, unit.id)
         if not membership or membership.status != UnitMembership.Status.ACTIVE:
-            raise NotFoundError("You are not a member of this unit.")
+            raise NotFoundError("Você não é membro desta unidade.")
 
         if membership.role != UnitMembership.Role.OWNER:
             raise PermissionDeniedError(
-                "Residents cannot leave a unit without owner action."
+                "Moradores não podem sair de uma unidade sem ação do proprietário."
             )
 
         other_members = [
@@ -296,8 +296,8 @@ class UnitMembershipService(IUnitMembershipService):
         ]
         if other_members:
             raise BusinessRuleError(
-                "You are the owner but there are other members. "
-                "Remove them first or contact an administrator."
+                "Você é o proprietário, mas há outros membros. "
+                "Remova-os primeiro ou contate um administrador."
             )
 
         self._repo.soft_leave(membership)
@@ -315,24 +315,24 @@ class UnitMembershipService(IUnitMembershipService):
             or owner_membership.role != UnitMembership.Role.OWNER
         ):
             raise PermissionDeniedError(
-                "Only the active owner can transfer ownership."
+                "Apenas o proprietário ativo pode transferir a propriedade."
             )
 
         new_owner = self._get_membership_or_404(membership_id)
         if new_owner.unit_id != unit.id:
-            raise NotFoundError("No membership matches the given query.")
+            raise NotFoundError("Nenhum vínculo encontrado.")
         if new_owner.user_id == owner.id:
             raise BusinessRuleError(
-                "Ownership must be transferred to another member."
+                "A propriedade deve ser transferida para outro membro."
             )
         self._require_active(new_owner)
         if new_owner.role != UnitMembership.Role.RESIDENT:
             raise BusinessRuleError(
-                "Ownership can only be transferred to an active resident."
+                "A propriedade só pode ser transferida para um morador ativo."
             )
         if not getattr(new_owner.user, "is_active", False):
             raise BusinessRuleError(
-                "Ownership cannot be transferred to an inactive user."
+                "A propriedade não pode ser transferida para um usuário inativo."
             )
 
         with self._tx.atomic():
@@ -351,13 +351,13 @@ class UnitMembershipService(IUnitMembershipService):
     def _get_unit_or_404(self, unit_id) -> Unit:
         unit = self._units.get_by_id(unit_id)
         if not unit:
-            raise NotFoundError("No unit matches the given query.")
+            raise NotFoundError("Nenhuma unidade encontrada.")
         return unit
 
     def _get_membership_or_404(self, pk) -> UnitMembership:
         membership = self._repo.get_by_id(pk)
         if not membership:
-            raise NotFoundError("No membership matches the given query.")
+            raise NotFoundError("Nenhum vínculo encontrado.")
         return membership
 
     def _require_owner(self, user, unit_id) -> None:
@@ -370,7 +370,7 @@ class UnitMembershipService(IUnitMembershipService):
             or owner.role != UnitMembership.Role.OWNER
         ):
             raise PermissionDeniedError(
-                "Only an active owner can perform this action."
+                "Apenas um proprietário ativo pode executar esta ação."
             )
 
     def _require_active_membership(self, user_id, unit_id) -> None:
@@ -380,12 +380,12 @@ class UnitMembershipService(IUnitMembershipService):
             or membership.status != UnitMembership.Status.ACTIVE
         ):
             raise PermissionDeniedError(
-                "You must be an active member of this unit."
+                "Você deve ser um membro ativo desta unidade."
             )
 
     def _require_active(self, membership) -> None:
         if membership.status != UnitMembership.Status.ACTIVE:
-            raise BusinessRuleError("Membership is not active.")
+            raise BusinessRuleError("O vínculo não está ativo.")
 
     def _build_decision_payload(
         self, membership, actor, action, reason

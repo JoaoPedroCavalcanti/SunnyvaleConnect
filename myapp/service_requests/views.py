@@ -32,7 +32,7 @@ def _parse_optional_bool(raw: str | None) -> bool:
         return True
     if normalized in {"false", "0"}:
         return False
-    raise ValueError(f"Invalid boolean query value: {raw!r}.")
+    raise ValueError(f"Valor booleano inválido na query: {raw!r}.")
 
 
 @extend_schema(tags=["service_requests"])

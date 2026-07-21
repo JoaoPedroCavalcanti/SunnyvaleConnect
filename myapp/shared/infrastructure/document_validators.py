@@ -33,16 +33,16 @@ class BrazilianCPFValidator(ICPFValidator):
     def validate(self, cpf: str) -> str | None:
         digits = self.normalize(cpf)
         if len(digits) != 11:
-            return "CPF must contain 11 digits."
+            return "O CPF deve conter 11 dígitos."
         if digits == digits[0] * 11:
-            return "CPF is invalid."
+            return "CPF inválido."
         for i in (9, 10):
             total = sum(int(digits[j]) * ((i + 1) - j) for j in range(i))
             check = (total * 10) % 11
             if check == 10:
                 check = 0
             if check != int(digits[i]):
-                return "CPF is invalid."
+                return "CPF inválido."
         return None
 
 
@@ -55,7 +55,7 @@ class BrazilianPhoneValidator(IPhoneValidator):
     def validate(self, phone: str) -> str | None:
         digits = self.normalize(phone)
         if len(digits) not in (10, 11):
-            return "Phone must contain 10 or 11 digits (DDD + number)."
+            return "O telefone deve conter 10 ou 11 dígitos (DDD + número)."
         if len(digits) == 11 and digits[2] != "9":
-            return "Mobile phone must start with 9 after the area code."
+            return "O celular deve começar com 9 após o DDD."
         return None

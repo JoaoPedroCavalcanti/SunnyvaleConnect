@@ -38,7 +38,7 @@ class SunnyValeNewsService(ISunnyValeNewsService):
     def _require_admin(user) -> None:
         if not getattr(user, "is_staff", False):
             raise PermissionDeniedError(
-                "Only staff users can perform this action."
+                "Apenas administradores podem executar esta ação."
             )
 
     def list(self, user, kind=None):
@@ -46,7 +46,7 @@ class SunnyValeNewsService(ISunnyValeNewsService):
         if kind is not None:
             if kind not in _VALID_KINDS:
                 raise BusinessRuleError(
-                    message=f"Invalid kind filter: {kind!r}.", field="kind"
+                    message=f"Filtro de tipo inválido: {kind!r}.", field="kind"
                 )
             return self._repo.list_by_kind(kind, condominium_id=condominium_id)
         return self._repo.list_all(condominium_id=condominium_id)
@@ -54,7 +54,7 @@ class SunnyValeNewsService(ISunnyValeNewsService):
     def get(self, user, news_id):
         instance = self._repo.get_by_id(news_id)
         if not instance:
-            raise NotFoundError("No news matches the given query.")
+            raise NotFoundError("Nenhuma notícia encontrada.")
         assert_same_condominium(user, instance.condominium_id)
         return instance
 

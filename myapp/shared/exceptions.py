@@ -27,7 +27,7 @@ class BusinessRuleError(DomainError):
 class NotFoundError(DomainError):
     """Entity not found -> HTTP 404."""
 
-    def __init__(self, message: str = "Not found."):
+    def __init__(self, message: str = "Não encontrado."):
         super().__init__(message)
         self.message = message
 
@@ -35,6 +35,6 @@ class NotFoundError(DomainError):
 class PermissionDeniedError(DomainError):
     """Operation not permitted for current user -> HTTP 403."""
 
-    def __init__(self, message: str = "Permission denied."):
+    def __init__(self, message: str = "Permissão negada."):
         super().__init__(message)
         self.message = message

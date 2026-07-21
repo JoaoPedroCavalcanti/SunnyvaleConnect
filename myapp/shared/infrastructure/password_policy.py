@@ -13,11 +13,11 @@ class DefaultPasswordPolicy(IPasswordPolicy):
     def validate(self, password: str) -> list[str]:
         errors: list[str] = []
         if not any(c.isupper() for c in password):
-            errors.append("Password must contain at least one uppercase letter.")
+            errors.append("A senha deve conter ao menos uma letra maiúscula.")
         if len(password) < 8:
-            errors.append("Password must be at least 8 characters long.")
+            errors.append("A senha deve ter no mínimo 8 caracteres.")
         if password.isalnum():
             errors.append(
-                "Password must be have at least 1 special character(ex: !$%*<)."
+                "A senha deve ter ao menos 1 caractere especial (ex: !$%*<)."
             )
         return errors

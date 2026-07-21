@@ -48,7 +48,7 @@ def can_manage_service_requests(user) -> bool:
 def ensure_not_employee(user, *, action: str) -> None:
     """Block write operations that are outside the employee role scope."""
     if is_employee(user):
-        raise PermissionDeniedError(f"Employees cannot {action}.")
+        raise PermissionDeniedError(f"Funcionários não podem {action}.")
 
 
 def can_see_all_visits(user) -> bool:

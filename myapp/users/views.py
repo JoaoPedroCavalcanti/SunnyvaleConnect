@@ -43,7 +43,7 @@ def _parse_optional_bool(raw: str | None) -> bool | None:
         return True
     if normalized in {"false", "0"}:
         return False
-    raise ValueError(f"Invalid boolean query value: {raw!r}.")
+    raise ValueError(f"Valor booleano inválido na query: {raw!r}.")
 
 
 @extend_schema(tags=["users"])
@@ -132,7 +132,7 @@ class UserListCreateView(APIView):
         if result["kind"] == SIGNUP_PENDING_EMAIL:
             return Response(
                 {
-                    "detail": "Check your email for a verification code.",
+                    "detail": "Confira seu e-mail para o código de verificação.",
                     "email": result["email"],
                     "code": SIGNUP_PENDING_EMAIL,
                 },
@@ -236,7 +236,7 @@ class LoginView(APIView):
         if kind == KIND_PENDING:
             return Response(
                 {
-                    "detail": "Your account is waiting for approval.",
+                    "detail": "Sua conta está aguardando aprovação.",
                     "code": KIND_PENDING,
                     "unit": result["unit"],
                     "condominium": condominium_payload,
@@ -247,7 +247,7 @@ class LoginView(APIView):
         if kind == KIND_DISABLED:
             return Response(
                 {
-                    "detail": "Your account is disabled. Contact the administrator.",
+                    "detail": "Sua conta está desativada. Contate o administrador.",
                     "code": KIND_DISABLED,
                     "condominium": condominium_payload,
                 },
@@ -255,7 +255,7 @@ class LoginView(APIView):
             )
 
         return Response(
-            {"detail": "Invalid credentials.", "code": KIND_INVALID},
+            {"detail": "Credenciais inválidas.", "code": KIND_INVALID},
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
@@ -331,7 +331,7 @@ class ResendVerificationView(APIView):
             serializer.validated_data["email"]
         )
         return Response(
-            {"detail": "Verification code sent."},
+            {"detail": "Código de verificação enviado."},
             status=status.HTTP_200_OK,
         )
 
@@ -357,8 +357,8 @@ class PasswordResetRequestView(APIView):
         return Response(
             {
                 "detail": (
-                    "If an account exists for this email, "
-                    "a verification code was sent."
+                    "Se existir uma conta com este e-mail, "
+                    "um código de verificação foi enviado."
                 )
             },
             status=status.HTTP_200_OK,
@@ -382,7 +382,7 @@ class PasswordResetConfirmView(APIView):
             data["email"], data["code"], data["new_password"]
         )
         return Response(
-            {"detail": "Password updated."},
+            {"detail": "Senha atualizada."},
             status=status.HTTP_200_OK,
         )
 
@@ -405,8 +405,8 @@ class PasswordResetResendView(APIView):
         return Response(
             {
                 "detail": (
-                    "If an account exists for this email, "
-                    "a verification code was sent."
+                    "Se existir uma conta com este e-mail, "
+                    "um código de verificação foi enviado."
                 )
             },
             status=status.HTTP_200_OK,

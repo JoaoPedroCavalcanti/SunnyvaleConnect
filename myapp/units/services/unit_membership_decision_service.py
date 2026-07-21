@@ -38,7 +38,7 @@ class UnitMembershipDecisionService(IUnitMembershipDecisionService):
     def list_for_unit(self, user, unit_id):
         unit = self._units.get_by_id(unit_id)
         if not unit:
-            raise NotFoundError("No unit matches the given query.")
+            raise NotFoundError("Nenhuma unidade encontrada.")
 
         assert_same_condominium(user, unit.condominium_id)
         if not getattr(user, "is_staff", False):
@@ -51,7 +51,7 @@ class UnitMembershipDecisionService(IUnitMembershipDecisionService):
                 or membership.role != UnitMembership.Role.OWNER
             ):
                 raise PermissionDeniedError(
-                    "Only an active owner can view the decision history."
+                    "Apenas um proprietário ativo pode ver o histórico de decisões."
                 )
 
         return list(self._repo.list_for_unit(unit.id))
@@ -60,7 +60,7 @@ class UnitMembershipDecisionService(IUnitMembershipDecisionService):
         """Condo-wide approve/reject history for condominium admins."""
         if not getattr(user, "is_staff", False):
             raise PermissionDeniedError(
-                "Only staff can view the condominium decision history."
+                "Apenas administradores podem ver o histórico de decisões do condomínio."
             )
         normalized = None
         if action is not None and str(action).strip() != "":
@@ -69,8 +69,8 @@ class UnitMembershipDecisionService(IUnitMembershipDecisionService):
             if normalized not in valid:
                 raise BusinessRuleError(
                     message=(
-                        f"Invalid action filter: {action!r}. "
-                        f"Use one of {sorted(valid)}."
+                        f"Filtro de ação inválido: {action!r}. "
+                        f"Use um de {sorted(valid)}."
                     ),
                     field="action",
                 )

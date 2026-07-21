@@ -120,16 +120,16 @@ class VisitorAccessService(IVisitorAccessService):
     def get_for(self, user, pk):
         instance = self._repo.get_by_id(pk)
         if not instance:
-            raise NotFoundError("No visitor access matches the given query.")
+            raise NotFoundError("Nenhum acesso de visitante encontrado.")
         assert_same_condominium(user, instance.host_user.condominium_id)
         if not can_see_all_visits(user) and instance.host_user_id != user.id:
-            raise NotFoundError("No visitor access matches the given query.")
+            raise NotFoundError("Nenhum acesso de visitante encontrado.")
         return instance
 
     def update(self, user, pk, payload):
-        ensure_not_employee(user, action="edit visits")
+        ensure_not_employee(user, action="editar visitas")
         instance = self.get_for(user, pk)
-        self._require_future_scheduled(instance, action="edited")
+        self._require_future_scheduled(instance, action="editadas")
 
         data = dict(payload)
         scheduled_date = data.get(
@@ -180,7 +180,7 @@ class VisitorAccessService(IVisitorAccessService):
             and effective_checkout <= effective_checkin
         ):
             raise BusinessRuleError(
-                "checkout_date_time must be after scheduled_date.",
+                "checkout_date_time deve ser depois de scheduled_date.",
                 field="checkout_date_time",
             )
         return self._repo.update(instance, data)
@@ -189,26 +189,26 @@ class VisitorAccessService(IVisitorAccessService):
     # create                                                             #
     # ------------------------------------------------------------------ #
     def create(self, user, payload: dict):
-        ensure_not_employee(user, action="register visitors")
+        ensure_not_employee(user, action="cadastrar visitantes")
         data = dict(payload)
         qr_access_enabled = bool(data.pop("qr_access_enabled", False))
         self._validate_create_payload(user, data, qr_access_enabled)
         return self._persist_visit(user, data, qr_access_enabled)
 
     def create_group_visits(self, user, payload: dict) -> list[VisitorAccessModel]:
-        ensure_not_employee(user, action="register visitors")
+        ensure_not_employee(user, action="cadastrar visitantes")
         data = dict(payload)
         qr_access_enabled = bool(data.pop("qr_access_enabled", False))
         group = data.get("visitor_group")
         if not group:
             raise BusinessRuleError(
-                "visitor_group is required.", field="visitor_group"
+                "visitor_group é obrigatório.", field="visitor_group"
             )
 
         members = self._group_repo.list_members(group.id)
         if not members:
             raise BusinessRuleError(
-                "This group has no members. Add members before scheduling a visit."
+                "Este grupo não tem membros. Adicione membros antes de agendar uma visita."
             )
 
         self._validate_create_payload(
@@ -236,12 +236,12 @@ class VisitorAccessService(IVisitorAccessService):
             if data.get("all_day"):
                 if scheduled_date.date() < timezone.localdate():
                     raise BusinessRuleError(
-                        "You can not create a visitor access with a past date.",
+                        "Não é possível criar um acesso de visitante com data no passado.",
                         field="Scheduled_date",
                     )
             else:
                 raise BusinessRuleError(
-                    "You can not create a visitor access with a past date.",
+                    "Não é possível criar um acesso de visitante com data no passado.",
                     field="Scheduled_date",
                 )
 
@@ -264,12 +264,12 @@ class VisitorAccessService(IVisitorAccessService):
             if group_members is not None:
                 if any(not (m.email or "").strip() for m in group_members):
                     raise BusinessRuleError(
-                        "QR access requires an email for every group member.",
+                        "O acesso por QR exige um e-mail para cada membro do grupo.",
                         field="email",
                     )
             elif not (data.get("email") or "").strip():
                 raise BusinessRuleError(
-                    "QR access requires a visitor email.",
+                    "O acesso por QR exige o e-mail do visitante.",
                     field="email",
                 )
 
@@ -321,7 +321,7 @@ class VisitorAccessService(IVisitorAccessService):
             except Exception as exc:
                 self._repo.delete(saved)
                 raise BusinessRuleError(
-                    "Could not send the visitor QR access email.",
+                    "Não foi possível enviar o e-mail com o QR de acesso do visitante.",
                     field="email",
                 ) from exc
             host = saved.host_user
@@ -340,21 +340,21 @@ class VisitorAccessService(IVisitorAccessService):
     # delete = soft cancel                                               #
     # ------------------------------------------------------------------ #
     def delete(self, user, pk):
-        ensure_not_employee(user, action="cancel visits")
+        ensure_not_employee(user, action="cancelar visitas")
         instance = self.get_for(user, pk)
-        self._require_future_scheduled(instance, action="cancelled")
+        self._require_future_scheduled(instance, action="canceladas")
         instance.status = self.Status.CANCELLED
         return self._repo.save(instance)
 
     def _require_future_scheduled(self, instance, *, action: str) -> None:
         if instance.status != self.Status.SCHEDULED:
             raise BusinessRuleError(
-                f"Only scheduled visits can be {action}.",
+                f"Apenas visitas agendadas podem ser {action}.",
                 field="status",
             )
         if instance.scheduled_date <= timezone.now():
             raise BusinessRuleError(
-                f"Past visits cannot be {action}.",
+                f"Visitas passadas não podem ser {action}.",
                 field="scheduled_date",
             )
 
@@ -364,31 +364,31 @@ class VisitorAccessService(IVisitorAccessService):
     def validate_access(self, user, credential: str) -> VisitorAccessModel:
         if not can_doorman_ops(user):
             raise PermissionDeniedError(
-                "Only admins or doorman staff can validate visitor access."
+                "Apenas administradores ou porteiros podem validar acesso de visitantes."
             )
 
         credential = (credential or "").strip()
         if not credential:
-            raise BusinessRuleError("Credential is required.", field="credential")
+            raise BusinessRuleError("A credencial é obrigatória.", field="credential")
 
         instance = self._resolve_credential(credential)
         if not instance:
-            raise NotFoundError("No visitor access matches the given credential.")
+            raise NotFoundError("Nenhum acesso de visitante encontrado para essa credencial.")
 
         if not instance.qr_access_enabled:
-            raise BusinessRuleError("This visit does not use QR access.")
+            raise BusinessRuleError("Esta visita não utiliza acesso por QR.")
 
         if instance.status == self.Status.CANCELLED:
-            raise BusinessRuleError("This visitor access has been cancelled.")
+            raise BusinessRuleError("Este acesso de visitante foi cancelado.")
         if instance.status == self.Status.CHECKED_IN:
-            raise BusinessRuleError("This access has already been used.")
+            raise BusinessRuleError("Este acesso já foi utilizado.")
         if instance.status == self.Status.CHECKED_OUT:
-            raise BusinessRuleError("This visit is already concluded.")
+            raise BusinessRuleError("Esta visita já foi concluída.")
 
         now = timezone.now()
         if now < instance.checkin_date_time or now > instance.checkout_date_time:
             raise BusinessRuleError(
-                "Visit is outside the allowed check-in window.",
+                "A visita está fora da janela de check-in permitida.",
                 field="credential",
             )
 
@@ -409,18 +409,18 @@ class VisitorAccessService(IVisitorAccessService):
     def notify_arrival(self, user, pk: int) -> VisitorAccessModel:
         if not can_doorman_ops(user):
             raise PermissionDeniedError(
-                "Only admins or doorman staff can notify visitor arrival."
+                "Apenas administradores ou porteiros podem notificar a chegada de visitantes."
             )
         instance = self._fetch_or_404(pk)
         if instance.status == self.Status.CANCELLED:
-            raise BusinessRuleError("This visitor access has been cancelled.")
+            raise BusinessRuleError("Este acesso de visitante foi cancelado.")
         if instance.status == self.Status.CHECKED_OUT:
-            raise BusinessRuleError("This visit is already concluded.")
+            raise BusinessRuleError("Esta visita já foi concluída.")
 
         host = instance.host_user
         if not host or not getattr(host, "email", ""):
             raise BusinessRuleError(
-                "The host has no email registered; cannot notify arrival.",
+                "O anfitrião não possui e-mail cadastrado; não é possível notificar a chegada.",
                 field="host_user",
             )
 
@@ -435,7 +435,7 @@ class VisitorAccessService(IVisitorAccessService):
     def _fetch_or_404(self, pk: int) -> VisitorAccessModel:
         instance = self._repo.get_by_id(pk)
         if not instance:
-            raise NotFoundError("No visitor access matches the given query.")
+            raise NotFoundError("Nenhum acesso de visitante encontrado.")
         return instance
 
     def _resolve_credential(self, credential: str) -> VisitorAccessModel | None:
@@ -452,14 +452,14 @@ class VisitorAccessService(IVisitorAccessService):
             token = secrets.token_urlsafe(24)
             if not self._repo.exists_with_access_token(token):
                 return token
-        raise BusinessRuleError("Could not generate a unique access token.")
+        raise BusinessRuleError("Não foi possível gerar um token de acesso único.")
 
     def _generate_unique_code(self) -> str:
         for _ in range(20):
             code = self._codes.alphanumeric(_ACCESS_CODE_LENGTH)
             if not self._repo.exists_with_access_code(code):
                 return code
-        raise BusinessRuleError("Could not generate a unique access code.")
+        raise BusinessRuleError("Não foi possível gerar um código de acesso único.")
 
     @staticmethod
     def _qr_payload(token: str) -> str:
@@ -475,7 +475,7 @@ class VisitorAccessService(IVisitorAccessService):
         normalized = str(value).lower()
         if normalized not in _VALID_PERIODS:
             raise BusinessRuleError(
-                f"Invalid period: {value!r}. Expected one of {list(_VALID_PERIODS)}.",
+                f"Período inválido: {value!r}. Esperado um de {list(_VALID_PERIODS)}.",
                 field="period",
             )
         return normalized
@@ -488,7 +488,7 @@ class VisitorAccessService(IVisitorAccessService):
         valid = {c.value for c in cls.Status}
         if normalized not in valid:
             raise BusinessRuleError(
-                f"Invalid status: {value!r}. Expected one of {sorted(valid)}.",
+                f"Status inválido: {value!r}. Esperado um de {sorted(valid)}.",
                 field="status",
             )
         return normalized

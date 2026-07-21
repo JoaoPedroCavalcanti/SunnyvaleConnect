@@ -68,7 +68,7 @@ class ServiceRequestRespondSerializer(serializers.Serializer):
         response = (attrs.get("response") or "").strip()
         if action == "decline" and not response:
             raise serializers.ValidationError(
-                {"response": "A justification is required when declining."}
+                {"response": "É necessária uma justificativa ao recusar."}
             )
         attrs["response"] = response
         return attrs

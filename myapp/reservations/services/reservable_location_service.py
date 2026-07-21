@@ -58,11 +58,11 @@ class ReservableLocationService(IReservableLocationService):
     def get(self, user, pk, tenant=None):
         instance = self._repo.get_by_id(pk)
         if not instance or not instance.is_active:
-            raise NotFoundError("Reservable location not found.")
+            raise NotFoundError("Local reservável não encontrado.")
         if is_platform_superuser(user):
             target_id = self._target_condominium_id(user, tenant)
             if instance.condominium_id != target_id:
-                raise NotFoundError("Reservable location not found.")
+                raise NotFoundError("Local reservável não encontrado.")
         else:
             assert_same_condominium(user, instance.condominium_id)
         return instance
@@ -74,7 +74,7 @@ class ReservableLocationService(IReservableLocationService):
         name = (data.get("name") or "").strip()
         if self._repo.exists_with_name(condominium.id, name):
             raise BusinessRuleError(
-                "A reservable location with this name already exists.",
+                "Já existe um local reservável com esse nome.",
                 field="name",
             )
         data["name"] = name
@@ -88,7 +88,7 @@ class ReservableLocationService(IReservableLocationService):
         self._ensure_platform_superuser(user)
         instance = self._repo.get_by_id(pk)
         if not instance:
-            raise NotFoundError("Reservable location not found.")
+            raise NotFoundError("Local reservável não encontrado.")
         data = dict(payload)
         if "name" in data:
             name = (data["name"] or "").strip()
@@ -98,7 +98,7 @@ class ReservableLocationService(IReservableLocationService):
                 exclude_id=instance.id,
             ):
                 raise BusinessRuleError(
-                    "A reservable location with this name already exists.",
+                    "Já existe um local reservável com esse nome.",
                     field="name",
                 )
             data["name"] = name
@@ -110,14 +110,14 @@ class ReservableLocationService(IReservableLocationService):
         self._ensure_platform_superuser(user)
         instance = self._repo.get_by_id(pk)
         if not instance:
-            raise NotFoundError("Reservable location not found.")
+            raise NotFoundError("Local reservável não encontrado.")
         self._repo.update(instance, {"is_active": False})
 
     @staticmethod
     def _ensure_platform_superuser(user):
         if not is_platform_superuser(user):
             raise PermissionDeniedError(
-                "Only platform superusers can manage reservable locations."
+                "Apenas superusuários da plataforma podem gerenciar locais reserváveis."
             )
 
     def _target_condominium_id(self, user, tenant):
@@ -130,7 +130,7 @@ class ReservableLocationService(IReservableLocationService):
         condominium_code = (data.get("condominium_code") or "").strip()
         if condominium_id is not None and condominium_code:
             raise BusinessRuleError(
-                "Pass either condominium_id or condominium_code, not both.",
+                "Informe apenas condominium_id ou condominium_code, não os dois.",
                 field="condominium_id",
             )
         if condominium_id is not None:
@@ -139,9 +139,9 @@ class ReservableLocationService(IReservableLocationService):
             condominium = self._condominiums.get_by_code(condominium_code)
         else:
             raise BusinessRuleError(
-                "condominium_id or condominium_code is required.",
+                "condominium_id ou condominium_code é obrigatório.",
                 field="condominium_code",
             )
         if not condominium or not getattr(condominium, "is_active", True):
-            raise NotFoundError("Condominium not found.")
+            raise NotFoundError("Condomínio não encontrado.")
         return condominium

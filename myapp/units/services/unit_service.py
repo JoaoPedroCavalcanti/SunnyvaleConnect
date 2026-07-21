@@ -137,7 +137,7 @@ class UnitService(IUnitService):
     def _require_active_condominium(self, condominium_code: str):
         condominium = self._condominiums.get_by_code(condominium_code)
         if not condominium or not condominium.is_active:
-            raise NotFoundError("Invalid or inactive condominium code.")
+            raise NotFoundError("Código de condomínio inválido ou inativo.")
         return condominium
 
     def list_for(self, user, status=None):
@@ -172,12 +172,12 @@ class UnitService(IUnitService):
     def get_for(self, user, pk):
         instance = self._repo.get_by_id(pk)
         if not instance:
-            raise NotFoundError("No unit matches the given query.")
+            raise NotFoundError("Nenhuma unidade encontrada.")
         assert_same_condominium(user, instance.condominium_id)
         if getattr(user, "is_staff", False):
             return instance
         if not self._memberships.get_for_user_and_unit(user.id, instance.id):
-            raise NotFoundError("No unit matches the given query.")
+            raise NotFoundError("Nenhuma unidade encontrada.")
         return instance
 
     def peek(self, pk, *, condominium_id: int):
@@ -188,14 +188,14 @@ class UnitService(IUnitService):
 
     def create(self, admin, payload: dict) -> Unit:
         if not getattr(admin, "is_staff", False):
-            raise PermissionDeniedError("Only staff can create units.")
+            raise PermissionDeniedError("Apenas administradores podem criar unidades.")
 
         condominium_id = require_condominium_id(admin)
         normalized = self.validate_kind_fields(payload)
 
         if self._duplicate_exists(condominium_id, normalized):
             raise BusinessRuleError(
-                "A unit with these identifiers already exists.",
+                "Já existe uma unidade com esses identificadores.",
                 field="kind",
             )
 
@@ -214,7 +214,7 @@ class UnitService(IUnitService):
         """Expand block/floor recipes into units. Platform superuser only."""
         if not is_platform_superuser(user):
             raise PermissionDeniedError(
-                "Only platform superusers can bulk-provision units."
+                "Apenas superusuários da plataforma podem provisionar unidades em massa."
             )
 
         condominium = self._resolve_condominium(payload)
@@ -253,7 +253,7 @@ class UnitService(IUnitService):
                     skipped += 1
                     continue
                 raise BusinessRuleError(
-                    "A unit with these identifiers already exists.",
+                    "Já existe uma unidade com esses identificadores.",
                     field="blocks",
                 )
 
@@ -287,7 +287,7 @@ class UnitService(IUnitService):
         condominium_code = (payload.get("condominium_code") or "").strip()
         if condominium_id is not None and condominium_code:
             raise BusinessRuleError(
-                "Pass either condominium_id or condominium_code, not both.",
+                "Informe apenas condominium_id ou condominium_code, não os dois.",
                 field="condominium_id",
             )
         if condominium_id is not None:
@@ -296,11 +296,11 @@ class UnitService(IUnitService):
             condominium = self._condominiums.get_by_code(condominium_code)
         else:
             raise BusinessRuleError(
-                "condominium_id or condominium_code is required.",
+                "condominium_id ou condominium_code é obrigatório.",
                 field="condominium_code",
             )
         if not condominium or not getattr(condominium, "is_active", True):
-            raise NotFoundError("Invalid or inactive condominium.")
+            raise NotFoundError("Condomínio inválido ou inativo.")
         return condominium
 
     def _expand_bulk_candidates(self, payload: dict) -> list[dict]:
@@ -317,8 +317,8 @@ class UnitService(IUnitService):
             and not number_range
         ):
             raise BusinessRuleError(
-                "Provide at least one of blocks, towers, number_range, "
-                "apartments or named_units.",
+                "Informe ao menos um de blocks, towers, number_range, "
+                "apartments ou named_units.",
                 field="blocks",
             )
 
@@ -327,7 +327,7 @@ class UnitService(IUnitService):
         for block_spec in blocks:
             block = (block_spec.get("block") or "").strip()
             if not block:
-                raise BusinessRuleError("block is required.", field="blocks")
+                raise BusinessRuleError("block é obrigatório.", field="blocks")
             candidates.extend(
                 self._expand_floor_grid(
                     floors=block_spec.get("floors"),
@@ -356,7 +356,7 @@ class UnitService(IUnitService):
             apartment = str(apt).strip()
             if not apartment:
                 raise BusinessRuleError(
-                    "apartments cannot contain empty values.",
+                    "apartments não pode conter valores vazios.",
                     field="apartments",
                 )
             candidates.append(
@@ -372,7 +372,7 @@ class UnitService(IUnitService):
             cleaned = str(name).strip()
             if not cleaned:
                 raise BusinessRuleError(
-                    "named_units cannot contain empty values.",
+                    "named_units não pode conter valores vazios.",
                     field="named_units",
                 )
             candidates.append(
@@ -397,20 +397,20 @@ class UnitService(IUnitService):
     ) -> list[dict]:
         if not isinstance(floors, int) or floors < 1:
             raise BusinessRuleError(
-                "floors must be a positive integer.", field=field
+                "floors deve ser um número inteiro positivo.", field=field
             )
         if floors > 100:
-            raise BusinessRuleError("floors cannot exceed 100.", field=field)
+            raise BusinessRuleError("floors não pode exceder 100.", field=field)
         if not units:
             raise BusinessRuleError(
-                "units (per floor) is required.", field=field
+                "units (por andar) é obrigatório.", field=field
             )
         cleaned_units: list[str] = []
         for unit_suffix in units:
             suffix = str(unit_suffix).strip()
             if not suffix:
                 raise BusinessRuleError(
-                    "unit suffixes cannot be empty.", field=field
+                    "os sufixos de unidade não podem ser vazios.", field=field
                 )
             cleaned_units.append(suffix)
 
@@ -435,17 +435,17 @@ class UnitService(IUnitService):
         name_prefix = spec.get("name_prefix", "Casa ")
         if not isinstance(start, int) or not isinstance(end, int):
             raise BusinessRuleError(
-                "number_range.start/end must be integers.",
+                "number_range.start/end devem ser inteiros.",
                 field="number_range",
             )
         if end < start:
             raise BusinessRuleError(
-                "number_range.end must be >= start.",
+                "number_range.end deve ser >= start.",
                 field="number_range",
             )
         if end - start + 1 > 5000:
             raise BusinessRuleError(
-                "number_range cannot exceed 5000 units.",
+                "number_range não pode exceder 5000 unidades.",
                 field="number_range",
             )
 
@@ -475,7 +475,7 @@ class UnitService(IUnitService):
     def validate_kind_fields(self, payload: dict) -> dict:
         kind = payload.get("kind")
         if kind not in Unit.Kind.values:
-            raise BusinessRuleError("Invalid unit kind.", field="kind")
+            raise BusinessRuleError("Tipo de unidade inválido.", field="kind")
 
         name = _display_name(payload.get("name") or "")
         apartment = _norm_code(payload.get("apartment") or "")
@@ -483,10 +483,10 @@ class UnitService(IUnitService):
 
         if kind == Unit.Kind.NAMED:
             if not name:
-                raise BusinessRuleError("name is required.", field="name")
+                raise BusinessRuleError("name é obrigatório.", field="name")
             if apartment or block:
                 raise BusinessRuleError(
-                    "apartment and block must be empty for NAMED units.",
+                    "apartment e block devem ficar vazios para unidades NAMED.",
                     field="apartment",
                 )
             return {"kind": kind, "name": name, "apartment": "", "block": ""}
@@ -494,11 +494,11 @@ class UnitService(IUnitService):
         if kind == Unit.Kind.APARTMENT:
             if not apartment:
                 raise BusinessRuleError(
-                    "apartment is required.", field="apartment"
+                    "apartment é obrigatório.", field="apartment"
                 )
             if name or block:
                 raise BusinessRuleError(
-                    "name and block must be empty for APARTMENT units.",
+                    "name e block devem ficar vazios para unidades APARTMENT.",
                     field="name",
                 )
             return {
@@ -509,12 +509,12 @@ class UnitService(IUnitService):
             }
 
         if not apartment:
-            raise BusinessRuleError("apartment is required.", field="apartment")
+            raise BusinessRuleError("apartment é obrigatório.", field="apartment")
         if not block:
-            raise BusinessRuleError("block is required.", field="block")
+            raise BusinessRuleError("block é obrigatório.", field="block")
         if name:
             raise BusinessRuleError(
-                "name must be empty for APARTMENT_BLOCK units.", field="name"
+                "name deve ficar vazio para unidades APARTMENT_BLOCK.", field="name"
             )
         return {
             "kind": kind,

@@ -19,15 +19,15 @@ class TestDefaultPasswordPolicy:
 
     def test_missing_upper(self, policy):
         errors = policy.validate("weakpass1!")
-        assert "Password must contain at least one uppercase letter." in errors
+        assert "A senha deve conter ao menos uma letra maiúscula." in errors
 
     def test_too_short(self, policy):
         errors = policy.validate("Aa1!")
-        assert "Password must be at least 8 characters long." in errors
+        assert "A senha deve ter no mínimo 8 caracteres." in errors
 
     def test_missing_special(self, policy):
         errors = policy.validate("Strong123")
-        assert any("special character" in e for e in errors)
+        assert any("caractere especial" in e for e in errors)
 
     def test_all_errors_at_once(self, policy):
         errors = policy.validate("a")

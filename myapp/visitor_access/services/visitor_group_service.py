@@ -54,29 +54,29 @@ class VisitorGroupService(IVisitorGroupService):
     def get_for(self, user, pk):
         instance = self._repo.get_by_id(pk)
         if not instance:
-            raise NotFoundError("No visitor group matches the given query.")
+            raise NotFoundError("Nenhum grupo de visitantes encontrado.")
         assert_same_condominium(user, instance.host_user.condominium_id)
         if not user.is_staff and instance.host_user_id != user.id:
-            raise NotFoundError("No visitor group matches the given query.")
+            raise NotFoundError("Nenhum grupo de visitantes encontrado.")
         return instance
 
     # ------------------------------------------------------------------ #
     # create / update / delete                                           #
     # ------------------------------------------------------------------ #
     def create(self, user, payload: dict):
-        ensure_not_employee(user, action="manage visitor groups")
+        ensure_not_employee(user, action="gerenciar grupos de visitantes")
         data = dict(payload)
         members = data.pop("members", []) or []
         name = (data.get("name") or "").strip()
 
         if not name:
-            raise BusinessRuleError("Name is required.", field="name")
+            raise BusinessRuleError("O nome é obrigatório.", field="name")
 
         self._validate_members(members)
 
         if self._repo.exists_with_name_for_user(user.id, name):
             raise BusinessRuleError(
-                "You already have a group with this name.", field="name"
+                "Você já tem um grupo com esse nome.", field="name"
             )
 
         group = self._repo.create({"name": name, "host_user": user})
@@ -84,7 +84,7 @@ class VisitorGroupService(IVisitorGroupService):
         return self._repo.get_by_id(group.id)
 
     def update(self, user, pk: int, payload: dict):
-        ensure_not_employee(user, action="manage visitor groups")
+        ensure_not_employee(user, action="gerenciar grupos de visitantes")
         instance = self.get_for(user, pk)
         data = dict(payload)
 
@@ -92,12 +92,12 @@ class VisitorGroupService(IVisitorGroupService):
         if new_name is not None:
             new_name = new_name.strip()
             if not new_name:
-                raise BusinessRuleError("Name cannot be blank.", field="name")
+                raise BusinessRuleError("O nome não pode ficar em branco.", field="name")
             if self._repo.exists_with_name_for_user(
                 instance.host_user_id, new_name, exclude_pk=instance.id
             ):
                 raise BusinessRuleError(
-                    "You already have a group with this name.", field="name"
+                    "Você já tem um grupo com esse nome.", field="name"
                 )
             self._repo.update(instance, {"name": new_name})
 
@@ -109,7 +109,7 @@ class VisitorGroupService(IVisitorGroupService):
         return self._repo.get_by_id(instance.id)
 
     def delete(self, user, pk: int) -> None:
-        ensure_not_employee(user, action="manage visitor groups")
+        ensure_not_employee(user, action="gerenciar grupos de visitantes")
         instance = self.get_for(user, pk)
         self._repo.delete(instance)
 
@@ -117,18 +117,18 @@ class VisitorGroupService(IVisitorGroupService):
     # schedule a visit for the whole group                               #
     # ------------------------------------------------------------------ #
     def schedule_visit(self, user, pk: int, payload: dict):
-        ensure_not_employee(user, action="schedule visits")
+        ensure_not_employee(user, action="agendar visitas")
         """Create one visit row per group member (each with own QR/code)."""
         group = self.get_for(user, pk)
         if group.members.count() == 0:
             raise BusinessRuleError(
-                "This group has no members. Add members before scheduling a visit."
+                "Este grupo não tem membros. Adicione membros antes de agendar uma visita."
             )
 
         scheduled_date = payload.get("scheduled_date")
         if scheduled_date is None:
             raise BusinessRuleError(
-                "scheduled_date is required.", field="scheduled_date"
+                "scheduled_date é obrigatório.", field="scheduled_date"
             )
 
         host_user = group.host_user
@@ -155,5 +155,5 @@ class VisitorGroupService(IVisitorGroupService):
             name = (m.get("name") or "").strip()
             if not name:
                 raise BusinessRuleError(
-                    f"Member at index {idx} requires a name.", field="members"
+                    f"O membro no índice {idx} precisa de um nome.", field="members"
                 )

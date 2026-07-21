@@ -99,7 +99,7 @@ class ServiceRequestService(IServiceRequestService):
         if responded_by_me:
             if not can_manage_service_requests(user):
                 raise PermissionDeniedError(
-                    "Only admins or cleaning staff can filter by responded_by_me."
+                    "Apenas administradores ou equipe de limpeza podem filtrar por responded_by_me."
                 )
             responded_by_id = user.id
         return self._repo.list_all(
@@ -121,7 +121,7 @@ class ServiceRequestService(IServiceRequestService):
     def create(self, user, payload: dict):
         if is_employee(user):
             raise PermissionDeniedError(
-                "Employees cannot open service requests."
+                "Funcionários não podem abrir solicitações de serviço."
             )
         data = dict(payload or {})
         data["requester"] = user
@@ -132,17 +132,17 @@ class ServiceRequestService(IServiceRequestService):
 
     def update(self, user, pk, payload):
         if not payload:
-            raise BusinessRuleError("Empty payload.")
+            raise BusinessRuleError("Payload vazio.")
         instance = self.get(user, pk)
 
         if not is_admin(user):
             if instance.requester_id != user.id:
                 raise PermissionDeniedError(
-                    "You can only edit your own service requests."
+                    "Você só pode editar suas próprias solicitações de serviço."
                 )
             if instance.status != ServiceRequestModel.Status.PENDING:
                 raise BusinessRuleError(
-                    "You can only edit a request while it is pending."
+                    "Você só pode editar uma solicitação enquanto ela estiver pendente."
                 )
             forbidden = {
                 "status",
@@ -161,35 +161,35 @@ class ServiceRequestService(IServiceRequestService):
         if not is_admin(user):
             if instance.requester_id != user.id:
                 raise PermissionDeniedError(
-                    "You can only delete your own service requests."
+                    "Você só pode excluir suas próprias solicitações de serviço."
                 )
             if instance.status != ServiceRequestModel.Status.PENDING:
                 raise BusinessRuleError(
-                    "You can only delete a request while it is pending."
+                    "Você só pode excluir uma solicitação enquanto ela estiver pendente."
                 )
         self._repo.delete(instance)
 
     def respond(self, operator, pk, action, response):
         if not can_manage_service_requests(operator):
             raise PermissionDeniedError(
-                "Only admins or cleaning staff can respond to a service request."
+                "Apenas administradores ou equipe de limpeza podem responder a uma solicitação de serviço."
             )
         if action not in self._VALID_ACTIONS:
             raise BusinessRuleError(
-                f"Invalid action. Expected one of {list(self._VALID_ACTIONS)}.",
+                f"Ação inválida. Esperado um de {list(self._VALID_ACTIONS)}.",
                 field="action",
             )
         message = (response or "").strip()
         if action == "decline" and not message:
             raise BusinessRuleError(
-                "A justification is required when declining.",
+                "É necessária uma justificativa ao recusar.",
                 field="response",
             )
 
         instance = self._fetch_or_404(pk)
         if instance.status != ServiceRequestModel.Status.PENDING:
             raise BusinessRuleError(
-                "This request has already been answered.", field="status"
+                "Esta solicitação já foi respondida.", field="status"
             )
 
         new_status = (
@@ -212,17 +212,17 @@ class ServiceRequestService(IServiceRequestService):
     def complete(self, operator, pk):
         if not can_manage_service_requests(operator):
             raise PermissionDeniedError(
-                "Only admins or cleaning staff can complete a service request."
+                "Apenas administradores ou equipe de limpeza podem concluir uma solicitação de serviço."
             )
         instance = self._fetch_or_404(pk)
         if instance.status != ServiceRequestModel.Status.ACCEPTED:
             raise BusinessRuleError(
-                "Only accepted requests can be marked completed.",
+                "Apenas solicitações aceitas podem ser marcadas como concluídas.",
                 field="status",
             )
         if not is_admin(operator) and instance.responded_by_id != operator.id:
             raise PermissionDeniedError(
-                "You can only complete service requests you accepted."
+                "Você só pode concluir solicitações de serviço que você aceitou."
             )
         return self._repo.update(
             instance, {"status": ServiceRequestModel.Status.COMPLETED}
@@ -246,7 +246,7 @@ class ServiceRequestService(IServiceRequestService):
     def _fetch_or_404(self, pk: int) -> ServiceRequestModel:
         instance = self._repo.get_by_id(pk)
         if not instance:
-            raise NotFoundError("No service request matches the given query.")
+            raise NotFoundError("Nenhuma solicitação de serviço encontrada.")
         return instance
 
     @staticmethod
@@ -257,7 +257,7 @@ class ServiceRequestService(IServiceRequestService):
         valid = {c.value for c in enum_cls}
         if upper not in valid:
             raise BusinessRuleError(
-                f"Invalid {field_name}: {value!r}. Expected one of {sorted(valid)}.",
+                f"{field_name} inválido: {value!r}. Esperado um de {sorted(valid)}.",
                 field=field_name,
             )
         return upper
@@ -269,7 +269,7 @@ class ServiceRequestService(IServiceRequestService):
         normalized = value.lower()
         if normalized not in {"future", "past"}:
             raise BusinessRuleError(
-                f"Invalid period: {value!r}. Expected 'future' or 'past'.",
+                f"Período inválido: {value!r}. Esperado 'future' ou 'past'.",
                 field="period",
             )
         return normalized

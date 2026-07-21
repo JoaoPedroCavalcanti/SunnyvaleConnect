@@ -54,7 +54,7 @@ class DeliveryNotificationService(IDeliveryNotificationService):
     def list_apartments(self, user) -> list[DeliveryUnitItem]:
         if not can_doorman_ops(user):
             raise PermissionDeniedError(
-                "Only admins or doorman staff can list delivery apartments."
+                "Apenas administradores ou porteiros podem listar apartamentos para entregas."
             )
 
         units = [
@@ -100,7 +100,7 @@ class DeliveryNotificationService(IDeliveryNotificationService):
     def get(self, user, pk):
         instance = self._repo.get_by_id(pk)
         if not instance:
-            raise NotFoundError("No delivery notification matches the given query.")
+            raise NotFoundError("Nenhuma notificação de entrega encontrada.")
         assert_same_condominium(user, instance.unit.condominium_id)
         return instance
 
@@ -108,32 +108,32 @@ class DeliveryNotificationService(IDeliveryNotificationService):
         unit_id = payload["unit_id"]
         unit = self._units.get_by_id(unit_id)
         if not unit:
-            raise NotFoundError("No unit matches the given unit_id.")
+            raise NotFoundError("Nenhuma unidade encontrada para o unit_id informado.")
         assert_same_condominium(user, unit.condominium_id)
         if unit.status != Unit.Status.ACTIVE:
             raise BusinessRuleError(
-                "This unit is not active; cannot register a delivery.",
+                "Esta unidade não está ativa; não é possível registrar uma entrega.",
                 field="unit_id",
             )
 
         owner_membership = self._memberships.get_active_owner(unit.id)
         if not owner_membership:
             raise BusinessRuleError(
-                "This unit has no active owner; cannot notify delivery.",
+                "Esta unidade não possui um proprietário ativo; não é possível notificar a entrega.",
                 field="unit_id",
             )
 
         extra_owners = list(self._memberships.list_active_owners(unit.id))
         if len(extra_owners) > 1:
             raise BusinessRuleError(
-                "This unit has more than one active owner.",
+                "Esta unidade possui mais de um proprietário ativo.",
                 field="unit_id",
             )
 
         owner = owner_membership.user
         if not owner.email:
             raise BusinessRuleError(
-                "The unit owner has no email registered; cannot notify delivery.",
+                "O proprietário da unidade não possui e-mail cadastrado; não é possível notificar a entrega.",
                 field="unit_id",
             )
 

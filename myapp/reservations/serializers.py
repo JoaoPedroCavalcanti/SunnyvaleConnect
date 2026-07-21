@@ -83,7 +83,7 @@ class ReservationPatchSerializer(serializers.Serializer):
     def validate(self, attrs):
         if "location_id" in self.initial_data:
             raise serializers.ValidationError(
-                {"location_id": "Reservation location cannot be changed."}
+                {"location_id": "O local da reserva não pode ser alterado."}
             )
         return attrs
 

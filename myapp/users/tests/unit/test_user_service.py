@@ -485,7 +485,7 @@ class TestRoleOnUpdate:
         admin = _FakeUser(99, is_staff=True, role=UserRole.ADMIN)
         with pytest.raises(PermissionDeniedError) as exc:
             service.update_self(admin, {"role": UserRole.RESIDENT})
-        assert "demote" in str(exc.value.message).lower()
+        assert "rebaixar" in str(exc.value.message).lower()
 
 
 class TestRoleOnDelete:
