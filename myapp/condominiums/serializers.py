@@ -1,6 +1,7 @@
 """Type/shape-only serializers for condominiums."""
 
 from condominiums.models import Condominium
+from condominiums.modules import ALL_MODULE_KEYS
 from rest_framework import serializers
 
 
@@ -16,10 +17,18 @@ class CondominiumInputSerializer(serializers.Serializer):
         required=False, allow_blank=True, max_length=300, default=""
     )
     is_active = serializers.BooleanField(required=False, default=True)
+    enabled_modules = serializers.ListField(
+        child=serializers.ChoiceField(choices=ALL_MODULE_KEYS),
+        required=False,
+        allow_empty=True,
+    )
 
 
 class CondominiumLookupOutputSerializer(serializers.ModelSerializer):
     logo_url = serializers.SerializerMethodField()
+    enabled_modules = serializers.ListField(
+        child=serializers.CharField(), read_only=True
+    )
 
     class Meta:
         model = Condominium
@@ -32,6 +41,7 @@ class CondominiumLookupOutputSerializer(serializers.ModelSerializer):
             "accent_color",
             "logo_url",
             "welcome_message",
+            "enabled_modules",
         ]
 
     def get_logo_url(self, obj):

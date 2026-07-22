@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 
+from condominiums.modules import default_enabled_modules, normalize_enabled_modules
 from condominiums.repositories.condominium_repository import ICondominiumRepository
 from shared.exceptions import BusinessRuleError, NotFoundError, PermissionDeniedError
 from shared.infrastructure.code_generator import ICodeGenerator
@@ -59,6 +60,17 @@ class CondominiumService(ICondominiumService):
         data = dict(payload)
         data.pop("code", None)
         data["code"] = self._generate_unique_code()
+        if "enabled_modules" not in data or data["enabled_modules"] is None:
+            data["enabled_modules"] = default_enabled_modules()
+        else:
+            try:
+                data["enabled_modules"] = normalize_enabled_modules(
+                    data["enabled_modules"]
+                )
+            except ValueError as exc:
+                raise BusinessRuleError(
+                    str(exc), field="enabled_modules"
+                ) from exc
         return self._repo.create(data)
 
     def _generate_unique_code(self) -> str:

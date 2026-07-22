@@ -1,15 +1,83 @@
+from django import forms
 from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 
 from condominiums.models import Condominium
+from condominiums.modules import (
+    ALL_MODULE_KEYS,
+    MODULE_CHOICES,
+    normalize_enabled_modules,
+)
 from shared.tenant import display_username
 from users.models import UserRole
 
 
+class CondominiumAdminForm(forms.ModelForm):
+    enable_all_modules = forms.BooleanField(
+        required=False,
+        label="Todos os módulos",
+        help_text=(
+            "Atalho: marca/desmarca todos abaixo. "
+            "O que vale ao salvar são os checkboxes individuais."
+        ),
+    )
+    enabled_modules = forms.MultipleChoiceField(
+        choices=MODULE_CHOICES,
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+        label="Módulos liberados",
+        help_text=(
+            "Usado só pelo front (menus/telas). Não bloqueia APIs no backend."
+        ),
+    )
+
+    class Meta:
+        model = Condominium
+        fields = "__all__"
+
+    class Media:
+        js = ("condominiums/admin_modules.js",)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        current = list(ALL_MODULE_KEYS)
+        if self.instance and self.instance.pk:
+            raw = self.instance.enabled_modules
+            if isinstance(raw, list):
+                current = [key for key in ALL_MODULE_KEYS if key in raw]
+        elif not (self.instance and self.instance.pk):
+            current = list(ALL_MODULE_KEYS)
+        self.fields["enabled_modules"].initial = current
+        self.fields["enable_all_modules"].initial = set(current) == set(
+            ALL_MODULE_KEYS
+        )
+
+    def clean(self):
+        cleaned = super().clean()
+        # Individual checkboxes are the source of truth. "enable_all_modules"
+        # is only a UI shortcut (synced via JS) and must not override a subset.
+        try:
+            cleaned["enabled_modules"] = normalize_enabled_modules(
+                cleaned.get("enabled_modules") or []
+            )
+        except ValueError as exc:
+            raise forms.ValidationError({"enabled_modules": str(exc)}) from exc
+        return cleaned
+
+
 @admin.register(Condominium)
 class CondominiumAdmin(admin.ModelAdmin):
-    list_display = ("name", "code", "slug", "is_active", "admin_count", "created_at")
+    form = CondominiumAdminForm
+    list_display = (
+        "name",
+        "code",
+        "slug",
+        "is_active",
+        "modules_summary",
+        "admin_count",
+        "created_at",
+    )
     list_filter = ("is_active",)
     search_fields = ("name", "code", "slug")
     readonly_fields = ("code", "slug", "created_at", "admin_accounts_panel")
@@ -39,11 +107,28 @@ class CondominiumAdmin(admin.ModelAdmin):
             },
         ),
         (
+            "Módulos",
+            {
+                "fields": ("enable_all_modules", "enabled_modules"),
+                "description": (
+                    "Escolha quais módulos o condomínio verá no app. "
+                    "Você pode editar depois para liberar ou remover módulos."
+                ),
+            },
+        ),
+        (
             "Administrators",
             {"fields": ("admin_accounts_panel",)},
         ),
         ("Metadata", {"fields": ("created_at",)}),
     )
+
+    @admin.display(description="Módulos")
+    def modules_summary(self, obj):
+        enabled = obj.enabled_modules or []
+        if set(enabled) >= set(ALL_MODULE_KEYS):
+            return "Todos"
+        return f"{len(enabled)}/{len(ALL_MODULE_KEYS)}"
 
     @admin.display(description="Admins")
     def admin_count(self, obj):

@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils.text import slugify
 
+from condominiums.modules import default_enabled_modules
 from shared.infrastructure.code_generator import RandomCodeGenerator
 
 _CODE_LENGTH = 8
@@ -18,6 +19,14 @@ class Condominium(models.Model):
     accent_color = models.CharField(max_length=7, default="#111827")
     logo = models.ImageField(upload_to="condominiums/logos/", blank=True, null=True)
     welcome_message = models.CharField(max_length=300, blank=True, default="")
+    enabled_modules = models.JSONField(
+        default=default_enabled_modules,
+        blank=True,
+        help_text=(
+            "Optional product modules available to this condominium. "
+            "Frontend only — does not gate backend APIs."
+        ),
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
 

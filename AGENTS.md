@@ -97,6 +97,23 @@ O `custom_exception_handler` (em `shared/exception_handler.py`) converte tudo pa
 
 `message` pode ser `str` ou `list[str]` (ex: múltiplos erros de senha).
 
+**Mensagens dessas exceptions devem estar em português (pt-BR)** — vão direto pro front/usuário. Ver seção Idioma abaixo.
+
+---
+
+## Idioma (código vs. usuário)
+
+O produto é para o Brasil. Separar sempre:
+
+| Camada | Idioma | Exemplos |
+|---|---|---|
+| Código do backend | **Inglês** | nomes de classes, funções, variáveis, commits, docstrings, comentários, chaves JSON de campo (`field="status"`), keys de módulo (`visitor_access`) |
+| Texto que o **usuário / front** vê | **Português (pt-BR)** | `BusinessRuleError` / `NotFoundError` / `PermissionDeniedError`, `serializers.ValidationError`, `error_messages` custom, validadores (CPF/senha), `detail` em responses de sucesso/erro |
+
+- `LANGUAGE_CODE = "pt-br"` — erros automáticos do DRF/Django (`required`, e-mail inválido, etc.) já saem em português.
+- Ao criar regra nova: escreva a mensagem da domain exception **já em português**. Não invente fluxo gettext só por causa de erros.
+- Não misture: código/identificadores em inglês; prosa voltada ao usuário em português.
+
 ---
 
 ## Container de DI (`shared/container.py`)
@@ -234,6 +251,7 @@ Para uma nova entidade `Foo`:
 - ❌ Importar serviço com `MyService()` direto (use sempre `container.my_service`)
 - ❌ View retornando dados que não passaram por um `<X>OutputSerializer` (exceto endpoints muito simples como checkin/checkout)
 - ❌ Adicionar lib externa de DI (`dependency-injector`, `injector`, etc) — o container manual é proposital
+- ❌ Mensagem de erro/domain exception em inglês (o usuário vê isso — use pt-BR)
 
 ---
 
